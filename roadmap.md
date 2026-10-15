@@ -1,0 +1,3 @@
+- [x] Match native in-feed ads to list, grid, and table note layouts and update immediately on view changes.
+- [x] Preserve top and every-five-items placement across all view modes.
+- [x] Verify browser layout and insertion math; live native AdMob rendering requires an Android device and an ad fill.

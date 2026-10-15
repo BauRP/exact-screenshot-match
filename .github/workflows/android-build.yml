@@ -1,0 +1,214 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Assemble APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0"
+
+      - name: Install web dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build web assets
+        run: bun run build
+
+      - name: Install Capacitor CLI
+        run: bun add -d @capacitor/cli
+
+      - name: Verify Capacitor web assets
+        run: |
+          test -f dist/client/index.html
+          test -d dist/client/assets
+
+      - name: Add Android platform
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+        env:
+          CI: true
+
+      - name: Debug web assets
+        run: |
+          echo "Listing files in dist/client:"
+          ls -R dist/client
+
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      - name: Apply Android overlay (icons, styles, colors)
+        run: |
+          if [ -d "android-overlay/app/src/main/res" ]; then
+            mkdir -p android/app/src/main/res
+            cp -R android-overlay/app/src/main/res/. android/app/src/main/res/
+          fi
+
+      - name: Fix Duplicate Resources
+        run: |
+          echo "Проверяем наличие дубликатов ресурсов..."
+          COLORS_FILE="android/app/src/main/res/values/colors.xml"
+          BG_FILE="android/app/src/main/res/values/ic_launcher_background.xml"
+          
+          if [ -f "$BG_FILE" ] && [ -f "$COLORS_FILE" ]; then
+            if grep -q "ic_launcher_background" "$COLORS_FILE"; then
+              echo "Найден дубликат ic_launcher_background! Удаляем лишний файл..."
+              rm "$BG_FILE"
+            fi
+          fi
+
+      - name: Configure SDK versions
+        run: |
+          cat > android/variables.gradle <<'EOF'
+          ext {
+              minSdkVersion = 24
+              compileSdkVersion = 36
+              targetSdkVersion = 36
+              androidxActivityVersion = '1.11.0'
+              androidxAppCompatVersion = '1.7.1'
+              androidxCoordinatorLayoutVersion = '1.3.0'
+              androidxCoreVersion = '1.17.0'
+              androidxCoreKTXVersion = '1.15.0'
+              androidxFragmentVersion = '1.8.9'
+              coreSplashScreenVersion = '1.2.0'
+              androidxWebkitVersion = '1.14.0'
+              junitVersion = '4.13.2'
+              androidxJunitVersion = '1.3.0'
+              androidxEspressoCoreVersion = '3.7.0'
+              cordovaAndroidVersion = '14.0.1'
+              kotlin_version = '2.2.20'
+              }
+          EOF
+
+      - name: Apply Android native sources (print plugin, MainActivity)
+        run: |
+          if [ -d "android-overlay/app/src/main/java" ]; then
+            mkdir -p android/app/src/main/java
+            cp -R android-overlay/app/src/main/java/. android/app/src/main/java/
+          fi
+
+      - name: Apply Android app module overlay (gradle, proguard)
+        run: |
+          cp android-overlay/app/build.gradle android/app/build.gradle
+          cp android-overlay/app/proguard-rules.pro android/app/proguard-rules.pro
+          cp android-overlay/app/src/main/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          grep -q "com.google.android.gms.ads.APPLICATION_ID" android/app/src/main/AndroidManifest.xml
+
+      - name: Grant gradlew execute permission
+        run: chmod +x android/gradlew
+
+      - name: Build debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Build release APK (unsigned)
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+        continue-on-error: true
+
+      - name: Create Release & Upload APK (Official GitHub Link)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import urllib.request
+          import json
+          from pathlib import Path
+
+          github_token = os.environ.get("GITHUB_TOKEN")
+          repository = os.environ.get("GITHUB_REPOSITORY")
+          run_number = os.environ.get("GITHUB_RUN_NUMBER")
+          ref_name = os.environ.get("GITHUB_REF_NAME", "main")
+
+          apk_files = list(Path("android/app/build/outputs/apk").rglob("*.apk"))
+          if not apk_files:
+              raise SystemExit("КРИТИЧЕСКАЯ ОШИБКА: APK файл не найден!")
+          apk_path = apk_files[0]
+
+          headers = {
+              "Authorization": f"Bearer {github_token}",
+              "Accept": "application/vnd.github+json",
+              "Content-Type": "application/json",
+              "X-GitHub-Api-Version": "2022-11-28"
+          }
+
+          tag_name = f"build-{run_number}"
+          release_data = json.dumps({
+              "tag_name": tag_name,
+              "target_commitish": ref_name,
+              "name": f"APK Build #{run_number}",
+              "body": "Автоматическая сборка APK для приложения.",
+              "draft": False,
+              "prerelease": True
+          }).encode("utf-8")
+
+          print("Создание релиза на GitHub...")
+          req = urllib.request.Request(f"https://api.github.com/repos/{repository}/releases", data=release_data, headers=headers, method="POST")
+          try:
+              with urllib.request.urlopen(req) as resp:
+                  release_json = json.loads(resp.read().decode("utf-8"))
+          except urllib.error.HTTPError as e:
+              print(f"Ошибка API GitHub: {e.code} - {e.read().decode('utf-8')}")
+              raise
+
+          upload_url_template = release_json["upload_url"]
+          upload_url = upload_url_template.split("{")[0] + f"?name={apk_path.name}"
+
+          print("Загрузка APK файла в релиз...")
+          file_data = apk_path.read_bytes()
+          upload_headers = {
+              "Authorization": f"Bearer {github_token}",
+              "Content-Type": "application/vnd.android.package-archive",
+              "Content-Length": str(len(file_data))
+          }
+
+          req_upload = urllib.request.Request(upload_url, data=file_data, headers=upload_headers, method="POST")
+          with urllib.request.urlopen(req_upload) as resp_upload:
+              asset_json = json.loads(resp_upload.read().decode("utf-8"))
+
+          download_url = asset_json["browser_download_url"]
+
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+          with open(summary_path, "a", encoding="utf-8") as f:
+              f.write("## 📱 Готовый файл APK:\n\n")
+              f.write(f"[🚀 НАЖМИ СЮДА, ЧТОБЫ СКАЧАТЬ APK]({download_url})\n")
+          print(f"Ссылка успешно создана: {download_url}")
+          PY

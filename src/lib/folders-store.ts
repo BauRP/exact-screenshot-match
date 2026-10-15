@@ -1,0 +1,117 @@
+import { useSyncExternalStore } from "react";
+
+export type Folder = {
+  id: string;
+  name: string;
+  system?: boolean;
+};
+
+const FOLDERS_KEY = "sn.folders.v1";
+const HIDDEN_KEY = "sn.hidden-system-folders.v1";
+const ACTIVE_KEY = "sn.active-folder.v1";
+
+export const SYSTEM_FOLDERS: Folder[] = [
+  { id: "all", name: "ALL", system: true },
+  { id: "work", name: "WORK", system: true },
+  { id: "home", name: "HOME", system: true },
+];
+
+const listeners = new Set<() => void>();
+let customFolders: Folder[] = [];
+let hiddenSystem: string[] = [];
+let activeId: string = "all";
+let hydrated = false;
+
+function persist() {
+  try {
+    localStorage.setItem(FOLDERS_KEY, JSON.stringify(customFolders));
+    localStorage.setItem(HIDDEN_KEY, JSON.stringify(hiddenSystem));
+  } catch {}
+}
+function emit() { listeners.forEach((l) => l()); }
+
+function hydrate() {
+  if (hydrated || typeof window === "undefined") return;
+  hydrated = true;
+  try {
+    const raw = localStorage.getItem(FOLDERS_KEY);
+    if (raw) customFolders = JSON.parse(raw);
+    const hidden = localStorage.getItem(HIDDEN_KEY);
+    if (hidden) hiddenSystem = JSON.parse(hidden);
+    const a = localStorage.getItem(ACTIVE_KEY);
+    if (a) activeId = a;
+  } catch {}
+}
+
+function subscribe(cb: () => void) {
+  hydrate();
+  listeners.add(cb);
+  return () => listeners.delete(cb);
+}
+
+export function useFolders(): Folder[] {
+  return useSyncExternalStore(
+    subscribe,
+    () => { hydrate(); return snapshot(); },
+    () => SYSTEM_FOLDERS,
+  );
+}
+
+let cachedList: Folder[] = SYSTEM_FOLDERS;
+let cachedKey = "";
+function snapshot(): Folder[] {
+  const key =
+    customFolders.map((f) => f.id + f.name).join("|") + "#" + hiddenSystem.join(",");
+  if (key !== cachedKey) {
+    cachedList = [
+      ...SYSTEM_FOLDERS.filter((f) => !hiddenSystem.includes(f.id)),
+      ...customFolders,
+    ];
+    cachedKey = key;
+  }
+  return cachedList;
+}
+
+export function useActiveFolder(): string {
+  return useSyncExternalStore(
+    subscribe,
+    () => { hydrate(); return activeId; },
+    () => "all",
+  );
+}
+
+export function setActiveFolder(id: string) {
+  activeId = id;
+  try { localStorage.setItem(ACTIVE_KEY, id); } catch {}
+  emit();
+}
+
+export function addFolder(name: string): Folder {
+  hydrate();
+  const f: Folder = { id: crypto.randomUUID(), name: name.trim() || "Folder" };
+  customFolders = [...customFolders, f];
+  persist(); emit();
+  return f;
+}
+
+export function renameFolder(id: string, name: string) {
+  hydrate();
+  customFolders = customFolders.map((f) => f.id === id ? { ...f, name: name.trim() || f.name } : f);
+  persist(); emit();
+}
+
+export function deleteFolder(id: string) {
+  hydrate();
+  // The "ALL" tab is permanent and can never be removed.
+  if (id === "all") return;
+  if (isSystemFolder(id)) {
+    if (!hiddenSystem.includes(id)) hiddenSystem = [...hiddenSystem, id];
+  }
+  customFolders = customFolders.filter((f) => f.id !== id);
+  if (activeId === id) { activeId = "all"; try { localStorage.setItem(ACTIVE_KEY, "all"); } catch {} }
+  persist(); emit();
+}
+
+export function isSystemFolder(id: string) {
+  return SYSTEM_FOLDERS.some((f) => f.id === id);
+}
