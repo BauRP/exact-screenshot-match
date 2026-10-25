@@ -50,6 +50,11 @@ export async function savePdfFile(id: string, bytes: ArrayBuffer): Promise<void>
   await withStore("readwrite", (store) => store.put(bytes, id) as IDBRequest<IDBValidKey>);
 }
 
+/** Create-only write for restoration. Never overwrite an existing/orphaned PDF. */
+export async function saveNewPdfFile(id: string, bytes: ArrayBuffer): Promise<void> {
+  await withStore("readwrite", (store) => store.add(bytes, id) as IDBRequest<IDBValidKey>);
+}
+
 export async function loadPdfFile(id: string): Promise<ArrayBuffer | null> {
   try {
     const value = await withStore<ArrayBuffer | undefined>("readonly", (store) => store.get(id));
@@ -60,11 +65,7 @@ export async function loadPdfFile(id: string): Promise<ArrayBuffer | null> {
 }
 
 export async function deletePdfFile(id: string): Promise<void> {
-  try {
-    await withStore("readwrite", (store) => store.delete(id) as unknown as IDBRequest<undefined>);
-  } catch {
-    /* ignore */
-  }
+  await withStore("readwrite", (store) => store.delete(id) as unknown as IDBRequest<undefined>);
 }
 
 /** Opens the native/system file picker and resolves with the chosen PDF. */
