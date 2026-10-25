@@ -50,6 +50,7 @@ import {
   compactRuns,
   getRuns,
   getSelectionOffsets,
+  nearestTextOffset,
   insertAt,
   rangeAll,
   readRunsFromDom,
@@ -575,8 +576,11 @@ function PdfViewerScreen() {
             selRef.current = { start: caret, end: caret };
             setActiveStyle(styleAt(runs, caret, baseStyle(overlay)));
           } else {
-            // An empty/missed line keeps its normal end insertion point.
-            setActiveStyle(styleAt(runs, end, baseStyle(overlay)));
+            const nearest = nearestTextOffset(node, tap.x, tap.y);
+            const caret = nearest ?? end;
+            setSelectionOffsets(node, caret, caret);
+            selRef.current = { start: caret, end: caret };
+            setActiveStyle(styleAt(runs, caret, baseStyle(overlay)));
           }
         });
       } else {
