@@ -172,6 +172,7 @@ function parseStoredNotes(raw: string | null): Note[] {
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) throw new Error("Unexpected notes database format");
+    if (parsed.some((item) => !isRecord(item))) throw new Error("Invalid note record");
     return parsed.map(normalizeNote).filter((note): note is Note => note !== null);
   } catch {
     throw new Error("Saved notes could not be parsed. Original data is preserved.");
