@@ -173,6 +173,8 @@ function PdfViewerScreen() {
   const pinchRef = useRef<{ distance: number; zoom: number } | null>(null);
   const renderTaskRef = useRef<any>(null);
   const editingNodeRef = useRef<HTMLSpanElement | null>(null);
+  // Remember where the user actually tapped while React mounts an editable overlay.
+  const pendingTapRef = useRef<{ x: number; y: number } | null>(null);
 
   const overlays = useMemo(() => note?.pdf?.overlays ?? [], [note]);
   const pageOverlays = useMemo(() => overlays.filter((item) => item.page === page), [overlays, page]);
@@ -481,15 +483,15 @@ function PdfViewerScreen() {
         saveRuns(overlay.id, next);
         rerender(next, sel.start, sel.end);
         pendingRef.current = null;
-      } else if (patch.fontSize !== undefined && len > 0) {
-        // Caret inside existing text: resize the word under the caret, keep the caret.
+      } else if ((patch.fontSize !== undefined || patch.fontFamily !== undefined) && len > 0) {
+        // With a caret inside a word, change only that word's font/size.
         const text = runsText(runs);
         let a = sel.start;
         let b = sel.start;
         while (a > 0 && !/\s/.test(text[a - 1])) a--;
         while (b < len && !/\s/.test(text[b])) b++;
         if (a === b) { a = 0; b = len; }
-        const next = applyRange(runs, a, b, { fontSize: patch.fontSize });
+        const next = applyRange(runs, a, b, patch);
         saveRuns(overlay.id, next);
         rerender(next, sel.start, sel.start);
         pendingRef.current = null;
@@ -544,11 +546,42 @@ function PdfViewerScreen() {
       const runs = getRuns(overlay);
       renderRunsInto(node, runs, viewScaleRef.current);
       renderedRunsRef.current = runs;
-      node.focus();
+      // Avoid scrolling/jumping to the top when activating an existing PDF line.
+      node.focus({ preventScroll: true });
       const end = runsText(runs).length;
+      const tap = pendingTapRef.current;
+      pendingTapRef.current = null;
+      // Place a temporary caret, then resolve the precise tapped character after mount.
       setSelectionOffsets(node, end, end);
       selRef.current = { start: end, end };
       pendingRef.current = null;
+      if (tap) {
+        requestAnimationFrame(() => {
+          if (editingNodeRef.current !== node || !node.isConnected) return;
+          const dom = document as Document & {
+            caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+            caretRangeFromPoint?: (x: number, y: number) => Range | null;
+          };
+          const position = dom.caretPositionFromPoint?.(tap.x, tap.y);
+          const pointRange = !position ? dom.caretRangeFromPoint?.(tap.x, tap.y) : null;
+          const pointNode = position?.offsetNode ?? pointRange?.startContainer;
+          const pointOffset = position?.offset ?? pointRange?.startOffset;
+          if (pointNode && pointOffset !== undefined && node.contains(pointNode)) {
+            const measure = document.createRange();
+            measure.selectNodeContents(node);
+            measure.setEnd(pointNode, pointOffset);
+            const caret = Math.max(0, Math.min(measure.toString().length, runsText(runs).length));
+            setSelectionOffsets(node, caret, caret);
+            selRef.current = { start: caret, end: caret };
+            setActiveStyle(styleAt(runs, caret, baseStyle(overlay)));
+          } else {
+            // An empty/missed line keeps its normal end insertion point.
+            setActiveStyle(styleAt(runs, end, baseStyle(overlay)));
+          }
+        });
+      } else {
+        setActiveStyle(styleAt(runs, end, baseStyle(overlay)));
+      }
       node.addEventListener("beforeinput", (event: InputEvent) => {
         if (event.inputType !== "insertText" || !event.data) return;
         const offsets = getSelectionOffsets(node);
@@ -600,6 +633,7 @@ function PdfViewerScreen() {
         yPct <= item.yPct + item.heightPct,
     );
     if (existing) {
+      pendingTapRef.current = { x: event.clientX, y: event.clientY };
       editingNodeRef.current = null;
       setEditingId(existing.id);
       return;
@@ -614,6 +648,7 @@ function PdfViewerScreen() {
     );
 
     if (hit) {
+      pendingTapRef.current = { x: event.clientX, y: event.clientY };
       const heightPx = (hit.heightPct / 100) * canvasHeight;
       const overlay: PdfTextOverlay = {
         id: createOverlayId(),
@@ -637,6 +672,7 @@ function PdfViewerScreen() {
       return;
     }
 
+    pendingTapRef.current = { x: event.clientX, y: event.clientY };
     const overlay: PdfTextOverlay = {
       id: createOverlayId(),
       page,
@@ -1193,12 +1229,12 @@ function PdfViewerScreen() {
               </PopoverTrigger>
               <PopoverContent
                 side="bottom"
-                align="center"
+                align="end"
                 sideOffset={6}
                 collisionPadding={12}
                 onOpenAutoFocus={(event) => event.preventDefault()}
                 onCloseAutoFocus={(event) => event.preventDefault()}
-                className="z-50 max-h-[min(16rem,calc(100dvh-8rem))] w-[min(14rem,calc(100vw-1.5rem))] overflow-y-auto rounded-xl p-1"
+                className="z-50 max-h-[min(16rem,calc(100dvh-8rem))] w-[min(14rem,calc(100vw-1.5rem))] max-w-[calc(100vw-24px)] overflow-x-hidden overflow-y-auto rounded-xl p-1"
               >
                 {PDF_FONTS.map((font) => (
                   <button
@@ -1209,12 +1245,12 @@ function PdfViewerScreen() {
                       applyStyle(() => ({ fontFamily: font.name }));
                       setFontMenuOpen(false);
                     }}
-                    className={`flex w-full items-center rounded-lg px-3 py-2 text-left text-sm hover:bg-secondary ${
+                    className={`flex w-full min-w-0 items-center overflow-hidden rounded-lg px-3 py-2 text-left text-sm hover:bg-secondary ${
                       ui.fontFamily === font.name ? "bg-secondary text-primary" : ""
                     }`}
                     style={{ fontFamily: font.css }}
                   >
-                    {font.name}
+                    <span className="block min-w-0 flex-1 truncate">{font.name}</span>
                   </button>
                 ))}
               </PopoverContent>
@@ -1268,22 +1304,7 @@ function PdfViewerScreen() {
                 ))}
               </div>
             )}
-            {textTool && (
-              <div className="pointer-events-none absolute inset-0">
-                {textBoxes.map((box, index) => (
-                  <span
-                    key={`${index}-${box.leftPct}`}
-                    className="absolute rounded-[2px] bg-primary/15 ring-1 ring-primary/30"
-                    style={{
-                      left: `${box.leftPct}%`,
-                      top: `${box.topPct}%`,
-                      width: `${box.widthPct}%`,
-                      height: `${box.heightPct}%`,
-                    }}
-                  />
-                ))}
-              </div>
-            )}
+            {/* Text hit-testing stays active, without drawing yellow markers over the PDF. */}
             {pageOverlays.map((overlay) => {
               const isEditing = overlay.id === editingId;
               const sizePx = Math.max((overlay.fontSize ?? DEFAULT_PDF_FONT_SIZE) * viewScale, 6);
@@ -1295,6 +1316,7 @@ function PdfViewerScreen() {
                   onClick={(event) => {
                     event.stopPropagation();
                     if (!isEditing && textTool) {
+                      pendingTapRef.current = { x: event.clientX, y: event.clientY };
                       editingNodeRef.current = null;
                       setEditingId(overlay.id);
                     }
