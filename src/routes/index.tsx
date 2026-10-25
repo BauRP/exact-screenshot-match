@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   ArrowDownAZ,
   X,
@@ -625,7 +625,7 @@ function NotesGrid({
         : "flex flex-col gap-3 md:grid md:grid-cols-2 md:gap-4 lg:grid-cols-3"}>
       <NativeAdCard view={view} slotKey="home-first" />
       {notes.map((note, index) => (
-        <React.Fragment key={note.id}>
+        <Fragment key={note.id}>
           <NoteCard
             note={note}
             view={view}
@@ -637,7 +637,7 @@ function NotesGrid({
           {(index + 1) % 5 === 0 && (
             <NativeAdCard view={view} slotKey={`home-after-${Math.floor((index + 1) / 5) * 5}`} />
           )}
-        </React.Fragment>
+        </Fragment>
       ))}
     </div>
   );
