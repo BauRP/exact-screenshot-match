@@ -53,6 +53,12 @@ export async function saveAudioFileWithId(id: string, blob: Blob): Promise<void>
   await operate("readwrite", (store) => store.put(blob, id));
 }
 
+/** Create-only write: never replace the audio associated with another note. */
+export async function saveNewAudioFile(id: string, blob: Blob): Promise<void> {
+  if (!/^[\w-]{1,128}$/.test(id)) throw new Error("Invalid audio ID");
+  await operate("readwrite", (store) => store.add(blob, id));
+}
+
 export async function loadAudioFile(id: string): Promise<Blob | null> {
   const value = await operate<Blob | undefined>("readonly", (store) => store.get(id));
   return value ?? null;
