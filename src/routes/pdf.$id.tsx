@@ -821,6 +821,7 @@ function PdfViewerScreen() {
     } catch (error) {
       // Aborted or unsupported share must never crash the viewer.
       console.error(error);
+      toast.error(error instanceof Error ? error.message : "Не удалось подготовить PDF для отправки");
     } finally {
       setBusy(false);
     }
@@ -889,7 +890,7 @@ function PdfViewerScreen() {
       }, 60_000);
     } catch (error) {
       console.error(error);
-      toast.error("Печать недоступна на этом устройстве");
+      toast.error(error instanceof Error ? error.message : "Печать недоступна на этом устройстве");
     } finally {
       setBusy(false);
     }
