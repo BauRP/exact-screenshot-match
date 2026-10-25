@@ -152,6 +152,7 @@ function Index() {
     const file = await pickPdfFile();
     if (!file) return;
 
+    let importedPdfId: string | null = null;
     try {
       const buffer = await file.arrayBuffer();
       const { PDFDocument } = await import("pdf-lib");
@@ -159,6 +160,7 @@ function Index() {
 
       const pdfId = crypto.randomUUID();
       await savePdfFile(pdfId, buffer);
+      importedPdfId = pdfId;
       const note = createNote({
         id: pdfId,
         kind: "pdf",
@@ -176,8 +178,13 @@ function Index() {
         },
       });
 
+      importedPdfId = null;
       navigate({ to: "/pdf/$id", params: { id: note.id } });
     } catch (error) {
+      if (importedPdfId) {
+        const { deletePdfFile } = await import("@/lib/pdf-files");
+        await deletePdfFile(importedPdfId).catch(console.error);
+      }
       console.error(error);
       toast.error("Не удалось открыть PDF-файл");
     }
