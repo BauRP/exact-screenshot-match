@@ -990,13 +990,15 @@ function PdfViewerScreen() {
       const buffer = output.buffer.slice(output.byteOffset, output.byteOffset + output.byteLength) as ArrayBuffer;
 
       const fileName = `${(note?.pdf?.fileName ?? "document.pdf").replace(/\.pdf$/i, "")}-p${page}.pdf`;
+      const newPdfId = crypto.randomUUID();
+      await savePdfFile(newPdfId, buffer);
       const created = createNote({
+        id: newPdfId,
         kind: "pdf",
         title: fileName.replace(/\.pdf$/i, ""),
         folderId: note?.folderId ?? "all",
         pdf: { fileName, size: output.byteLength, pageCount: 1, favorite: false, overlays: [] },
       });
-      await savePdfFile(created.id, buffer);
       toast.success("Страница сохранена как отдельный PDF");
     } catch (error) {
       console.error(error);
