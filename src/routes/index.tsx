@@ -275,7 +275,7 @@ function Index() {
       </div>
 
       {hydrated && status !== "error" && filteredNotes.length === 0 ? (
-        <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-[130px] pt-4"><NativeAdCard view={view} slotKey="home-first" /></main>
+        <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-[130px] pt-4"><NativeAdCard slotKey="home-first" /></main>
       ) : (
         <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-[130px] pt-4 [-webkit-overflow-scrolling:touch]">
           {!hydrated ? (
@@ -645,7 +645,7 @@ function NotesGrid({
       : view === "table"
         ? "flex flex-col gap-2"
         : "flex flex-col gap-3 md:grid md:grid-cols-2 md:gap-4 lg:grid-cols-3"}>
-      <NativeAdCard view={view} slotKey="home-first" />
+      <NativeAdCard slotKey="home-first" />
       {notes.map((note, index) => (
         <Fragment key={note.id}>
           <NoteCard
@@ -657,7 +657,7 @@ function NotesGrid({
             onOpen={() => onOpen(note)}
           />
           {(index + 1) % 5 === 0 && (
-            <NativeAdCard view={view} slotKey={`home-after-${Math.floor((index + 1) / 5) * 5}`} />
+            <NativeAdCard slotKey={`home-after-${Math.floor((index + 1) / 5) * 5}`} />
           )}
         </Fragment>
       ))}
