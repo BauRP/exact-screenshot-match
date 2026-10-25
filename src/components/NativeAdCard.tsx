@@ -11,10 +11,10 @@ export function NativeAdCard({ view, slotKey }: { view: ViewMode; slotKey: strin
     "feed-id": HOME_AD_FEED_ID,
     "slot-key": slotKey,
     "aria-label": "Рекламное объявление",
-    style: { display: "block", width: "100%", height: view === "table" ? "48px" : "120px", minHeight: view === "table" ? "48px" : "120px" },
+    style: { display: "block", width: "100%", height: "120px", minHeight: "120px" },
   });
   return (
-    <div className={`${noteCardShell(view)} ${view === "table" ? "min-h-[72px] overflow-hidden p-2" : "min-h-[120px] overflow-hidden p-2"}`}>
+    <div className={`${noteCardShell(view)} ${view === "table" ? "min-h-[150px] overflow-hidden p-2" : "min-h-[150px] overflow-hidden p-2"}`}>
       <div className="flex items-center gap-2 px-1 pb-1 text-[10px] font-semibold text-muted-foreground">
         <FileText className="h-3 w-3" />
         <span>Реклама</span>
