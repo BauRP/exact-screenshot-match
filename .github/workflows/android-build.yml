@@ -57,6 +57,9 @@ jobs:
           test -n "$(find dist/client/assets -name '*.js' -print -quit)"
           test -n "$(find dist/client/assets -name '*.css' -print -quit)"
 
+      - name: TypeScript static checks
+        run: bunx tsc --noEmit
+
       - name: Prepare Android project
         run: |
           set -euo pipefail
