@@ -9,6 +9,7 @@ type NativeFeed = {
   resume(): void;
   invalidateLayout(): Promise<void>;
   destroy(): Promise<void>;
+  addListener(event: string, listener: (event: Record<string, unknown>) => void): Promise<{ remove(): Promise<void> }>;
 };
 
 function onAndroid(): boolean {
@@ -35,24 +36,35 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
     let starting = false;
     let attempts = 0;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const handles: Array<{ remove(): Promise<void> }> = [];
+    const report = (state: string, details?: unknown) => console.info(`[SuperNotes AdMob] ${state}`, details ?? "");
 
     const initialize = async () => {
-      if (starting || disposed || !navigator.onLine || feedRef.current) return;
+      if (starting || disposed || feedRef.current) return;
+      if (!navigator.onLine) {
+        report("Offline: native ad request postponed");
+        return;
+      }
       starting = true;
       attempts += 1;
       try {
         const {
-          AdMob, AdmobConsentStatus, NativeAdFeed, NativeAdTemplate,
+          AdMob, AdmobConsentStatus, NativeAdFeed, NativeAdTemplate, NativeAdPluginEvents,
         } = await import("@capacitor-community/admob");
 
         // Google's UMP consent must be checked before any ad request.
+        report("Checking consent");
         let consent = await AdMob.requestConsentInfo();
         if (disposed) return;
         if (consent.isConsentFormAvailable && consent.status === AdmobConsentStatus.REQUIRED) {
           consent = await AdMob.showConsentForm();
         }
-        if (disposed || !consent.canRequestAds) return;
+        if (disposed || !consent.canRequestAds) {
+          report("Ad loading blocked by consent state", { status: consent.status });
+          return;
+        }
 
+        report("Initializing Google Mobile Ads SDK");
         await AdMob.initialize();
         if (disposed) return;
 
@@ -60,6 +72,7 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
         // only for a real release, after validating the native UI on a device.
         // APK built by this workflow is a debug build: use Google test inventory.
         const testAds = import.meta.env.VITE_ADMOB_LIVE_ADS !== "true";
+        report("Creating native feed (Small 120px test ads)", { testing: testAds });
         const feed = await NativeAdFeed.create({
           feedId: HOME_AD_FEED_ID,
           template: NativeAdTemplate.Small,
@@ -77,11 +90,20 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
           return;
         }
         feedRef.current = feed;
+        const failed = await feed.addListener(NativeAdPluginEvents.FailedToLoad, (event) => {
+          console.warn("[SuperNotes AdMob] Native ad failed to load", event);
+        });
+        handles.push(failed);
+        const loaded = await feed.addListener(NativeAdPluginEvents.Loaded, (event) => {
+          report("Native test ad loaded", event);
+        });
+        handles.push(loaded);
         if (pausedRef.current) await feed.pause();
         setReady(true);
+        report("Native feed ready; awaiting slot ad response");
       } catch (error) {
         // Notes and PDF must continue working with an empty ad slot.
-        console.warn("Native ads not available; reserving slots", error);
+        console.warn("[SuperNotes AdMob] Initialization failed; preserving placeholder", error);
         if (!disposed && attempts < 3 && navigator.onLine) {
           retryTimer = setTimeout(() => { retryTimer = null; void initialize(); }, Math.min(2000 * attempts, 6000));
         }
@@ -97,6 +119,7 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
       disposed = true;
       window.removeEventListener("online", onOnline);
       if (retryTimer !== null) clearTimeout(retryTimer);
+      for (const handle of handles) void handle.remove().catch(console.warn);
       setReady(false);
       const feed = feedRef.current;
       feedRef.current = null;
