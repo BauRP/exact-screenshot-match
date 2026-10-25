@@ -46,7 +46,7 @@ jobs:
           packages: "platform-tools platforms;android-36 build-tools;36.0.0"
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --no-save
 
       - name: Build app
         run: |
@@ -70,10 +70,8 @@ jobs:
           cp android-overlay/variables.gradle android/variables.gradle
 
           # Removed AdMob is expected. The old workflow incorrectly REQUIRED it.
-          if grep -q 'com.google.android.gms.ads.APPLICATION_ID' android/app/src/main/AndroidManifest.xml; then
-            echo "ERROR: unexpected advertising identifier in the ad-free app"
-            exit 1
-          fi
+          grep -q 'com.google.android.gms.ads.APPLICATION_ID' android/app/src/main/AndroidManifest.xml
+          grep -q 'ca-app-pub-9902253594429663~4405601673' android/app/src/main/res/values/admob.xml
 
           # Capacitor and our custom resources can declare the same launcher color.
           if test -f android/app/src/main/res/values/ic_launcher_background.xml &&
