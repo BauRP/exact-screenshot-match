@@ -515,15 +515,19 @@ export function deleteNote(id: string) {
   commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
   persistNotes(nextNotes);
   if (target?.kind === "pdf") {
-    void import("./pdf-files").then((module) => module.deletePdfFile(id));
+    void import("./pdf-files").then((module) => module.deletePdfFile(id)).catch((error) => console.error("Unable to remove PDF", error));
   }
 }
 
 
 export function clearAll() {
   ensureReadyForMutation();
+  const pdfIds = state.notes.filter((note) => note.kind === "pdf").map((note) => note.id);
   commit({ notes: [], hydrated: true, status: "ready", error: null });
   persistNotes([]);
+  void import("./pdf-files").then(async ({ deletePdfFile }) => {
+    await Promise.all(pdfIds.map((id) => deletePdfFile(id)));
+  }).catch((error) => console.error("Unable to clear PDF files", error));
 }
 
 export function exportNotes(): string {
