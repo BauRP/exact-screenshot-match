@@ -104,7 +104,8 @@ function Index() {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [renameValue, setRenameValue] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  useNativeAdFeed(view, menuOpen || selected.size > 0 || Boolean(renameValue) || confirmDelete);
+  const [folderDialog, setFolderDialog] = useState<FolderDialogState>(null);
+  useNativeAdFeed(view, menuOpen || selected.size > 0 || Boolean(renameValue) || confirmDelete || Boolean(folderDialog));
 
   // Selection is scoped to the folder being viewed and to notes that still exist.
   useEffect(() => setSelected(new Set()), [activeFolder]);
@@ -130,7 +131,7 @@ function Index() {
       : navigate({ to: "/editor/$id", params: { id: note.id }, search: { folder: undefined } });
 
   const selectedNotes = notes.filter((n) => selected.has(n.id));
-  const [folderDialog, setFolderDialog] = useState<FolderDialogState>(null);
+
 
   const filteredNotes = useMemo(() => {
     if (activeFolder === "all") return notes;
