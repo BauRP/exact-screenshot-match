@@ -950,7 +950,9 @@ function PdfViewerScreen() {
     setBusy(true);
     try {
       const { PDFDocument } = await import("pdf-lib");
-      const base = await PDFDocument.load(bytes.slice(0), { ignoreEncryption: true });
+      const currentExport = await buildBytes();
+      if (!currentExport) throw new Error("PDF could not be prepared");
+      const base = await PDFDocument.load(currentExport, { ignoreEncryption: true });
       const extra = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: true });
       const copied = await base.copyPages(extra, extra.getPageIndices());
       copied.forEach((copiedPage) => base.addPage(copiedPage));
@@ -960,7 +962,7 @@ function PdfViewerScreen() {
       const current = getNote(id);
       if (current?.pdf) {
         updateNote(id, {
-          pdf: { ...current.pdf, pageCount: base.getPageCount(), size: merged.byteLength },
+          pdf: { ...current.pdf, pageCount: base.getPageCount(), size: merged.byteLength, overlays: [] },
         });
       }
       setBytes(buffer);
