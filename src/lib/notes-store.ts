@@ -363,6 +363,9 @@ function createId() {
 
 function ensureReadyForMutation() {
   if (!state.hydrated) initializeSynchronously();
+  if (state.status === "error") {
+    throw new Error("Notes storage has an error. Writes are blocked to protect existing data.");
+  }
 }
 
 export function useNotes(): Note[] {
