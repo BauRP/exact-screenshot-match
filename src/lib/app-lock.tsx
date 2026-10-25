@@ -159,7 +159,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  if (!ready) return <>{children}</>;
+  if (!ready) return <div className="flex h-[100dvh] items-center justify-center bg-background" aria-label="Проверка защиты приложения"><span className="text-sm text-muted-foreground">Проверка доступа…</span></div>;
 
   if (locked) {
     return <LockScreen onUnlock={() => { markUnlocked(); setLocked(false); }} />;
