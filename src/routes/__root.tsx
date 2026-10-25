@@ -193,11 +193,12 @@ function RootComponent() {
 
 /** Root frame: fills the screen and starts strictly below the system status bar. */
 function SafeFrame({ children }: { children: ReactNode }) {
-  const top = "env(safe-area-inset-top)";
+  const nativeAndroid = typeof window !== "undefined" && (window as Window & { Capacitor?: { getPlatform?: () => string } }).Capacitor?.getPlatform?.() === "android";
+  const top = nativeAndroid ? "0px" : "env(safe-area-inset-top)";
   return (
     <div
-      style={{ paddingTop: top }}
-      className="flex h-[100dvh] w-full max-w-[100vw] flex-col overflow-x-hidden bg-background pb-[env(safe-area-inset-bottom)]"
+      style={{ paddingTop: top, paddingBottom: "env(safe-area-inset-bottom)" }}
+      className="flex h-[100dvh] w-full max-w-[100vw] flex-col overflow-x-hidden bg-background"
     >
       {children}
     </div>
