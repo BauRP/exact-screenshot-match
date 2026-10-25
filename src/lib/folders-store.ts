@@ -115,3 +115,35 @@ export function deleteFolder(id: string) {
 export function isSystemFolder(id: string) {
   return SYSTEM_FOLDERS.some((f) => f.id === id);
 }
+
+/** Backups include custom folder IDs so the note-to-folder relationship survives. */
+export function exportFolderBackup(): { folders: Folder[]; hiddenSystem: string[] } {
+  hydrate();
+  return {
+    folders: customFolders.map((folder) => ({ ...folder })),
+    hiddenSystem: [...hiddenSystem],
+  };
+}
+
+export function restoreFolderBackup(folders: Folder[], _hiddenSystem: string[]): void {
+  hydrate();
+  if (!Array.isArray(folders) || folders.length > 1000) throw new Error("Invalid folder backup");
+  const known = new Set([...SYSTEM_FOLDERS, ...customFolders].map((folder) => folder.id));
+  const pending: Folder[] = [];
+  for (const folder of folders) {
+    if (!folder || typeof folder.id !== "string" || !/^[\\w-]{1,128}$/.test(folder.id) ||
+        typeof folder.name !== "string" || folder.name.length > 120) {
+      throw new Error("Invalid folder record in backup");
+    }
+    if (!known.has(folder.id)) {
+      pending.push({ id: folder.id, name: folder.name.trim() || "Folder" });
+      known.add(folder.id);
+    }
+  }
+  if (pending.length === 0) return;
+  const next = [...customFolders, ...pending];
+  // Save first: never tell the UI the folder was restored if persistence failed.
+  localStorage.setItem(FOLDERS_KEY, JSON.stringify(next));
+  customFolders = next;
+  emit();
+}
