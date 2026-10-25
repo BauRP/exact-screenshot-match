@@ -1,92 +1,40 @@
-# Project Recovery Suite
+# Супер заметки (Super Notes)
 
-PROJECT RESTORATION AND SETUP INSTRUCTIONS
+Android-приложение для локальных заметок, папок, аудиозаписей, сканирования текста и работы с PDF.
 
-PHASE 1: CONTEXT INGESTION & ARCHITECTURE ANALYSIS
+## Структура
+- `src/routes/index.tsx` — список, плитка и таблица заметок и PDF.
+- `src/routes/editor.$id.tsx` — редактор заметок.
+- `src/routes/pdf.$id.tsx` — просмотр, редактирование и экспорт PDF.
+- `src/routes/camera.tsx` — получение фото и распознавание текста.
+- `src/routes/settings.tsx` — настройки приложения.
+- `src/lib/notes-store.ts` — локальные данные заметок.
+- `src/lib/pdf-files.ts` — PDF-файлы в IndexedDB.
+- `src/lib/native-ads.ts`, `src/components/NativeAdCard.tsx` — нативные рекламные места Google AdMob.
+- `android-overlay/` — настройки Android, включая AdMob application ID.
+- `.github/workflows/android-build.yml` — сборка Android и публикация тестового APK в GitHub Releases.
 
-Before generating or modifying any code, please locate and read the ARCHITECTURE.md file in the root of the provided ZIP archive. It is important to fully understand the application's logic, tech stack, state management, database structure, and custom solutions. Please adapt the setup to match the exact architectural rules defined in this file.
+## Правила изменений
+1. **Не удалять AdMob**: в приложении используется нативная реклама Google. Видимая рекламная карточка находится первой, затем после каждых пяти пользовательских заметок или PDF. Пустые места сохраняются и при отсутствии объявления. Обязательная маркировка «Реклама».
+2. Сохранять пользовательские заметки, PDF и настройки совместимыми с предыдущими версиями. Не стирать локальную базу при миграции.
+3. Не отключать проверку разрешений, согласия на рекламу и защиту от ошибок.
+4. Для тестирования использовать тестовые объявления Google. Включение реальных рекламных блоков требует проверки на устройстве и корректной политики конфиденциальности.
+5. Android WebView не должен перекрывать системную строку состояния и навигацию.
+6. Проверять редактирование PDF, сохранение кириллицы и обновление программы без потери данных.
 
-PHASE 2: CORE OBJECTIVE
-
-Act as a Senior Software Architect. Please reconstruct the provided project files from the ZIP archive with full functional and visual fidelity.
-
-Required modification during setup:
-
-    REMOVE GOOGLE ADS: Please safely remove any Google Ads (AdMob, AdSense, etc.) initialization, SDK dependencies, UI ad banners, and related logic. The application must be completely ad-free while maintaining all other native functionalities.
-
-PHASE 3: SYSTEM RECOVERY (RESTORE FROM ZIP)
-
-Please ensure the following configurations are restored exactly as they were in the original ZIP archive:
-
-A. UI SCALING & TAILWIND CONFIGURATION
-
-    Restore index.html. Ensure the viewport meta tag is exactly: <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-
-    Inspect tailwind.config.ts (or .js) and src/index.css. Restore all root font-size scales, custom mappings, and breakpoints.
-
-    Ensure touch-action: manipulation, user-select: none, and safe-area inset paddings are fully restored.
-
-B. ANDROID NATIVE PERMISSIONS & MANIFEST
-
-    Re-insert media storage permissions (READ_MEDIA_IMAGES, READ_MEDIA_VIDEO, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, ACCESS_MEDIA_LOCATION).
-
-    Include android:requestLegacyExternalStorage="true" in the <application> tag.
-
-    Restore all <queries> declarations.
-
-    Preserve android:configChanges parameters on the main activity.
-
-C. CAPACITOR CONFIGURATION
-
-    Restore settings including webDir: "dist", and server: { androidScheme: 'https', cleartext: true }.
-
-    Ensure proper file scheme conversion (Capacitor.convertFileSrc(path)) is maintained for local media.
-
-D. MEDIA SCANNING HANDLERS
-
-    Check all hooks handling media indexing. Ensure runtime permission checks happen before querying storage.
-
-    Ensure the app scans directories recursively to fetch metadata exactly as originally written in the ZIP.
-
-E. LAUNCHER ASSETS & BUILD
-
-    Ensure all original PNG launcher icons from mipmap-* are present.
-
-    Check build.gradle to ensure compileSdk, targetSdk, and dependencies match the original structure.
-
-PHASE 4: IMPLEMENTATION STANDARDS
-
-    Comprehensive Setup: Recreate every feature, utility, component, and routing config exactly as in the source (without the ads).
-
-    No Placeholders: Please provide complete code blocks. Do not use shortcuts, stubs, or comments like "// existing code here".
-
-    Full File Output: When modifying or generating a file, please output the entire unabbreviated file from start to finish.
-
-    Original Code: Please use the exact original logic from the ZIP archive instead of generating new template code.
-
-EXECUTION STRATEGY:
-
-Step 1: Output a brief confirmation that you have read ARCHITECTURE.md and list the core stack you absorbed.
-
-Step 2: Begin the extraction, ad removal, and full unabbreviated code generation following the standards above.
-
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/f30e1934-1bd6-4367-bce6-14e7e6748278).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
+## Сборка
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+bun install
+bun run build
+npx cap add android
+npx cap sync android
 ```
+
+После создания Android-проекта наложить файлы `android-overlay` по шагам в GitHub Actions.
+
+Тестовая сборка: `Actions → Android APK - Super Notes → Run workflow`.
+Готовые APK: https://github.com/BauRP/exact-screenshot-match/releases
+
+**Важно:** тестовые APK используют debug-подпись, которая может меняться между сборками. До установки другой версии следует сохранить копии важных заметок и PDF. Для обновлений без переустановки нужен постоянный ключ подписи.
+
+Существующие данные заметок хранятся локально, резервное копирование полноценного PDF-архива ещё требует отдельной проверки. Не заявлять о шифровании заметок: PIN сейчас только ограничивает доступ к интерфейсу.
