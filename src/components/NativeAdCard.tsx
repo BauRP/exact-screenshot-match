@@ -63,12 +63,6 @@ export function NativeAdCard({ view, slotKey }: { view: ViewMode; slotKey: strin
           </span>
         </div>
         <div className="relative h-[90px] w-full min-w-0 overflow-hidden rounded-lg">
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 flex items-center px-2 text-xs text-muted-foreground/70"
-          >
-            Рекламное место
-          </div>
           {slot}
         </div>
       </div>
