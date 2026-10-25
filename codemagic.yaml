@@ -1,0 +1,79 @@
+# Super Notes APK is built on Codemagic, not on GitHub Actions.
+# Connect this repository at https://codemagic.io, create a secret
+# variable GITHUB_TOKEN in the github_release group, and enable its webhook.
+workflows:
+  supernotes-android-apk:
+    name: Super Notes - Android APK
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      node: 22
+      java: 21
+      groups:
+        - github_release
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+      cancel_previous_builds: true
+    scripts:
+      - name: Install Bun and dependencies
+        script: |
+          set -euo pipefail
+          npm install --global bun
+          bun --version
+          bun install --frozen-lockfile
+      - name: Build offline web assets
+        script: |
+          set -euo pipefail
+          bun run build
+          test -s dist/client/index.html
+          test -d dist/client/assets
+      - name: Install Android SDK 36
+        script: |
+          set -euo pipefail
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Generate Capacitor Android project
+        script: |
+          set -euo pipefail
+          npx cap add android
+          npx cap sync android
+      - name: Apply repository native Android overlay
+        script: |
+          set -euo pipefail
+          cp -R android-overlay/app/src/main/res/. android/app/src/main/res/
+          cp -R android-overlay/app/src/main/java/. android/app/src/main/java/
+          cp android-overlay/app/build.gradle android/app/build.gradle
+          cp android-overlay/app/proguard-rules.pro android/app/proguard-rules.pro
+          cp android-overlay/app/src/main/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          cp android-overlay/variables.gradle android/variables.gradle
+          # The app has no AdMob. Never require the removed advertising app ID.
+          if grep -q 'com.google.android.gms.ads.APPLICATION_ID' android/app/src/main/AndroidManifest.xml; then
+            echo "Unexpected AdMob app ID in ad-free Android manifest"
+            exit 1
+          fi
+          # Capacitor creates this value file; our overlay already declares the same color.
+          if test -f android/app/src/main/res/values/ic_launcher_background.xml &&
+             grep -q 'name="ic_launcher_background"' android/app/src/main/res/values/colors.xml; then
+            rm android/app/src/main/res/values/ic_launcher_background.xml
+          fi
+          printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > android/local.properties
+      - name: Assemble installable debug APK
+        script: |
+          set -euo pipefail
+          chmod +x android/gradlew
+          cd android
+          ./gradlew assembleDebug --no-daemon --stacktrace
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          cd ..
+          mkdir -p artifacts
+          cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/SuperNotes-debug.apk
+      - name: Publish APK to GitHub Releases
+        script: |
+          set -euo pipefail
+          python3 scripts/publish-apk-github.py
+    artifacts:
+      - artifacts/SuperNotes-debug.apk
