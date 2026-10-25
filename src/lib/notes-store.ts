@@ -586,7 +586,7 @@ export function importBackupNotes(imported: Note[]): number {
   const additions: Note[] = [];
   for (const item of imported) {
     if (!isRecord(item) || typeof item.id !== "string" ||
-        !/^[\\w-]{1,128}$/.test(item.id) ||
+        !/^[\w-]{1,128}$/.test(item.id) ||
         typeof item.body !== "string" || typeof item.title !== "string") {
       throw new Error("Corrupted note in backup");
     }
