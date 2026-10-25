@@ -130,6 +130,19 @@ export async function restoreFullBackup(file: File): Promise<number> {
   const manifest = parseManifest(metadata);
   const pdfIds = uniqueIds(manifest.pdfIds);
   const audioIds = uniqueIds(manifest.audioIds);
+  // Reject backups that omit referenced binary attachments.
+  for (const record of manifest.notes) {
+    if (!record || typeof record !== "object" || typeof record.id !== "string" ||
+        typeof record.title !== "string" || typeof record.body !== "string") {
+      throw new Error("В архиве найдена повреждённая заметка");
+    }
+    if (record.kind === "pdf" && !pdfIds.includes(record.id)) {
+      throw new Error("В архиве не указан PDF для заметки: " + record.id);
+    }
+    for (const id of audioIdsInHtml(record.body)) {
+      if (!audioIds.includes(id)) throw new Error("В архиве отсутствует аудиозапись: " + id);
+    }
+  }
 
   // Validate ALL referenced files before making any changes to local storage.
   let total = metadata.byteLength;
