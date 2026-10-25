@@ -528,9 +528,13 @@ function SettingsPage() {
             <Btn
               variant="destructive"
               onClick={() => {
-                clearAll();
-                setClearOpen(false);
-                toast.success(t("delete_all"));
+                try {
+                  clearAll();
+                  setClearOpen(false);
+                  toast.success(t("delete_all"));
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Не удалось удалить заметки");
+                }
               }}
             >
               {t("delete_all")}
