@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Moon,
   Sun,
@@ -13,8 +13,11 @@ import {
   Shield,
   Send,
   MessageSquarePlus,
+  Download,
+  Upload,
 } from "lucide-react";
 import { sendFeedback } from "@/lib/feedback.functions";
+import { createFullBackup, restoreFullBackup, shareFullBackup } from "@/lib/backup";
 import { AppHeader } from "@/components/AppHeader";
 import { BottomNav } from "@/components/BottomNav";
 import { useTheme, setTheme } from "@/lib/theme";
@@ -196,6 +199,31 @@ function SettingsPage() {
   const [fbTopic, setFbTopic] = useState("");
   const [fbText, setFbText] = useState("");
   const [fbSending, setFbSending] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const backupPickerRef = useRef<HTMLInputElement>(null);
+
+  const makeBackup = async () => {
+    if (backupBusy) return;
+    setBackupBusy(true);
+    try {
+      const archive = await createFullBackup();
+      await shareFullBackup(archive);
+      toast.success("Резервная копия подготовлена");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось создать резервную копию");
+    } finally { setBackupBusy(false); }
+  };
+
+  const importBackup = async (file: File) => {
+    if (backupBusy) return;
+    setBackupBusy(true);
+    try {
+      const count = await restoreFullBackup(file);
+      toast.success(`Восстановлено заметок: ${count}. Существующие заметки сохранены.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось восстановить архив");
+    } finally { setBackupBusy(false); }
+  };
 
   const openPinSetup = (enableBiometricsAfterwards: boolean) => {
     setEnableBioAfterPin(enableBiometricsAfterwards);
@@ -371,6 +399,19 @@ function SettingsPage() {
         </Section>
 
         <Section title={t("data")} eyebrow="05">
+          <Row icon={<Download className="h-4 w-4" />} title="Полная резервная копия" hint="Заметки, PDF, аудио и папки — один ZIP-файл">
+            <Btn disabled={backupBusy} onClick={() => void makeBackup()}>Сохранить</Btn>
+          </Row>
+          <div className="h-px bg-border" />
+          <Row icon={<Upload className="h-4 w-4" />} title="Восстановить из ZIP" hint="Добавляет документы, не удаляя существующие">
+            <Btn disabled={backupBusy} onClick={() => backupPickerRef.current?.click()}>Открыть</Btn>
+          </Row>
+          <input ref={backupPickerRef} className="hidden" type="file" accept=".zip,application/zip" onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) void importBackup(file);
+          }} />
+          <div className="h-px bg-border" />
           <Row
             icon={<Trash2 className="h-4 w-4 text-destructive" />}
             title={t("clear_all_notes")}
