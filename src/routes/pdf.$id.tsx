@@ -989,6 +989,7 @@ function PdfViewerScreen() {
   const splitCurrentPage = async () => {
     if (!bytes) return;
     setBusy(true);
+    let extractedPdfId: string | null = null;
     try {
       const { PDFDocument } = await import("pdf-lib");
       const rendered = await buildBytes();
@@ -1003,15 +1004,21 @@ function PdfViewerScreen() {
       const fileName = `${(note?.pdf?.fileName ?? "document.pdf").replace(/\.pdf$/i, "")}-p${page}.pdf`;
       const newPdfId = crypto.randomUUID();
       await savePdfFile(newPdfId, buffer);
-      const created = createNote({
+      extractedPdfId = newPdfId;
+      createNote({
         id: newPdfId,
         kind: "pdf",
         title: fileName.replace(/\.pdf$/i, ""),
         folderId: note?.folderId ?? "all",
         pdf: { fileName, size: output.byteLength, pageCount: 1, favorite: false, overlays: [] },
       });
+      extractedPdfId = null;
       toast.success("Страница сохранена как отдельный PDF");
     } catch (error) {
+      if (extractedPdfId) {
+        const { deletePdfFile } = await import("@/lib/pdf-files");
+        await deletePdfFile(extractedPdfId).catch(console.error);
+      }
       console.error(error);
       toast.error("Не удалось извлечь страницу");
     } finally {
