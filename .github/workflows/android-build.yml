@@ -46,7 +46,7 @@ jobs:
           packages: "platform-tools platforms;android-36 build-tools;36.0.0"
 
       - name: Install dependencies
-        run: bun install --no-save
+        run: bun install
 
       - name: Build app
         run: |
@@ -69,7 +69,7 @@ jobs:
           cp android-overlay/app/src/main/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
           cp android-overlay/variables.gradle android/variables.gradle
 
-          # Removed AdMob is expected. The old workflow incorrectly REQUIRED it.
+          # Native AdMob is configured in the overlay (no legacy ad banners).
           grep -q 'com.google.android.gms.ads.APPLICATION_ID' android/app/src/main/AndroidManifest.xml
           grep -q 'ca-app-pub-9902253594429663~4405601673' android/app/src/main/res/values/admob.xml
 
