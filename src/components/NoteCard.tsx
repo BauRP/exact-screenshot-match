@@ -23,8 +23,8 @@ export function noteCardShell(view: ViewMode) {
   const layout = view === "grid"
     ? "aspect-[4/5] p-4 flex flex-col"
     : view === "table"
-      ? "flex items-center gap-4 p-3"
-      : "p-4 flex flex-col gap-2";
+      ? "min-h-[142px] flex items-center gap-4 p-3"
+      : "min-h-[154px] p-4 flex flex-col gap-2";
   return `relative min-w-0 rounded-2xl border border-border bg-card/70 backdrop-blur ${layout}`;
 }
 
