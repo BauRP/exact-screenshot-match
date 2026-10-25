@@ -200,12 +200,18 @@ function emit() {
   listeners.forEach((listener) => listener());
 }
 
+/**
+ * Persist first and notify React only after the storage write succeeded.
+ * A failed write must NEVER make an unsaved edit look successfully stored.
+ */
 function persistNotes(nextNotes: Note[]) {
-  if (!isBrowserStorageAvailable()) return;
   try {
+    if (!isBrowserStorageAvailable()) throw new Error("Local notes storage is unavailable");
     window.localStorage.setItem(NOTES_KEY, JSON.stringify(nextNotes));
   } catch (error) {
-    commit({ status: "error", error: error instanceof Error ? error.message : "Storage write failed" });
+    const message = error instanceof Error ? error.message : "Storage write failed";
+    commit({ status: "error", error: message });
+    throw new Error("Unable to save notes: " + message);
   }
 }
 
@@ -430,8 +436,8 @@ export function createNote(partial?: Partial<Note>): Note {
 
   };
   const nextNotes = [note, ...state.notes];
-  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
   persistNotes(nextNotes);
+  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
   return note;
 }
 
@@ -493,8 +499,8 @@ export function updateNote(id: string, patch: Partial<Note>) {
   });
 
   if (!changed) return;
-  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
   persistNotes(nextNotes);
+  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
 }
 
 export function togglePin(id: string) {
@@ -507,8 +513,8 @@ export function togglePin(id: string) {
   });
 
   if (!changed) return;
-  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
   persistNotes(nextNotes);
+  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
 }
 
 export function deleteNote(id: string) {
@@ -516,10 +522,9 @@ export function deleteNote(id: string) {
   const target = state.notes.find((note) => note.id === id);
   const nextNotes = state.notes.filter((note) => note.id !== id);
   if (nextNotes.length === state.notes.length) return;
-  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
   persistNotes(nextNotes);
-  // Never delete binary attachments if persisting the note deletion failed.
-  if (state.status === "error") return;
+  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
+  // Binary attachments are removed only after the note change was persisted.
   if (target?.kind === "pdf") {
     void import("./pdf-files").then((module) => module.deletePdfFile(id)).catch((error) => console.error("Unable to remove PDF", error));
   }
@@ -533,13 +538,24 @@ export function deleteNote(id: string) {
 }
 
 
+/** Move the notes out of a folder BEFORE its tab is removed. */
+export function moveNotesToFolder(sourceId: string, destinationId = "all") {
+  ensureReadyForMutation();
+  if (sourceId === destinationId) return;
+  const nextNotes = state.notes.map((note) =>
+    note.folderId === sourceId ? { ...note, folderId: destinationId } : note,
+  );
+  if (nextNotes.every((note, index) => note === state.notes[index])) return;
+  persistNotes(nextNotes);
+  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
+}
+
 export function clearAll() {
   ensureReadyForMutation();
   const notesBeforeClear = state.notes;
   const pdfIds = notesBeforeClear.filter((note) => note.kind === "pdf").map((note) => note.id);
-  commit({ notes: [], hydrated: true, status: "ready", error: null });
   persistNotes([]);
-  if (state.status === "error") return;
+  commit({ notes: [], hydrated: true, status: "ready", error: null });
   void import("./pdf-files").then(async ({ deletePdfFile }) => {
     await Promise.all(pdfIds.map((id) => deletePdfFile(id)));
   }).catch((error) => console.error("Unable to clear PDF files", error));
