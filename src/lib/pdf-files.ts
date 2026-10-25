@@ -78,25 +78,41 @@ export function pickPdfFile(): Promise<File | null> {
     input.style.position = "fixed";
     input.style.left = "-9999px";
     let settled = false;
+    let pickerLeftApp = false;
+    let returnCheck: ReturnType<typeof setTimeout> | null = null;
+
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") pickerLeftApp = true;
+      else if (pickerLeftApp) checkReturn();
+    };
+    const onBlur = () => { pickerLeftApp = true; };
+    const onFocus = () => { if (pickerLeftApp) checkReturn(); };
 
     const finish = (file: File | null) => {
       if (settled) return;
       settled = true;
+      if (returnCheck !== null) clearTimeout(returnCheck);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
       input.remove();
       resolve(file);
     };
 
+    function checkReturn() {
+      if (returnCheck !== null) clearTimeout(returnCheck);
+      returnCheck = setTimeout(() => {
+        if (!settled && !input.files?.length) finish(null);
+      }, 600);
+    }
+
     input.addEventListener("change", () => finish(input.files?.[0] ?? null));
     input.addEventListener("cancel", () => finish(null));
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
     document.body.appendChild(input);
     input.click();
-
-    // Safety net: some Android webviews never fire "cancel".
-    window.setTimeout(() => {
-      if (!settled && !input.files?.length) {
-        // keep waiting for change; only clean up if the element got detached
-      }
-    }, 1000);
   });
 }
 
