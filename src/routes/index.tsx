@@ -348,9 +348,13 @@ function Index() {
               variant="destructive"
               className="rounded-full"
               onClick={() => {
-                selected.forEach((id) => deleteNote(id));
-                setSelected(new Set());
-                setConfirmDelete(false);
+                try {
+                  selected.forEach((id) => deleteNote(id));
+                  setSelected(new Set());
+                  setConfirmDelete(false);
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Ошибка удаления");
+                }
               }}
             >
               {t("delete")}
