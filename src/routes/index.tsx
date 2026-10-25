@@ -50,6 +50,7 @@ import {
 } from "@/lib/folders-store";
 import {
   createNote,
+  moveNotesToFolder,
   deleteNote,
   updateNote,
   setSort,
@@ -253,7 +254,15 @@ function Index() {
           getLabel={localizedFolderName}
           onSelect={setActiveFolder}
           onRename={(folder) => setFolderDialog({ mode: "rename", id: folder.id, value: folder.name })}
-          onDelete={(folder) => deleteFolder(folder.id)}
+          onDelete={(folder) => {
+            try {
+              moveNotesToFolder(folder.id);
+              deleteFolder(folder.id);
+              toast.success("Заметки перемещены в общую папку");
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "Не удалось удалить папку");
+            }
+          }}
         />
 
       </div>
