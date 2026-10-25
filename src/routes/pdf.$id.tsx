@@ -703,18 +703,41 @@ function PdfViewerScreen() {
   const buildBytes = useCallback(async (): Promise<Uint8Array | null> => {
     if (!bytes) return null;
     const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+    const fontkitModule = await import("@pdf-lib/fontkit");
     const document = await PDFDocument.load(bytes.slice(0), { ignoreEncryption: true });
+    document.registerFontkit(fontkitModule.default);
+
     const fontCache = new Map<string, any>();
-    const embedFont = async (key: string) => {
-      const cached = fontCache.get(key);
-      if (cached) return cached;
-      const standard = (StandardFonts as Record<string, any>)[key] ?? StandardFonts.Helvetica;
-      const embedded = await document.embedFont(standard);
-      fontCache.set(key, embedded);
+    const embedStandard = async (key: string) => {
+      const cacheKey = `standard:${key}`;
+      if (fontCache.has(cacheKey)) return fontCache.get(cacheKey);
+      const embedded = await document.embedFont(
+        (StandardFonts as Record<string, any>)[key] ?? StandardFonts.Helvetica,
+      );
+      fontCache.set(cacheKey, embedded);
       return embedded;
     };
-    const pages = document.getPages();
 
+    // Noto Sans Cyrillic WOFF assets are bundled into the APK by Vite.
+    // There is no network request to an external font service.
+    const embedCyrillic = async (bold: boolean, italic: boolean) => {
+      const cacheKey = `cyrillic:${bold ? 700 : 400}:${italic ? "italic" : "normal"}`;
+      if (fontCache.has(cacheKey)) return fontCache.get(cacheKey);
+      const source = bold
+        ? italic
+          ? await import("@fontsource/noto-sans/files/noto-sans-cyrillic-700-italic.woff?url")
+          : await import("@fontsource/noto-sans/files/noto-sans-cyrillic-700-normal.woff?url")
+        : italic
+          ? await import("@fontsource/noto-sans/files/noto-sans-cyrillic-400-italic.woff?url")
+          : await import("@fontsource/noto-sans/files/noto-sans-cyrillic-400-normal.woff?url");
+      const response = await fetch(source.default);
+      if (!response.ok) throw new Error("The bundled Cyrillic font could not be loaded.");
+      const embedded = await document.embedFont(await response.arrayBuffer(), { subset: true });
+      fontCache.set(cacheKey, embedded);
+      return embedded;
+    };
+
+    const pages = document.getPages();
     for (const overlay of overlays) {
       const target = pages[overlay.page - 1];
       if (!target) continue;
@@ -722,48 +745,69 @@ function PdfViewerScreen() {
       const x = (overlay.xPct / 100) * width;
       const boxHeight = Math.max((overlay.heightPct / 100) * height, 10);
       const y = height - (overlay.yPct / 100) * height - boxHeight;
-
       const runs = getRuns(overlay).filter((run) => run.text);
-      // Validate glyphs before masking any original text.
+
+      // Validate and select an embeddable font for every character BEFORE
+      // masking the original text. Unsupported scripts abort safely.
+      const prepared = [];
       for (const run of runs) {
-        const font = await embedFont(standardFontKey(run.fontFamily, run.bold, run.italic));
-        try {
-          font.encodeText(run.text);
-        } catch {
-          throw new Error("This PDF contains characters that require an embedded Unicode font. Export was stopped; the original document is safe.");
+        const original = await embedStandard(standardFontKey(run.fontFamily, run.bold, run.italic));
+        const portions: Array<{ font: any; text: string }> = [];
+        for (const character of run.text) {
+          let chosen = original;
+          try {
+            original.encodeText(character);
+          } catch {
+            if (!/[\u0400-\u052f]/u.test(character)) {
+              throw new Error("This PDF includes characters unsupported by the embedded export fonts.");
+            }
+            chosen = await embedCyrillic(run.bold, run.italic);
+            try {
+              chosen.encodeText(character);
+            } catch {
+              throw new Error("Unable to embed a Cyrillic character; the original PDF remains untouched.");
+            }
+          }
+          const last = portions[portions.length - 1];
+          if (last && last.font === chosen) last.text += character;
+          else portions.push({ font: chosen, text: character });
         }
+        prepared.push({ run, portions });
       }
+
       if (overlay.cover) {
         target.drawRectangle({
-          x: x - 1, y: y - 1,
+          x: x - 1,
+          y: y - 1,
           width: (overlay.widthPct / 100) * width + 2,
           height: boxHeight + 2,
           color: rgb(1, 1, 1),
         });
       }
+
       const maxSize = runs.reduce((m, run) => Math.max(m, run.fontSize), 0) || boxHeight * 0.8;
       const baselineY = y + Math.max((boxHeight - maxSize) / 2, 0) + maxSize * 0.2;
       let cursorX = x;
-
-      for (const run of runs) {
+      for (const { run, portions } of prepared) {
         const size = run.fontSize;
-        const font = await embedFont(standardFontKey(run.fontFamily, run.bold, run.italic));
         const { r, g, b } = hexToRgb(run.color);
-        try {
-          const runWidth = font.widthOfTextAtSize(run.text, size);
-          target.drawText(run.text, { x: cursorX, y: baselineY, size, font, color: rgb(r, g, b) });
-          if (run.underline && run.text.trim()) {
+        for (const portion of portions) {
+          const runWidth = portion.font.widthOfTextAtSize(portion.text, size);
+          if (cursorX + runWidth > width + 0.5) {
+            throw new Error("Text exceeds the PDF page edge. Reduce the font size or move the text.");
+          }
+          target.drawText(portion.text, {
+            x: cursorX, y: baselineY, size,
+            font: portion.font, color: rgb(r, g, b),
+          });
+          if (run.underline && portion.text.trim()) {
             target.drawRectangle({
-              x: cursorX,
-              y: baselineY - size * 0.12,
-              width: runWidth,
-              height: Math.max(size * 0.06, 0.6),
+              x: cursorX, y: baselineY - size * 0.12,
+              width: runWidth, height: Math.max(size * 0.06, 0.6),
               color: rgb(r, g, b),
             });
           }
           cursorX += runWidth;
-        } catch (error) {
-          throw new Error("Unable to write PDF text; no exported file was produced.", { cause: error });
         }
       }
     }
