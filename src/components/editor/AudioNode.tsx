@@ -6,6 +6,7 @@ import {
 } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
 import { Pause, Play, Trash2 } from "lucide-react";
+import { loadAudioFile } from "@/lib/audio-files";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -62,6 +63,7 @@ export const AudioNote = Node.create({
 
 function AudioNoteView({ node, deleteNode, editor }: NodeViewProps) {
   const src = node.attrs.src as string;
+  const [playbackSrc, setPlaybackSrc] = useState(() => src.startsWith("audiodb:") ? "" : src);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -71,6 +73,25 @@ function AudioNoteView({ node, deleteNode, editor }: NodeViewProps) {
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
   const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    if (!src.startsWith("audiodb:")) {
+      setPlaybackSrc(src);
+      return;
+    }
+    let disposed = false;
+    let objectUrl: string | null = null;
+    setPlaybackSrc("");
+    void loadAudioFile(src.slice("audiodb:".length)).then((blob) => {
+      if (disposed || !blob) return;
+      objectUrl = URL.createObjectURL(blob);
+      setPlaybackSrc(objectUrl);
+    }).catch((error) => console.error("Unable to load audio attachment", error));
+    return () => {
+      disposed = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [src]);
 
   useEffect(() => {
     return () => {
@@ -217,7 +238,7 @@ function AudioNoteView({ node, deleteNode, editor }: NodeViewProps) {
 
         <audio
           ref={audioRef}
-          src={src}
+          src={playbackSrc}
           preload="metadata"
           onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
           onTimeUpdate={(e) => setProgress(e.currentTarget.currentTime)}
