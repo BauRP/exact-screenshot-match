@@ -720,7 +720,24 @@ function PdfViewerScreen() {
       const y = height - (overlay.yPct / 100) * height - boxHeight;
 
       const runs = getRuns(overlay).filter((run) => run.text);
-      // Validate glyphs before masking original content. Never erase a line whose characters cannot be exported.\n      for (const run of runs) {\n        const font = await embedFont(standardFontKey(run.fontFamily, run.bold, run.italic));\n        try { font.encodeText(run.text); } catch {\n          throw new Error("PDF export needs an embedded Unicode font for this text. The original document was not modified.");\n        }\n      }\n      if (overlay.cover) {\n        target.drawRectangle({ x: x - 1, y: y - 1, width: (overlay.widthPct / 100) * width + 2, height: boxHeight + 2, color: rgb(1, 1, 1) });\n      }\n      const maxSize = runs.reduce((m, run) => Math.max(m, run.fontSize), 0) || boxHeight * 0.8;
+      // Validate glyphs before masking any original text.
+      for (const run of runs) {
+        const font = await embedFont(standardFontKey(run.fontFamily, run.bold, run.italic));
+        try {
+          font.encodeText(run.text);
+        } catch {
+          throw new Error("This PDF contains characters that require an embedded Unicode font. Export was stopped; the original document is safe.");
+        }
+      }
+      if (overlay.cover) {
+        target.drawRectangle({
+          x: x - 1, y: y - 1,
+          width: (overlay.widthPct / 100) * width + 2,
+          height: boxHeight + 2,
+          color: rgb(1, 1, 1),
+        });
+      }
+      const maxSize = runs.reduce((m, run) => Math.max(m, run.fontSize), 0) || boxHeight * 0.8;
       const baselineY = y + Math.max((boxHeight - maxSize) / 2, 0) + maxSize * 0.2;
       let cursorX = x;
 
@@ -741,9 +758,8 @@ function PdfViewerScreen() {
             });
           }
           cursorX += runWidth;
-        } catch {
-          // Non WinAnsi glyphs (e.g. Cyrillic) cannot be drawn with the
-          // standard font — the white mask still applies.
+        } catch (error) {
+          throw new Error("Unable to write PDF text; no exported file was produced.", { cause: error });
         }
       }
     }
