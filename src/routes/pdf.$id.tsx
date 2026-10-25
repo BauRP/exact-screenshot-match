@@ -453,7 +453,7 @@ function PdfViewerScreen() {
     if (!node) return;
     renderRunsInto(node, runs, viewScaleRef.current);
     renderedRunsRef.current = runs;
-    node.focus();
+    node.focus({ preventScroll: true });
     setSelectionOffsets(node, start, end);
     selRef.current = { start, end };
   }, []);
