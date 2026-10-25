@@ -380,22 +380,18 @@ function SettingsPage() {
               }}
             />
           </Row>
-          {(bioEnabled || pinEnabled) && (
-            <>
-              <div className="h-px bg-border" />
-              <Row icon={<Lock className="h-4 w-4" />} title={t("set_pin")} hint={t("app_lock_hint")}>
-                <Btn
-                  onClick={() => {
-                    // Changing an existing PIN requires authentication.
-                    if (pinEnabled) requireAuth(() => openPinSetup(false));
-                    else openPinSetup(false);
-                  }}
-                >
-                  {t("set_pin")}
-                </Btn>
-              </Row>
-            </>
-          )}
+          <div className="h-px bg-border" />
+          <Row icon={<Lock className="h-4 w-4" />} title={t("set_pin")} hint={t("app_lock_hint")}>
+            <Btn
+              onClick={() => {
+                // Always permit first-time PIN setup; authenticate before changes.
+                if (pinEnabled) requireAuth(() => openPinSetup(false));
+                else openPinSetup(false);
+              }}
+            >
+              {t("set_pin")}
+            </Btn>
+          </Row>
         </Section>
 
         <Section title={t("data")} eyebrow="05">
