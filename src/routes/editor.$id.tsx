@@ -250,6 +250,7 @@ function EditorPage() {
 
   /** Checkmark = the one and only commit point. */
   const handleSave = () => {
+    try {
     const body = editor?.getHTML() ?? "";
     const plain = (editor?.getText() ?? "").trim();
     const typedTitle = title.trim();
@@ -278,6 +279,10 @@ function EditorPage() {
     }
 
     navigate({ to: "/" });
+    } catch (error) {
+      console.error("Unable to save note", error);
+      alert(error instanceof Error ? error.message : "Не удалось сохранить заметку. Текст остаётся в редакторе.");
+    }
   };
 
   /**
