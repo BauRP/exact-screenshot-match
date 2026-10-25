@@ -517,8 +517,17 @@ export function deleteNote(id: string) {
   if (nextNotes.length === state.notes.length) return;
   commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
   persistNotes(nextNotes);
+  // Never delete binary attachments if persisting the note deletion failed.
+  if (state.status === "error") return;
   if (target?.kind === "pdf") {
     void import("./pdf-files").then((module) => module.deletePdfFile(id)).catch((error) => console.error("Unable to remove PDF", error));
+  }
+  if (target?.body) {
+    void import("./audio-files").then(async ({ audioIdsInHtml, deleteAudioFile }) => {
+      const stillUsed = new Set(nextNotes.flatMap((item) => audioIdsInHtml(item.body)));
+      const ids = audioIdsInHtml(target.body).filter((audioId) => !stillUsed.has(audioId));
+      await Promise.all(ids.map((audioId) => deleteAudioFile(audioId)));
+    }).catch((error) => console.error("Unable to delete audio files", error));
   }
 }
 
@@ -527,10 +536,16 @@ export function clearAll() {
   ensureReadyForMutation();
   const pdfIds = state.notes.filter((note) => note.kind === "pdf").map((note) => note.id);
   commit({ notes: [], hydrated: true, status: "ready", error: null });
+  const notesBeforeClear = state.notes;
   persistNotes([]);
+  if (state.status === "error") return;
   void import("./pdf-files").then(async ({ deletePdfFile }) => {
     await Promise.all(pdfIds.map((id) => deletePdfFile(id)));
   }).catch((error) => console.error("Unable to clear PDF files", error));
+  void import("./audio-files").then(async ({ audioIdsInHtml, deleteAudioFile }) => {
+    const ids = new Set(notesBeforeClear.flatMap((note) => audioIdsInHtml(note.body)));
+    await Promise.all([...ids].map((id) => deleteAudioFile(id)));
+  }).catch((error) => console.error("Unable to clear audio files", error));
 }
 
 export function exportNotes(): string {
