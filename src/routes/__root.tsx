@@ -197,7 +197,7 @@ function SafeFrame({ children }: { children: ReactNode }) {
   const top = nativeAndroid ? "0px" : "env(safe-area-inset-top)";
   return (
     <div
-      style={{ paddingTop: top, paddingBottom: "env(safe-area-inset-bottom)" }}
+      style={{ paddingTop: top, paddingBottom: nativeAndroid ? "0px" : "env(safe-area-inset-bottom)" }}
       className="flex h-[100dvh] w-full max-w-[100vw] flex-col overflow-x-hidden bg-background"
     >
       {children}
