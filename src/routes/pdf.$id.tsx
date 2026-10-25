@@ -719,18 +719,8 @@ function PdfViewerScreen() {
       const boxHeight = Math.max((overlay.heightPct / 100) * height, 10);
       const y = height - (overlay.yPct / 100) * height - boxHeight;
 
-      if (overlay.cover) {
-        target.drawRectangle({
-          x: x - 1,
-          y: y - 1,
-          width: (overlay.widthPct / 100) * width + 2,
-          height: boxHeight + 2,
-          color: rgb(1, 1, 1),
-        });
-      }
-
       const runs = getRuns(overlay).filter((run) => run.text);
-      const maxSize = runs.reduce((m, run) => Math.max(m, run.fontSize), 0) || boxHeight * 0.8;
+      // Validate glyphs before masking original content. Never erase a line whose characters cannot be exported.\n      for (const run of runs) {\n        const font = await embedFont(standardFontKey(run.fontFamily, run.bold, run.italic));\n        try { font.encodeText(run.text); } catch {\n          throw new Error("PDF export needs an embedded Unicode font for this text. The original document was not modified.");\n        }\n      }\n      if (overlay.cover) {\n        target.drawRectangle({ x: x - 1, y: y - 1, width: (overlay.widthPct / 100) * width + 2, height: boxHeight + 2, color: rgb(1, 1, 1) });\n      }\n      const maxSize = runs.reduce((m, run) => Math.max(m, run.fontSize), 0) || boxHeight * 0.8;
       const baselineY = y + Math.max((boxHeight - maxSize) / 2, 0) + maxSize * 0.2;
       let cursorX = x;
 
@@ -923,7 +913,9 @@ function PdfViewerScreen() {
     setBusy(true);
     try {
       const { PDFDocument } = await import("pdf-lib");
-      const source = await PDFDocument.load(bytes.slice(0), { ignoreEncryption: true });
+      const rendered = await buildBytes();
+      if (!rendered) return;
+      const source = await PDFDocument.load(rendered, { ignoreEncryption: true });
       const target = await PDFDocument.create();
       const [copied] = await target.copyPages(source, [page - 1]);
       target.addPage(copied);
