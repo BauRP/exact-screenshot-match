@@ -49,7 +49,7 @@ export async function saveAudioFile(blob: Blob): Promise<string> {
 }
 
 export async function saveAudioFileWithId(id: string, blob: Blob): Promise<void> {
-  if (!/^[\\w-]{1,128}$/.test(id)) throw new Error("Invalid audio ID");
+  if (!/^[\w-]{1,128}$/.test(id)) throw new Error("Invalid audio ID");
   await operate("readwrite", (store) => store.put(blob, id));
 }
 
