@@ -19,6 +19,8 @@ import { AppHeader } from "@/components/AppHeader";
 import { useLongPress } from "@/hooks/use-long-press";
 import { BottomNav } from "@/components/BottomNav";
 import { NoteCard } from "@/components/NoteCard";
+import { NativeAdCard } from "@/components/NativeAdCard";
+import { useNativeAdFeed } from "@/lib/native-ads";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -97,6 +99,7 @@ function Index() {
   const activeFolder = useActiveFolder();
   const navigate = useNavigate();
   const t = useT();
+  useNativeAdFeed(view, menuOpen || selected.size > 0 || Boolean(renameValue) || confirmDelete);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -252,7 +255,7 @@ function Index() {
 
       </div>
 
-      {hydrated && status !== "error" && filteredNotes.length === 0 ? (
+      {false && hydrated && status !== "error" && filteredNotes.length === 0 ? (
         <main className="mx-auto flex w-full min-h-0 max-w-xl flex-1 flex-col items-center justify-center overflow-hidden overscroll-none px-4 pb-[130px] pt-4 touch-none">
         </main>
       ) : (
@@ -620,9 +623,10 @@ function NotesGrid({
       : view === "table"
         ? "flex flex-col gap-2"
         : "flex flex-col gap-3 md:grid md:grid-cols-2 md:gap-4 lg:grid-cols-3"}>
-      {notes.map((note) => (
+      <NativeAdCard view={view} slotKey="home-first" />
+      {notes.map((note, index) => (
+        <React.Fragment key={note.id}>
           <NoteCard
-            key={note.id}
             note={note}
             view={view}
             selected={selected.has(note.id)}
@@ -630,6 +634,10 @@ function NotesGrid({
             onToggle={() => onToggle(note.id)}
             onOpen={() => onOpen(note)}
           />
+          {(index + 1) % 5 === 0 && (
+            <NativeAdCard view={view} slotKey={`home-after-${Math.floor((index + 1) / 5) * 5}`} />
+          )}
+        </React.Fragment>
       ))}
     </div>
   );
