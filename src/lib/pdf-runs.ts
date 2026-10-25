@@ -202,6 +202,42 @@ export function getSelectionOffsets(node: HTMLElement): { start: number; end: nu
   return { start: Math.min(a, b), end: Math.max(a, b) };
 }
 
+/** Fallback for Android WebViews without a reliable caretRangeFromPoint.
+ * Measures the rendered characters in the tapped PDF text box and picks the
+ * visually nearest insertion point, instead of jumping to the end.
+ */
+export function nearestTextOffset(node: HTMLElement, x: number, y: number): number | null {
+  const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  let current = walker.nextNode();
+  let position = 0;
+  let bestOffset: number | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  let examined = 0;
+
+  while (current && examined < 800) {
+    const length = current.textContent?.length ?? 0;
+    for (let index = 0; index < length && examined < 800; index += 1) {
+      range.setStart(current, index);
+      range.setEnd(current, index + 1);
+      const rect = range.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        const middle = (rect.left + rect.right) / 2;
+        const deltaY = y < rect.top ? rect.top - y : y > rect.bottom ? y - rect.bottom : 0;
+        const distance = Math.abs(x - middle) + deltaY * 5;
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestOffset = position + index + (x >= middle ? 1 : 0);
+        }
+      }
+      examined += 1;
+    }
+    position += length;
+    current = walker.nextNode();
+  }
+  return bestOffset;
+}
+
 export function setSelectionOffsets(node: HTMLElement, start: number, end: number) {
   const locate = (offset: number): [Node, number] => {
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
