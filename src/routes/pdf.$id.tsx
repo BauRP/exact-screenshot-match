@@ -173,6 +173,7 @@ function PdfViewerScreen() {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const pinchRef = useRef<{ distance: number; zoom: number } | null>(null);
   const renderTaskRef = useRef<any>(null);
+  const renderQueueRef = useRef<Promise<void>>(Promise.resolve());
   const editingNodeRef = useRef<HTMLSpanElement | null>(null);
   // Remember where the user actually tapped while React mounts an editable overlay.
   const pendingTapRef = useRef<{ x: number; y: number } | null>(null);
@@ -232,8 +233,12 @@ function PdfViewerScreen() {
   useEffect(() => {
     if (!pdfDoc) return;
     let cancelled = false;
+    let task: any = null;
 
-    (async () => {
+    // A PDF.js canvas must never be used by two render() tasks concurrently.
+    const previous = renderQueueRef.current;
+    const work = previous.catch(() => undefined).then(async () => {
+      if (cancelled) return;
       const pdfPage = await pdfDoc.getPage(page);
       if (cancelled) return;
 
@@ -256,8 +261,7 @@ function PdfViewerScreen() {
       setCanvasHeight(viewport.height);
       setViewScale(viewport.scale || 1);
 
-      renderTaskRef.current?.cancel?.();
-      const task = pdfPage.render({
+      task = pdfPage.render({
         canvasContext: context,
         viewport,
         transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined,
@@ -266,7 +270,8 @@ function PdfViewerScreen() {
 
       try {
         await task.promise;
-      } catch {
+      } catch (error) {
+        if (!cancelled) console.warn("PDF page render failed", error);
         return;
       }
       if (cancelled) return;
@@ -302,10 +307,14 @@ function PdfViewerScreen() {
           };
         });
       if (!cancelled) setTextBoxes(boxes);
-    })();
+    }).catch((error) => {
+      if (!cancelled) console.error("Unable to render PDF page", error);
+    });
+    renderQueueRef.current = work;
 
     return () => {
       cancelled = true;
+      task?.cancel?.();
     };
   }, [pdfDoc, page, zoom, rotation]);
 
