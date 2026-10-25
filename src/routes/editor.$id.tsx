@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { saveAudioFile } from "@/lib/audio-files";
 import { ColorGrid, PALETTE } from "@/components/ColorGrid";
 import {
   ArrowLeft,
@@ -335,14 +336,19 @@ function EditorPage() {
         const blob = new Blob(chunksRef.current, {
           type: rec.mimeType || "audio/webm",
         });
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const dataUrl = reader.result as string;
-          editor?.chain().focus().insertAudioNote(dataUrl).run();
-        };
-        reader.readAsDataURL(blob);
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
+        try {
+          if (blob.size > 0) {
+            const audioId = await saveAudioFile(blob);
+            if (!editor?.isDestroyed) editor?.chain().focus().insertAudioNote(`audiodb:${audioId}`).run();
+          }
+        } catch (error) {
+          console.error("Could not save audio recording", error);
+          alert("Не удалось сохранить аудио. Проверьте свободное место.");
+        } finally {
+          chunksRef.current = [];
+          streamRef.current?.getTracks().forEach((t) => t.stop());
+          streamRef.current = null;
+        }
       };
       rec.start();
       recorderRef.current = rec;
