@@ -24,7 +24,7 @@ function openDatabase(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("Failed to open PDF storage"));
+    request.onerror = () => { dbPromise = null; reject(request.error ?? new Error("Failed to open PDF storage")); };
   });
 
   return dbPromise;
@@ -36,8 +36,12 @@ function withStore<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => 
       new Promise<T>((resolve, reject) => {
         const tx = db.transaction(STORE, mode);
         const request = run(tx.objectStore(STORE));
-        request.onsuccess = () => resolve(request.result);
+        let value: T;
+        request.onsuccess = () => { value = request.result; };
         request.onerror = () => reject(request.error ?? new Error("PDF storage request failed"));
+        tx.oncomplete = () => resolve(value);
+        tx.onerror = () => reject(tx.error ?? new Error("PDF storage transaction failed"));
+        tx.onabort = () => reject(tx.error ?? new Error("PDF storage transaction aborted"));
       }),
   );
 }
