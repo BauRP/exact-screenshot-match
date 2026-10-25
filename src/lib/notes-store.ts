@@ -577,3 +577,29 @@ export function exportNotes(): string {
     2,
   );
 }
+
+/** Non-destructive restore: existing notes always win on ID collisions. */
+export function importBackupNotes(imported: Note[]): number {
+  ensureReadyForMutation();
+  if (!Array.isArray(imported) || imported.length > 10000) throw new Error("Invalid notes archive");
+  const ids = new Set(state.notes.map((note) => note.id));
+  const additions: Note[] = [];
+  for (const item of imported) {
+    if (!isRecord(item) || typeof item.id !== "string" ||
+        !/^[\\w-]{1,128}$/.test(item.id) ||
+        typeof item.body !== "string" || typeof item.title !== "string") {
+      throw new Error("Corrupted note in backup");
+    }
+    const normalized = normalizeNote(item);
+    if (!normalized) throw new Error("Corrupted note in backup");
+    if (!ids.has(normalized.id)) {
+      additions.push(normalized);
+      ids.add(normalized.id);
+    }
+  }
+  if (!additions.length) return 0;
+  const next = [...additions, ...state.notes];
+  persistNotes(next);
+  commit({ notes: next, hydrated: true, status: "ready", error: null });
+  return additions.length;
+}
