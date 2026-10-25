@@ -534,9 +534,9 @@ export function deleteNote(id: string) {
 
 export function clearAll() {
   ensureReadyForMutation();
-  const pdfIds = state.notes.filter((note) => note.kind === "pdf").map((note) => note.id);
-  commit({ notes: [], hydrated: true, status: "ready", error: null });
   const notesBeforeClear = state.notes;
+  const pdfIds = notesBeforeClear.filter((note) => note.kind === "pdf").map((note) => note.id);
+  commit({ notes: [], hydrated: true, status: "ready", error: null });
   persistNotes([]);
   if (state.status === "error") return;
   void import("./pdf-files").then(async ({ deletePdfFile }) => {
