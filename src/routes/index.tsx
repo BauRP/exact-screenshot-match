@@ -155,7 +155,10 @@ function Index() {
       const { PDFDocument } = await import("pdf-lib");
       const document = await PDFDocument.load(buffer, { ignoreEncryption: true });
 
+      const pdfId = crypto.randomUUID();
+      await savePdfFile(pdfId, buffer);
       const note = createNote({
+        id: pdfId,
         kind: "pdf",
         title: file.name.replace(/\.pdf$/i, "") || "PDF",
         folderId: activeFolder === "all" ? "all" : activeFolder,
@@ -171,7 +174,6 @@ function Index() {
         },
       });
 
-      await savePdfFile(note.id, buffer);
       navigate({ to: "/pdf/$id", params: { id: note.id } });
     } catch (error) {
       console.error(error);
