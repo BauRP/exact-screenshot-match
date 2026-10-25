@@ -7,6 +7,7 @@ on:
     branches:
       - main
       - chatgpt/external-apk-build-20261025
+      - chatgpt/super-notes-stability-20261025
 
 permissions:
   contents: write
