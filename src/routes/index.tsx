@@ -99,12 +99,12 @@ function Index() {
   const activeFolder = useActiveFolder();
   const navigate = useNavigate();
   const t = useT();
-  useNativeAdFeed(view, menuOpen || selected.size > 0 || Boolean(renameValue) || confirmDelete);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [renameValue, setRenameValue] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  useNativeAdFeed(view, menuOpen || selected.size > 0 || Boolean(renameValue) || confirmDelete);
 
   // Selection is scoped to the folder being viewed and to notes that still exist.
   useEffect(() => setSelected(new Set()), [activeFolder]);
@@ -255,9 +255,8 @@ function Index() {
 
       </div>
 
-      {false && hydrated && status !== "error" && filteredNotes.length === 0 ? (
-        <main className="mx-auto flex w-full min-h-0 max-w-xl flex-1 flex-col items-center justify-center overflow-hidden overscroll-none px-4 pb-[130px] pt-4 touch-none">
-        </main>
+      {hydrated && status !== "error" && filteredNotes.length === 0 ? (
+        <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-[130px] pt-4"><NativeAdCard view={view} slotKey="home-first" /></main>
       ) : (
         <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-[130px] pt-4 [-webkit-overflow-scrolling:touch]">
           {!hydrated ? (
