@@ -55,6 +55,7 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
 
         // Debug builds use Google test inventory. Set VITE_ADMOB_LIVE_ADS=true
         // only for a real release, after validating the native UI on a device.
+        // APK built by this workflow is a debug build: use Google test inventory.
         const testAds = import.meta.env.VITE_ADMOB_LIVE_ADS !== "true";
         const feed = await NativeAdFeed.create({
           feedId: HOME_AD_FEED_ID,
