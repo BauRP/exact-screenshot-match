@@ -192,7 +192,9 @@ function PdfViewerScreen() {
     loadPdfFile(id).then((buffer) => {
       if (cancelled) return;
       if (!buffer) setLoadError("Файл не найден в локальном хранилище.");
-      else setBytes(buffer);
+      else { setLoadError(null); setBytes(buffer); }
+    }).catch((error) => {
+      if (!cancelled) setLoadError(error instanceof Error ? error.message : "Ошибка чтения PDF");
     });
     return () => {
       cancelled = true;
