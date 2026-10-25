@@ -122,8 +122,18 @@ export async function shareFullBackup(blob: Blob): Promise<void> {
 export async function restoreFullBackup(file: File): Promise<number> {
   if (file.size > MAX_ARCHIVE_BYTES) throw new Error("Архив превышает безопасный лимит 100 МБ");
   const bytes = new Uint8Array(await file.arrayBuffer());
+  let declaredBytes = 0;
   const entries = unzipSync(bytes, {
-    filter: (entry) => entry.originalSize <= MAX_ENTRY_BYTES,
+    filter: (entry) => {
+      if (entry.originalSize > MAX_ENTRY_BYTES) {
+        throw new Error("Один из файлов архива превышает ограничение");
+      }
+      declaredBytes += entry.originalSize;
+      if (declaredBytes > MAX_ARCHIVE_BYTES) {
+        throw new Error("Распакованный архив превышает 100 МБ");
+      }
+      return true;
+    },
   });
   const metadata = entries["manifest.json"];
   if (!metadata) throw new Error("В архиве отсутствует manifest.json");
