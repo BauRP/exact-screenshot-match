@@ -33,10 +33,13 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
     if (!onAndroid()) return;
     let disposed = false;
     let starting = false;
+    let attempts = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     const initialize = async () => {
       if (starting || disposed || !navigator.onLine || feedRef.current) return;
       starting = true;
+      attempts += 1;
       try {
         const {
           AdMob, AdmobConsentStatus, NativeAdFeed, NativeAdTemplate,
@@ -79,6 +82,9 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
       } catch (error) {
         // Notes and PDF must continue working with an empty ad slot.
         console.warn("Native ads not available; reserving slots", error);
+        if (!disposed && attempts < 3 && navigator.onLine) {
+          retryTimer = setTimeout(() => { retryTimer = null; void initialize(); }, Math.min(2000 * attempts, 6000));
+        }
       } finally {
         starting = false;
       }
@@ -90,6 +96,7 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
     return () => {
       disposed = true;
       window.removeEventListener("online", onOnline);
+      if (retryTimer !== null) clearTimeout(retryTimer);
       setReady(false);
       const feed = feedRef.current;
       feedRef.current = null;
