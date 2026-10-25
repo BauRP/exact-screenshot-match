@@ -4,8 +4,8 @@
  * No network or account is required. Large archives deliberately fail early.
  */
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
-import { audioIdsInHtml, loadAudioFile, saveAudioFileWithId } from "./audio-files";
-import { loadPdfFile, savePdfFile } from "./pdf-files";
+import { audioIdsInHtml, loadAudioFile, saveNewAudioFile, deleteAudioFile } from "./audio-files";
+import { loadPdfFile, saveNewPdfFile, deletePdfFile } from "./pdf-files";
 import { exportNotes, importBackupNotes, type Note } from "./notes-store";
 import { exportFolderBackup, restoreFolderBackup, type Folder } from "./folders-store";
 
@@ -168,24 +168,53 @@ export async function restoreFullBackup(file: File): Promise<number> {
   }
   if (total > MAX_ARCHIVE_BYTES) throw new Error("Размер распакованных файлов превышает 100 МБ");
 
-  // Never overwrite files for existing notes. The merge preserves current
-  // documents, even when an old archive contains the same IDs.
-  const existing = new Set((JSON.parse(exportNotes()) as { notes: Note[] }).notes.map((note) => note.id));
-  const newNotes = manifest.notes.filter((note) => !existing.has(note.id));
-  for (const note of newNotes) {
-    if (note.kind === "pdf" && pdfIds.includes(note.id)) {
-      const raw = entries["pdf/" + note.id + ".pdf"];
-      await savePdfFile(note.id, raw.slice().buffer);
+  // Restore only truly new notes. Never replace existing notes or binary data.
+  const existingNotes = (JSON.parse(exportNotes()) as { notes: Note[] }).notes;
+  const existingIds = new Set(existingNotes.map((note) => note.id));
+  const incoming = manifest.notes.filter((note) => !existingIds.has(note.id));
+  const newPdfIds: string[] = [];
+  const newAudioIds: string[] = [];
+  const rewritten = new Map<string, string>();
+
+  // Audio may be referenced by existing notes or orphan files. Always use
+  // new attachment IDs and rewrite only the imported notes' references.
+  const newNotes = incoming.map((note) => {
+    let body = note.body;
+    for (const id of audioIdsInHtml(body)) {
+      let replacement = rewritten.get(id);
+      if (!replacement) {
+        replacement = crypto.randomUUID();
+        rewritten.set(id, replacement);
+      }
+      body = body.split("audiodb:" + id).join("audiodb:" + replacement);
     }
+    return { ...note, body };
+  });
+  try {
+    for (const note of newNotes) {
+      if (note.kind !== "pdf") continue;
+      const raw = entries["pdf/" + note.id + ".pdf"];
+      if (!raw) throw new Error("Отсутствует PDF: " + note.id);
+      // add() rejects duplicate keys, including orphan files not in notes.
+      await saveNewPdfFile(note.id, raw.slice().buffer);
+      newPdfIds.push(note.id);
+    }
+    for (const [sourceId, destinationId] of rewritten) {
+      const raw = entries["audio/" + sourceId + ".blob"];
+      if (!raw) throw new Error("Отсутствует аудио: " + sourceId);
+      await saveNewAudioFile(destinationId, new Blob([raw.slice().buffer]));
+      newAudioIds.push(destinationId);
+    }
+    // Note metadata is published only after ALL of its attachments exist.
+    // Restore folder IDs ahead of note metadata to preserve their grouping.
+    restoreFolderBackup(manifest.folders, manifest.hiddenSystem);
+    return importBackupNotes(newNotes);
+  } catch (error) {
+    // Clean up only newly created binary data, never pre-existing files.
+    await Promise.allSettled([
+      ...newPdfIds.map((id) => deletePdfFile(id)),
+      ...newAudioIds.map((id) => deleteAudioFile(id)),
+    ]);
+    throw error;
   }
-  // Audio IDs may be shared between notes: do not overwrite any recording
-  // currently referenced by the device's existing notes.
-  const existingAudio = new Set((JSON.parse(exportNotes()) as { notes: Note[] }).notes.flatMap((n) => audioIdsInHtml(n.body)));
-  for (const id of audioIds) {
-    if (existingAudio.has(id)) continue;
-    const original = manifest.notes.some((note) => !existing.has(note.id) && audioIdsInHtml(note.body).includes(id));
-    if (original) await saveAudioFileWithId(id, new Blob([entries["audio/" + id + ".blob"].slice().buffer]));
-  }
-  restoreFolderBackup(manifest.folders, manifest.hiddenSystem);
-  return importBackupNotes(newNotes);
 }
