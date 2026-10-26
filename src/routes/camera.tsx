@@ -150,7 +150,20 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         outstanding.push(task);
         return withDeadline(task, duration);
       };
-      const prepared = native ? await native.prepareImage({path}) : null;
+      // Preparing an unusually large or unreadable file must not block the UI
+      // forever. Late native completion is cleaned up without starting OCR.
+      const preparation = native ? native.prepareImage({path}) : null;
+      let prepared: {path:string;width:number;height:number} | null = null;
+      if (preparation) {
+        try {
+          prepared = await withDeadline(preparation, 20000);
+        } catch (error) {
+          void preparation.then(late =>
+            native?.releaseImage({path: late.path}).catch(console.warn),
+            () => undefined);
+          throw error;
+        }
+      }
       const scanPath = prepared?.path ?? path;
       const width = prepared?.width ?? 1;
       const height = prepared?.height ?? 1;
