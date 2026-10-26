@@ -113,53 +113,64 @@ function composeRecognizedText(result: {
   return paragraphs.join("\n\n");
 }
 
-/**
- * ML Kit's Latin-script model ships the Russian (Cyrillic) language data, but
- * it can emit visually identical ASCII glyphs inside otherwise Cyrillic words
- * (e.g. "Poccия"). This normaliser rewrites those lookalikes back to Cyrillic
- * whenever the surrounding word is Cyrillic, so output never mixes alphabets.
- */
-const LATIN_TO_CYRILLIC: Record<string, string> = {
-  A: "А", B: "В", C: "С", E: "Е", H: "Н", K: "К", M: "М", O: "О",
-  P: "Р", T: "Т", X: "Х", Y: "У", a: "а", c: "с", e: "е", o: "о",
-  p: "р", x: "х", y: "у",
+type OcrMode = "auto" | "latin" | "cyrillic" | "chinese" | "japanese" | "korean" | "devanagari";
+type OcrCandidate = { text: string; script: OcrMode; quality: number };
+const SCRIPT_SYMBOLS: Record<string, RegExp> = {
+  cyrillic: /[\u0400-\u052f]/g,
+  chinese: /[\u3400-\u9fff]/g,
+  japanese: /[\u3040-\u30ff]/g,
+  korean: /[\uac00-\ud7af\u1100-\u11ff]/g,
+  devanagari: /[\u0900-\u097f]/g,
+  latin: /[A-Za-z\u00c0-\u024f]/g,
 };
-
-const CYRILLIC_RE = /[\u0400-\u04FF]/;
-
-function normalizeCyrillicWord(word: string): string {
-  if (!CYRILLIC_RE.test(word)) return word;
-  let out = "";
-  for (const ch of word) {
-    out += LATIN_TO_CYRILLIC[ch] ?? ch;
-  }
-  return out;
+function qualityOf(text: string, script: OcrMode, confidence?: number): number {
+  const readable = (text.match(/[\p{L}\p{N}]/gu) ?? []).length;
+  if (!readable) return -1;
+  const pattern = SCRIPT_SYMBOLS[script];
+  const match = pattern ? (text.match(pattern) ?? []).length : readable;
+  const ratio = match / readable;
+  const noise = (text.match(/[\ufffd\u25a1]/g) ?? []).length;
+  return ratio * 100 + Math.min(readable, 300) / 10 - noise * 15 + (confidence ?? 0) * 0.10;
 }
-
-function normalizeCyrillicText(text: string): string {
-  return text.replace(/[^\s]+/g, (word) => normalizeCyrillicWord(word));
-}
-
 async function initializeOcrEngine(): Promise<OcrEngine> {
-  if (!isNativePlatform()) {
-    throw new Error("Google ML Kit OCR is available only inside the installed Android app.");
-  }
-
-  const bundle: NativeTextRecognitionBundle = await import("@capacitor-mlkit/text-recognition");
-
+  if (!isNativePlatform()) throw new Error("OCR доступно только в установленном приложении Android");
+  const mlkit: NativeTextRecognitionBundle = await import("@capacitor-mlkit/text-recognition");
+  const { Capacitor, registerPlugin } = await import("@capacitor/core");
+  const native = Capacitor.getPlatform() === "android"
+    ? registerPlugin<{ recognize(input: {path:string; language:string}): Promise<{text:string; confidence:number}> }>("OfflineCyrillicOcr")
+    : null;
+  const scripts: Array<{id:OcrMode; script: typeof mlkit.Script.Latin}> = [
+    {id:"latin",script:mlkit.Script.Latin},
+    {id:"chinese",script:mlkit.Script.Chinese},
+    {id:"japanese",script:mlkit.Script.Japanese},
+    {id:"korean",script:mlkit.Script.Korean},
+    {id:"devanagari",script:mlkit.Script.Devanagari},
+  ];
   return {
     processImage: async (path: string) => {
-      const result = await bundle.TextRecognition.processImage({
-        path,
-        // Russian / Cyrillic text is recognised by ML Kit's Latin-script model,
-        // which bundles the full Cyrillic language data.
-        script: bundle.Script.Latin,
-      });
-      const layout = composeRecognizedText(
-        result as { text: string; blocks?: { lines?: { text: string }[] }[] },
-      );
-      return normalizeCyrillicText(layout);
-    },
+      const results: OcrCandidate[] = [];
+      // Run serially to avoid peak memory pressure on lower-end Android phones.
+      for (const item of scripts) {
+        try {
+          const data = await mlkit.TextRecognition.processImage({path,script:item.script});
+          const value = composeRecognizedText(data);
+          if (value.trim()) results.push({text:value,script:item.id,quality:qualityOf(value,item.id)});
+        } catch(error) {
+          console.warn("OCR model unavailable",item.id,error);
+        }
+      }
+      if (native) {
+        try {
+          const data = await native.recognize({path,language:"rus+kaz"});
+          if (data.text.trim()) results.push({text:data.text.trim(),script:"cyrillic",quality:qualityOf(data.text,"cyrillic",data.confidence)});
+        } catch(error) {
+          console.warn("Bundled Russian/Kazakh OCR unavailable",error);
+        }
+      }
+      if (!results.length) throw new Error("Не удалось распознать текст. Попробуйте другое фото.");
+      results.sort((a,b)=>b.quality-a.quality);
+      return results[0].text;
+    }
   };
 }
 
@@ -361,7 +372,7 @@ function CameraPage() {
         </div>
 
         <p className="mx-auto max-w-xs px-4 text-center text-xs leading-relaxed text-muted-foreground">
-          Распознавание текста временно поддерживает только латиницу
+          Распознавание текста на разных языках — без отправки фото на сервер
         </p>
         <h2 className="mt-3 px-4 text-center font-display text-base font-semibold leading-snug">
           {busy ? t("ocr_scanning") : "Выберите фотографию с текстом, чтобы извлечь его и добавить в заметку"}
