@@ -108,9 +108,9 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
     @PluginMethod
     public void recognize(PluginCall call) {
         final String source = call.getString("path");
-        final String language = call.getString("language", "rus+kaz");
+        final String language = call.getString("language", "kaz+rus");
         if (source == null || source.trim().isEmpty() ||
-                !("rus".equals(language) || "kaz".equals(language) || "rus+kaz".equals(language))) {
+                !("rus".equals(language) || "kaz".equals(language) || "rus+kaz".equals(language) || "kaz+rus".equals(language))) {
             call.reject("Invalid local image path or OCR language");
             return;
         }

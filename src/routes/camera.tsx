@@ -13,7 +13,7 @@ import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget } from "@/lib/ocr-budget";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText } from "@/lib/ocr-text";
-import { ocrScanPlan, type OcrMode } from "@/lib/ocr-plan";
+import { ocrScanPlan, CYRILLIC_OCR_LANGUAGES, type OcrMode } from "@/lib/ocr-plan";
 
 export const Route = createFileRoute("/camera")({
   head: () => ({ meta: [
@@ -170,7 +170,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
           if (!native) continue;
           onProgress("Распознавание: русский и казахский");
           try {
-            const data = await timed(native.recognize({path:scanPath,language:"rus+kaz"}), 18000);
+            const data = await timed(native.recognize({path:scanPath,language:CYRILLIC_OCR_LANGUAGES}), 18000);
             if (data.text.trim()) {
               const lines: OcrLine[] = (data.lines ?? []).map(line => ({...line,script:"cyrillic"}));
               results.push({text:data.text,script:"cyrillic",lines,confidence:data.confidence});

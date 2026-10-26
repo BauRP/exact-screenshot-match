@@ -1,6 +1,6 @@
 name: Offline OCR image quality (desktop smoke test)
 
-# Independent quality checks must never replace or cancel the APK release.
+# Independently verifies actual rendered images without touching APK releases.
 on:
   workflow_dispatch:
   push:
@@ -9,6 +9,8 @@ on:
     paths:
       - 'scripts/ocr-quality-regression.py'
       - 'scripts/prepare-ocr-models.sh'
+      - 'src/lib/ocr-plan.ts'
+      - 'android-overlay/app/src/main/java/app/lovable/supernotes/OfflineCyrillicOcrPlugin.java'
       - '.github/workflows/ocr-quality.yml'
 
 permissions:
@@ -16,7 +18,7 @@ permissions:
 
 jobs:
   quality:
-    name: Check pinned Russian and Kazakh models on rendered images
+    name: Check pinned Russian/Kazakh models on 11 rendered images
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -30,13 +32,13 @@ jobs:
           sudo apt-get install -y --no-install-recommends tesseract-ocr fonts-dejavu-core
           python3 -m pip install --user --break-system-packages 'Pillow==11.3.0'
 
-      - name: Verify the same offline models packed in the APK
+      - name: Verify the exact offline models packed in the APK
         run: bash scripts/prepare-ocr-models.sh
 
-      - name: OCR rendered images and measure character errors
+      - name: Measure OCR errors on 11 photo scenarios
         run: |
           set -euo pipefail
           python3 scripts/ocr-quality-regression.py \
             --tessdata android-overlay/app/src/main/assets/tessdata \
             --out ocr-quality-results
-          cat ocr-quality-results/results.json >> "$GITHUB_STEP_SUMMARY"
+          cat ocr-quality-results/summary.md >> "$GITHUB_STEP_SUMMARY"

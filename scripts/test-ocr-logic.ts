@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { ocrTextToEditorHtml } from "../src/lib/ocr-note";
 import { composeRecognizedText } from "../src/lib/ocr-text";
-import { ocrScanPlan } from "../src/lib/ocr-plan";
+import { ocrScanPlan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
 import { linesFromMlKit } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
 import { OcrTimeBudget } from "../src/lib/ocr-budget";
@@ -164,4 +164,5 @@ assert.equal(mergeOcrCandidates([wideText,duplicate]),"Hello");
 const otherRow: OcrCandidate = {script:"latin",text:"Hello",
   lines:[{text:"Hello",script:"latin",left:.05,right:.92,top:.60,bottom:.64}]};
 assert.equal(mergeOcrCandidates([wideText,otherRow]),"Hello\nHello");
+assert.equal(CYRILLIC_OCR_LANGUAGES,"kaz+rus");
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");
