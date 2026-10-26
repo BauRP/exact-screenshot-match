@@ -189,6 +189,7 @@ function SettingsPage() {
   const language = useLang();
   const t = useT();
   const navigate = useNavigate();
+  const [clearing, setClearing] = useState(false);
   const { pinEnabled, bioEnabled } = useLockConfig();
   const [clearOpen, setClearOpen] = useState(false);
   const [pinDialog, setPinDialog] = useState(false);
@@ -423,7 +424,7 @@ function SettingsPage() {
           </Row>
           <div className="h-px bg-border" />
           <Row icon={<Shield className="h-4 w-4" />} title={t("privacy_policy")}>
-            <Btn onClick={() => navigate({ to: "/privacy" })}>{t("open_action")}</Btn>
+            <Btn onClick={() => window.open("https://baurp.github.io/privacy/wave-notes/", "_blank", "noopener,noreferrer")}>Перейти на сайт</Btn>
           </Row>
           <div className="h-px bg-border" />
           <Row icon={<MessageSquarePlus className="h-4 w-4" />} title={t("ideas_wishes")}>
@@ -580,7 +581,7 @@ function SettingsPage() {
       {/* Clear-all confirm */}
       <Modal
         open={clearOpen}
-        onClose={() => setClearOpen(false)}
+        onClose={() => { if (!clearing) setClearOpen(false); }}
         title={t("delete_all_q")}
         icon={<Trash2 className="h-4 w-4 text-destructive" />}
         footer={
@@ -590,14 +591,16 @@ function SettingsPage() {
             </Btn>
             <Btn
               variant="destructive"
-              onClick={() => {
+              onClick={async () => {
+                if (clearing) return;
+                setClearing(true);
                 try {
-                  clearAll();
+                  await clearAll();
                   setClearOpen(false);
                   toast.success(t("delete_all"));
                 } catch (error) {
                   toast.error(error instanceof Error ? error.message : "Не удалось удалить заметки");
-                }
+                } finally { setClearing(false); }
               }}
             >
               {t("delete_all")}
