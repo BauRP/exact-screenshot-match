@@ -163,19 +163,28 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
   return {
     processImage: async (path: string, mode: OcrMode = "auto") => {
       const results: OcrCandidate[] = [];
+      // A timeout does not cancel a native promise. Track unfinished work and
+      // do not delete the image while a native recognizer may still read it.
+      const outstanding: Promise<unknown>[] = [];
+      let timedOut = false;
+      const timed = <T,>(task: Promise<T>, duration: number): Promise<T> => {
+        outstanding.push(task);
+        return withDeadline(task, duration);
+      };
       const prepared = native ? await native.prepareImage({path}) : null;
       const scanPath = prepared?.path ?? path;
       const width = prepared?.width ?? 1;
       const height = prepared?.height ?? 1;
       try {
-      // Keep native recognizers serialized to avoid an ML Kit memory spike.
+      // A timed-out model must not trigger any more native scans on this photo.
       const recognize = async (item: typeof scripts[number]) => {
         try {
-          const data = await withDeadline(mlkit.TextRecognition.processImage({path:scanPath,script:item.script}), 15000);
+          const data = await timed(mlkit.TextRecognition.processImage({path:scanPath,script:item.script}), 15000);
           const value = composeRecognizedText(data);
           if (value.trim()) results.push({text:value,script:item.id,lines:linesFromMlKit(data,item.id,width,height)});
         } catch(error) {
           console.warn("OCR model failed",item.id,error);
+          if (error instanceof Error && error.message === "OCR timed out") timedOut = true;
         }
       };
       // Explicit mode scans just one model.
@@ -187,12 +196,13 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         // when a Han-script image is suspected; first-model wins is unsafe.
         for (const item of scripts) {
           await recognize(item);
+          if (timedOut) break;
           await yieldToMainThread();
         }
       }
-      if (native && (mode === "auto" || mode === "cyrillic")) {
+      if (!timedOut && native && (mode === "auto" || mode === "cyrillic")) {
         try {
-          const data = await withDeadline(native.recognize({path:scanPath,language:"rus+kaz"}), 18000);
+          const data = await timed(native.recognize({path:scanPath,language:"rus+kaz"}), 18000);
           if (data.text.trim()) {
             const lines: OcrLine[] = (data.lines ?? []).map(line => ({...line,script:"cyrillic"}));
             results.push({text:data.text,script:"cyrillic",lines,confidence:data.confidence});
@@ -209,7 +219,12 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       if (!text) throw new Error("Не удалось распознать текст. Попробуйте другое фото.");
       return text;
       } finally {
-        if (native && prepared) await native.releaseImage({path: prepared.path}).catch(console.warn);
+        if (native && prepared) {
+          // If the UI timed out, cleanup is deferred until the native read ends.
+          // No more model runs are launched after a timeout.
+          void Promise.allSettled(outstanding).then(() =>
+            native.releaseImage({path: prepared.path}).catch(console.warn));
+        }
       }
     }
   };
