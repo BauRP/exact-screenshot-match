@@ -21,4 +21,11 @@ assert.equal(mergeOcrCandidates([russian, korean, japanese, chinese]), "Прив
 const unlocatedNoise: OcrCandidate = {script:"latin",text:"abc",lines:[]};
 assert.equal(mergeOcrCandidates([russian,korean,unlocatedNoise]), "Привет мир\n\n한국어 문장");
 assert.equal(mergeOcrCandidates([japanese,japanese]), "こんにちは日本語");
+const mixed: OcrCandidate[] = [
+  { script:"cyrillic", text:"Қазақ тіліндегі мәтін", lines:[line("Қазақ тіліндегі мәтін","cyrillic",.1)] },
+  { script:"latin", text:"English language", lines:[line("English language","latin",.24)] },
+  { script:"japanese", text:"日本語の文章", lines:[line("日本語の文章","japanese",.38)] },
+];
+assert.equal(mergeOcrCandidates(mixed), "Қазақ тіліндегі мәтін\n\nEnglish language\n\n日本語の文章");
+assert.equal(mergeOcrCandidates([{script:"cyrillic",text:"Тест",lines:[line("Тест","cyrillic",.1)]}]), "Тест");
 console.log("OCR selection/merge logic: assertions passed.");
