@@ -26,7 +26,7 @@ type NativeCameraBundle = typeof import("@capacitor/camera");
 type NativeTextRecognitionBundle = typeof import("@capacitor-mlkit/text-recognition");
 
 type OcrEngine = {
-  processImage: (path: string) => Promise<string>;
+  processImage: (path: string, mode?: OcrMode) => Promise<string>;
 };
 
 type CameraErrorBoundaryState = {
@@ -147,10 +147,11 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
     {id:"devanagari",script:mlkit.Script.Devanagari},
   ];
   return {
-    processImage: async (path: string) => {
+    processImage: async (path: string, mode: OcrMode = "auto") => {
       const results: OcrCandidate[] = [];
       // Run serially to avoid peak memory pressure on lower-end Android phones.
       for (const item of scripts) {
+        if (mode !== "auto" && mode !== item.id) continue;
         try {
           const data = await mlkit.TextRecognition.processImage({path,script:item.script});
           const value = composeRecognizedText(data);
@@ -159,7 +160,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
           console.warn("OCR model unavailable",item.id,error);
         }
       }
-      if (native) {
+      if (native && (mode === "auto" || mode === "cyrillic")) {
         try {
           const data = await native.recognize({path,language:"rus+kaz"});
           if (data.text.trim()) results.push({text:data.text.trim(),script:"cyrillic",quality:qualityOf(data.text,"cyrillic",data.confidence)});
@@ -212,6 +213,7 @@ function CameraPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [status, setStatus] = useState<CaptureStatus>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [ocrMode, setOcrMode] = useState<OcrMode>("auto");
 
   useEffect(() => {
     mountedRef.current = true;
@@ -260,7 +262,7 @@ function CameraPage() {
       await yieldToMainThread();
       safeSetStatus("scanning", operationId);
       const engine = await initializeOcrEngine();
-      const text = await engine.processImage(imagePath);
+      const text = await engine.processImage(imagePath, ocrMode);
 
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
 
@@ -371,6 +373,18 @@ function CameraPage() {
           </div>
         </div>
 
+        <label className="mb-3 flex flex-col gap-1 text-xs text-muted-foreground" htmlFor="ocr-language">
+          Язык текста (обычно определяется автоматически)
+          <select id="ocr-language" value={ocrMode} disabled={busy} onChange={(e) => setOcrMode(e.target.value as OcrMode)} className="rounded-lg border border-border bg-background p-2 text-foreground">
+            <option value="auto">Определять автоматически</option>
+            <option value="cyrillic">Русский / Казахский</option>
+            <option value="latin">Латиница</option>
+            <option value="chinese">Китайский</option>
+            <option value="japanese">Японский</option>
+            <option value="korean">Корейский</option>
+            <option value="devanagari">Хинди и другие на деванагари</option>
+          </select>
+        </label>
         <p className="mx-auto max-w-xs px-4 text-center text-xs leading-relaxed text-muted-foreground">
           Распознавание текста на разных языках — без отправки фото на сервер
         </p>
