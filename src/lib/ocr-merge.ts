@@ -81,6 +81,12 @@ function sameRegion(a: OcrLine, b: OcrLine): boolean {
   const aHeight = a.bottom - a.top, bHeight = b.bottom - b.top;
   // A recognizer can hallucinate a page-wide line over a valid shorter label.
   // Deduplicate only comparable boxes on BOTH axes, not text in nearby columns.
+  // One recognizer can draw a wider box around the EXACT same text.
+  // Spatial-size disagreement is not evidence that text should be duplicated.
+  const sameText = a.text.trim().normalize("NFKC").toLocaleLowerCase() ===
+    b.text.trim().normalize("NFKC").toLocaleLowerCase();
+  if (sameText && horizontal / Math.min(aWidth, bWidth) >= .65 &&
+      vertical / Math.min(aHeight, bHeight) >= .65) return true;
   const widthRatio = Math.min(aWidth, bWidth) / Math.max(aWidth, bWidth);
   const heightRatio = Math.min(aHeight, bHeight) / Math.max(aHeight, bHeight);
   return widthRatio >= .60 && heightRatio >= .52 &&

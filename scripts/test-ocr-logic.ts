@@ -158,4 +158,10 @@ assert.equal(linesFromMlKit({blocks:[{lines:[{
 assert.equal(linesFromMlKit({blocks:[{lines:[{
   text:"partly visible", boundingBox:{left:-10,top:20,right:50,bottom:80}
 }]}]},"latin",1000,1000)[0].left,0);
+const wideText: OcrCandidate = {script:"latin",text:"Hello",
+  lines:[{text:"Hello",script:"latin",left:.05,right:.92,top:.50,bottom:.54}]};
+assert.equal(mergeOcrCandidates([wideText,duplicate]),"Hello");
+const otherRow: OcrCandidate = {script:"latin",text:"Hello",
+  lines:[{text:"Hello",script:"latin",left:.05,right:.92,top:.60,bottom:.64}]};
+assert.equal(mergeOcrCandidates([wideText,otherRow]),"Hello\nHello");
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");
