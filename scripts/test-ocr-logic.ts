@@ -64,4 +64,25 @@ assert.equal(mlkitPixels[1].top, 0.25);
 assert.equal(linesFromMlKit({blocks:[{lines:[{text:"Bad",boundingBox:{left:Infinity,top:1,right:200,bottom:50}}]}]},"latin",1000,1000).length,0);
 assert.equal(linesFromMlKit({blocks:[{lines:[{text:"Bad",boundingBox:{left:10,top:10,right:0,bottom:0}}]}]},"latin",1000,1000).length,0);
 assert.equal(linesFromMlKit({blocks:[]},"latin",0,1000).length,0);
+assert.ok(lineScore("Привет", "latin") < 0);
+assert.ok(lineScore("Hello", "chinese") < 0);
+assert.ok(lineScore("日本語の文章", "japanese", "ja") > lineScore("日本語の文章", "chinese"));
+assert.ok(lineScore("ქართული", "cyrillic") < 0);
+assert.ok(lineScore("A", "latin") > 20);
+const wrongAlphabet: OcrCandidate = {script:"japanese",text:"Prive",lines:[line("Prive","japanese",.2)]};
+assert.equal(mergeOcrCandidates([russian, wrongAlphabet]), "Привет мир");
+const adjacentCyrillic: OcrCandidate = {script:"cyrillic",text:"Сәлем",lines:[{
+  text:"Сәлем",script:"cyrillic",left:.10,top:.44,right:.43,bottom:.49,
+}]};
+const adjacentLatin: OcrCandidate = {script:"latin",text:"Hello",lines:[{
+  text:"Hello",script:"latin",left:.52,top:.44,right:.82,bottom:.49,
+}]};
+assert.equal(mergeOcrCandidates([adjacentLatin,adjacentCyrillic]), "Сәлем\nHello");
+const hanResult: OcrCandidate = {script:"japanese",text:"学校",lines:[{
+  text:"学校",script:"japanese",left:.1,top:.66,right:.8,bottom:.71,language:"ja",
+}]};
+const chineseResult: OcrCandidate = {script:"chinese",text:"学枚",lines:[{
+  text:"学枚",script:"chinese",left:.1,top:.66,right:.8,bottom:.71,
+}]};
+assert.equal(mergeOcrCandidates([hanResult,chineseResult]), "学校");
 console.log("OCR selection, ML Kit geometry and note preservation: assertions passed.");

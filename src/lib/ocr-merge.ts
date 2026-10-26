@@ -23,15 +23,15 @@ export interface OcrCandidate {
 }
 
 const MATCH: Record<OcrScript, RegExp> = {
-  latin: /[A-Za-zÀ-ɏ]/gu,
-  cyrillic: /[\u0400-\u052f]/gu,
-  chinese: /[\u3400-\u9fff]/gu,
-  japanese: /[\u3040-\u30ff\u3400-\u9fff]/gu,
-  korean: /[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]/gu,
-  devanagari: /[\u0900-\u097f]/gu,
+  latin: /\p{Script=Latin}/gu,
+  cyrillic: /\p{Script=Cyrillic}/gu,
+  chinese: /\p{Script=Han}/gu,
+  japanese: /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/gu,
+  korean: /\p{Script=Hangul}/gu,
+  devanagari: /\p{Script=Devanagari}/gu,
 };
-const KANA = /[\u3040-\u30ff]/u;
-const HAN = /[\u3400-\u9fff]/u;
+const KANA = /[\p{Script=Hiragana}\p{Script=Katakana}]/u;
+const HAN = /\p{Script=Han}/u;
 
 export function lineScore(text: string, script: OcrScript, language?: string, confidence?: number): number {
   const letters = (text.match(/\p{L}/gu) ?? []).length;
@@ -41,7 +41,9 @@ export function lineScore(text: string, script: OcrScript, language?: string, co
   if (!letters && !digits) return -100;
   const matches = (text.match(MATCH[script]) ?? []).length;
   if (!letters) return 24 + Math.min(digits, 8) * 2 - (text.match(/[\ufffd\u25a1\u25af]/gu) ?? []).length * 20;
-  if (letters === 1 && matches === 0) return -100;
+  // A model must have actual evidence of its alphabet. Other recognizers
+  // sometimes hallucinate Latin letters on a Chinese or Cyrillic page.
+  if (matches === 0) return -100;
   const ratio = matches / Math.max(1, letters);
   const invalid = (text.match(/[\ufffd\u25a1\u25af]/gu) ?? []).length;
   const expected = language?.toLowerCase() ?? "";
@@ -53,6 +55,7 @@ export function lineScore(text: string, script: OcrScript, language?: string, co
   // Japanese simply because Han characters are also used in Japanese.
   const japaneseAmbiguity = script === "japanese" && HAN.test(text) && !KANA.test(text) ? 7 : 0;
   const wrongKana = script === "chinese" && KANA.test(text) ? 35 : 0;
+  // OCR confidence is a hint only, not a language detector.
   const certainty = Number.isFinite(confidence) ? Math.max(0, Math.min(100, confidence!)) * .15 : 0;
   return ratio * 60 + Math.min(letters + digits, 80) * .25 + langBonus + kanaBonus +
     certainty - japaneseAmbiguity - wrongKana - invalid * 20;
