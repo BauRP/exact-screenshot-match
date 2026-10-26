@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { createNote } from "@/lib/notes-store";
 import { useT } from "@/lib/i18n";
 import { toast } from "sonner";
-import { mergeOcrCandidates, hasStrongText, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
+import { mergeOcrCandidates, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
 
 export const Route = createFileRoute("/camera")({
   head: () => ({ meta: [
@@ -119,6 +119,8 @@ type OcrRectangle = { left?: number; top?: number; right?: number; bottom?: numb
 function linesFromMlKit(
   data: { blocks?: { lines?: unknown[] }[] },
   script: OcrScript,
+  width: number,
+  height: number,
 ): OcrLine[] {
   // Different versions of ML Kit expose either a rect or a boundingBox.
   const lines: OcrLine[] = [];
@@ -126,16 +128,13 @@ function linesFromMlKit(
     for (const raw of block.lines ?? []) {
       const item = raw as { text?: string; boundingBox?: OcrRectangle; rect?: OcrRectangle; frame?: OcrRectangle; confidence?: number };
       const box = item.boundingBox ?? item.rect ?? item.frame;
-      // ML Kit rectangles are absolute pixel coordinates. Only native Tesseract
-      // currently guarantees normalized coordinates; don't mix coordinate systems.
+      // ML Kit returns pixel rectangles; convert to oriented image fractions.
       if (!box || !item.text) continue;
       const left = box.left ?? box.x, top = box.top ?? box.y;
       const right = box.right ?? (left !== undefined && box.width !== undefined ? left + box.width : undefined);
       const bottom = box.bottom ?? (top !== undefined && box.height !== undefined ? top + box.height : undefined);
       if ([left, top, right, bottom].some(v => v === undefined)) continue;
-      // Do not assume the ML Kit frame is normalized.
-      if (right! > 1 || bottom! > 1) continue;
-      lines.push({ text: item.text, left: left!, top: top!, right: right!, bottom: bottom!, script, confidence: item.confidence });
+      lines.push({ text: item.text, left: left! / width, top: top! / height, right: right! / width, bottom: bottom! / height, script, confidence: item.confidence });
     }
   }
   return lines;
@@ -152,7 +151,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
   const mlkit: NativeTextRecognitionBundle = await import("@capacitor-mlkit/text-recognition");
   const { Capacitor, registerPlugin } = await import("@capacitor/core");
   const native = Capacitor.getPlatform() === "android"
-    ? registerPlugin<{ recognize(input: {path:string; language:string}): Promise<{text:string; confidence:number; lines?: Omit<OcrLine, "script">[]}> }>("OfflineCyrillicOcr")
+    ? registerPlugin<{ recognize(input: {path:string; language:string}): Promise<{text:string; confidence:number; lines?: Omit<OcrLine, "script">[]}>; prepareImage(input:{path:string}):Promise<{path:string;width:number;height:number}>; releaseImage(input:{path:string}):Promise<void> }>("OfflineCyrillicOcr")
     : null;
   const scripts: Array<{id:OcrScript; script: (typeof mlkit.Script)[keyof typeof mlkit.Script]}> = [
     {id:"latin",script:mlkit.Script.Latin},
@@ -164,12 +163,17 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
   return {
     processImage: async (path: string, mode: OcrMode = "auto") => {
       const results: OcrCandidate[] = [];
+      const prepared = native ? await native.prepareImage({path}) : null;
+      const scanPath = prepared?.path ?? path;
+      const width = prepared?.width ?? 1;
+      const height = prepared?.height ?? 1;
+      try {
       // Keep native recognizers serialized to avoid an ML Kit memory spike.
       const recognize = async (item: typeof scripts[number]) => {
         try {
-          const data = await withDeadline(mlkit.TextRecognition.processImage({path,script:item.script}), 15000);
+          const data = await withDeadline(mlkit.TextRecognition.processImage({path:scanPath,script:item.script}), 15000);
           const value = composeRecognizedText(data);
-          if (value.trim()) results.push({text:value,script:item.id,lines:linesFromMlKit(data,item.id)});
+          if (value.trim()) results.push({text:value,script:item.id,lines:linesFromMlKit(data,item.id,width,height)});
         } catch(error) {
           console.warn("OCR model failed",item.id,error);
         }
@@ -184,14 +188,11 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         for (const item of scripts) {
           await recognize(item);
           await yieldToMainThread();
-          // With a strong Latin result, avoid five extra model runs.
-          if (item.id === "latin" && hasStrongText(results) &&
-              /^[\p{Script=Latin}\p{N}\p{P}\p{Z}\p{S}\n\r\t]+$/u.test(results[0].text)) break;
         }
       }
       if (native && (mode === "auto" || mode === "cyrillic")) {
         try {
-          const data = await withDeadline(native.recognize({path,language:"rus+kaz"}), 18000);
+          const data = await withDeadline(native.recognize({path:scanPath,language:"rus+kaz"}), 18000);
           if (data.text.trim()) {
             const lines: OcrLine[] = (data.lines ?? []).map(line => ({...line,script:"cyrillic"}));
             results.push({text:data.text,script:"cyrillic",lines,confidence:data.confidence});
@@ -207,6 +208,9 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       const text = mergeOcrCandidates(results);
       if (!text) throw new Error("Не удалось распознать текст. Попробуйте другое фото.");
       return text;
+      } finally {
+        if (native && prepared) await native.releaseImage({path: prepared.path}).catch(console.warn);
+      }
     }
   };
 }
@@ -244,7 +248,7 @@ function CameraPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const mountedRef = useRef(false);
   const operationIdRef = useRef(0);
-  const pendingWebSourceRef = useRef<CaptureSource>("gallery");
+  const inFlightRef = useRef(false);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [status, setStatus] = useState<CaptureStatus>("idle");
@@ -286,6 +290,8 @@ function CameraPage() {
   };
 
   const scanNativeImage = async (source: CaptureSource) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     const operationId = operationIdRef.current + 1;
     operationIdRef.current = operationId;
     setError(null);
@@ -311,6 +317,8 @@ function CameraPage() {
     } catch (caught) {
       const message = caught instanceof Error && caught.message ? caught.message : t("ocr_unavailable");
       handleFailure(message, operationId);
+    } finally {
+      inFlightRef.current = false;
     }
   };
 
@@ -318,7 +326,6 @@ function CameraPage() {
     const input = inputRef.current;
     if (!input) return;
 
-    pendingWebSourceRef.current = source;
     operationIdRef.current += 1;
     setError(null);
     setStatus("picking");
