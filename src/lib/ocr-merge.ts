@@ -74,10 +74,18 @@ function intersection(a: OcrLine, b: OcrLine): number {
 }
 function sameRegion(a: OcrLine, b: OcrLine): boolean {
   const overlap = intersection(a, b);
-  const aArea = (a.right - a.left) * (a.bottom - a.top);
-  const bArea = (b.right - b.left) * (b.bottom - b.top);
-  // Compare against smaller line: OCR engines often disagree on word extent.
-  return overlap > 0 && overlap / Math.min(aArea, bArea) > .45;
+  if (overlap <= 0) return false;
+  const vertical = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+  const horizontal = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+  const aWidth = a.right - a.left, bWidth = b.right - b.left;
+  const aHeight = a.bottom - a.top, bHeight = b.bottom - b.top;
+  // A recognizer can hallucinate a page-wide line over a valid shorter label.
+  // Deduplicate only comparable boxes on BOTH axes, not text in nearby columns.
+  const widthRatio = Math.min(aWidth, bWidth) / Math.max(aWidth, bWidth);
+  const heightRatio = Math.min(aHeight, bHeight) / Math.max(aHeight, bHeight);
+  return widthRatio >= .60 && heightRatio >= .52 &&
+    horizontal / Math.min(aWidth,bWidth) >= .65 &&
+    vertical / Math.min(aHeight,bHeight) >= .65;
 }
 
 /**
@@ -90,12 +98,17 @@ export function mergeOcrCandidates(candidates: OcrCandidate[]): string {
     ...line, confidence: line.confidence ?? c.confidence,
   }))).filter(valid);
 
-  const unlocated = candidates.filter(c => c.text.trim() && c.lines.length === 0 && lineScore(c.text, c.script, undefined, c.confidence) >= 30);
-  if (!lines.length || (unlocated.length && lines.length < 2)) {
-    return candidates
-      .filter(c => c.text.trim())
-      .sort((a, b) => lineScore(b.text, b.script, undefined, b.confidence) -
-        lineScore(a.text, a.script, undefined, a.confidence))[0]?.text.trim() ?? "";
+  // Some models return text without geometry. If there are too few reliable
+  // located lines, use the most plausible COMPLETE text. Never prefer a
+  // recognizer whose entire result belongs to another alphabet.
+  const plausible = candidates
+    .filter(c => c.text.trim())
+    .map(c => ({candidate:c, score:lineScore(c.text,c.script,undefined,c.confidence)}))
+    .filter(c => c.score >= 20)
+    .sort((a,b) => b.score-a.score);
+  const unlocated = plausible.filter(c => c.candidate.lines.length === 0);
+  if (!lines.length || (lines.length < 2 && unlocated.length)) {
+    return plausible[0]?.candidate.text.trim() ?? "";
   }
 
   // Prefer spatial fusion of located lines over a lower-quality unlocated result.
@@ -109,6 +122,7 @@ export function mergeOcrCandidates(candidates: OcrCandidate[]): string {
     if (selected.some(existing => sameRegion(existing, line))) continue;
     selected.push(line);
   }
+  if (!selected.length) return plausible[0]?.candidate.text.trim() ?? "";
   selected.sort((a, b) => {
     const centerA = (a.top + a.bottom) / 2;
     const centerB = (b.top + b.bottom) / 2;

@@ -85,4 +85,25 @@ const chineseResult: OcrCandidate = {script:"chinese",text:"学枚",lines:[{
   text:"学枚",script:"chinese",left:.1,top:.66,right:.8,bottom:.71,
 }]};
 assert.equal(mergeOcrCandidates([hanResult,chineseResult]), "学校");
+// A false-script model must never create a garbage-only note.
+assert.equal(mergeOcrCandidates([{
+  script:"japanese", text:"Hello stranger",
+  lines:[],
+}]), "");
+assert.equal(mergeOcrCandidates([{
+  script:"korean", text:"English",
+  lines:[line("English","korean",.15)],
+}]), "");
+// Scans may include two genuinely adjacent words in the same row.
+// Broad bounding boxes must not consume a narrower second language.
+const firstColumn: OcrCandidate = {script:"latin",text:"English",lines:[{
+ text:"English",script:"latin",left:.12,right:.42,top:.55,bottom:.60,
+}]};
+const secondColumn: OcrCandidate = {script:"cyrillic",text:"Русский",lines:[{
+ text:"Русский",script:"cyrillic",left:.38,right:.75,top:.55,bottom:.60,
+}]};
+assert.equal(mergeOcrCandidates([firstColumn,secondColumn]),"English\nРусский");
+assert.equal(mergeOcrCandidates([duplicate,duplicate,duplicate]),"Hello");
+const noGeometryWrong: OcrCandidate = {script:"chinese",text:"Hello",lines:[]};
+assert.equal(mergeOcrCandidates([russian,noGeometryWrong]),"Привет мир");
 console.log("OCR selection, ML Kit geometry and note preservation: assertions passed.");
