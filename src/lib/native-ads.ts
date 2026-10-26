@@ -39,6 +39,7 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
     let attempts = 0;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     const slotRetries = new Map<string, number>();
+    const knownSlots = new Set<string>();
     const slotTimers = new Set<ReturnType<typeof setTimeout>>();
     const handles: Array<{ remove(): Promise<void> }> = [];
     const report = (state: string, details?: unknown) => console.info(`[SuperNotes AdMob] ${state}`, details ?? "");
@@ -105,6 +106,7 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
         const failed = await feed.addListener(NativeAdPluginEvents.FailedToLoad, (event) => {
           console.warn("[SuperNotes AdMob] Native ad failed to load", event);
           const slot = event.slotKey;
+          if (slot) knownSlots.add(slot);
           updateAdDiagnostic("failed", `Ошибка Google: ${event.code} — ${event.message}`, { error: `${event.code}: ${event.message}`, slot });
           if (slot && !disposed) {
             const retries = slotRetries.get(slot) ?? 0;
@@ -123,6 +125,7 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
         handles.push(failed);
         const loaded = await feed.addListener(NativeAdPluginEvents.Loaded, (event) => {
           slotRetries.delete(event.slotKey);
+          knownSlots.add(event.slotKey);
           updateAdDiagnostic("loaded", "Тестовое объявление загружено", { slot: event.slotKey });
         });
         handles.push(loaded);
@@ -144,7 +147,22 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
       retryTimer = setTimeout(() => { retryTimer = null; void initialize(); }, Math.min(2000 * (attempts + 1), 15000));
     };
     const onOnline = () => { updateAdDiagnostic("waiting", "Интернет доступен, повторяем запрос"); void initialize(); };
-    const onRetry = () => { attempts = 0; slotRetries.clear(); if (retryTimer) clearTimeout(retryTimer); retryTimer = null; void initialize(); };
+    const onRetry = () => {
+      attempts = 0;
+      slotRetries.clear();
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = null;
+      const existing = feedRef.current;
+      if (existing) {
+        for (const slot of knownSlots) {
+          void existing.reload(slot).catch((error) => console.warn("[SuperNotes AdMob] Manual reload failed", slot, error));
+        }
+        if (knownSlots.size === 0) {
+          existing.resume();
+          void existing.invalidateLayout().catch(console.warn);
+        }
+      } else void initialize();
+    };
     window.addEventListener("supernotes-admob-retry", onRetry);
     window.addEventListener("online", onOnline);
     void initialize();
