@@ -16,6 +16,7 @@ import com.googlecode.tesseract.android.TessBaseAPI;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -25,6 +26,65 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
     private static final long KAZ_SIZE = 4734644L;
     // Keep one native recognizer at a time on a worker thread, never on Android UI.
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
+
+
+    /**
+     * Decode any gallery/content URI once, apply EXIF, and give BOTH engines
+     * the same oriented bitmap with known dimensions. JPEG lives only in the
+     * app's private cache and is deleted after the scan.
+     */
+    @PluginMethod
+    public void prepareImage(PluginCall call) {
+        final String source = call.getString("path");
+        if (source == null || source.trim().isEmpty()) {
+            call.reject("No local image was selected");
+            return;
+        }
+        worker.execute(() -> {
+            Bitmap bitmap = null;
+            File target = null;
+            try {
+                bitmap = loadBitmap(source);
+                target = new File(getContext().getCacheDir(), "wave-ocr-" + UUID.randomUUID() + ".jpg");
+                try (FileOutputStream out = new FileOutputStream(target)) {
+                    if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)) {
+                        throw new IllegalStateException("Could not prepare the photo");
+                    }
+                    out.getFD().sync();
+                }
+                JSObject response = new JSObject();
+                response.put("path", Uri.fromFile(target).toString());
+                response.put("width", bitmap.getWidth());
+                response.put("height", bitmap.getHeight());
+                call.resolve(response);
+            } catch (Exception e) {
+                if (target != null) target.delete();
+                call.reject("Photo preparation failed: " + e.getMessage(), e);
+            } finally {
+                if (bitmap != null && !bitmap.isRecycled()) bitmap.recycle();
+            }
+        });
+    }
+
+    @PluginMethod
+    public void releaseImage(PluginCall call) {
+        final String source = call.getString("path");
+        if (source != null) {
+            try {
+                Uri uri = Uri.parse(source);
+                File image = new File(uri.getPath() == null ? "" : uri.getPath());
+                File cache = getContext().getCacheDir();
+                if (image.getCanonicalFile().getParentFile().equals(cache.getCanonicalFile())
+                        && image.getName().startsWith("wave-ocr-")
+                        && image.getName().endsWith(".jpg")) {
+                    image.delete();
+                }
+            } catch (Exception ignored) {
+                // Never allow cleanup to mask the actual OCR result/error.
+            }
+        }
+        call.resolve();
+    }
 
     @PluginMethod
     public void recognize(PluginCall call) {
