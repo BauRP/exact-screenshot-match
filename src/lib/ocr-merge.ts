@@ -83,13 +83,15 @@ export function mergeOcrCandidates(candidates: OcrCandidate[]): string {
     ...line, confidence: line.confidence ?? c.confidence,
   }))).filter(valid);
 
-  if (!lines.length || candidates.some(c => c.text.trim() && c.lines.length === 0)) {
+  const unlocated = candidates.filter(c => c.text.trim() && c.lines.length === 0 && lineScore(c.text, c.script, undefined, c.confidence) >= 30);
+  if (!lines.length || (unlocated.length && lines.length < 2)) {
     return candidates
       .filter(c => c.text.trim())
       .sort((a, b) => lineScore(b.text, b.script, undefined, b.confidence) -
         lineScore(a.text, a.script, undefined, a.confidence))[0]?.text.trim() ?? "";
   }
 
+  // Prefer spatial fusion of located lines over a lower-quality unlocated result.
   // Strongest local line wins, not whichever model won the entire page.
   lines.sort((a, b) =>
     lineScore(b.text, b.script, b.language, b.confidence) -
