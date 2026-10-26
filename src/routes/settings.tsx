@@ -438,7 +438,7 @@ function SettingsPage() {
               title={adDiagnostic.message}
               hint={`Состояние: ${adDiagnostic.status}; загрузок: ${adDiagnostic.loadedCount}; ошибок: ${adDiagnostic.failedCount}`}
             >
-              <Btn onClick={requestAdRetry}><RefreshCw className="mr-1 inline h-3 w-3" />Повторить</Btn>
+              <Btn onClick={() => { requestAdRetry(); navigate({ to: "/" }); }}><RefreshCw className="mr-1 inline h-3 w-3" />Повторить</Btn>
             </Row>
             {adDiagnostic.lastError ? (
               <p className="break-words px-3 pb-2 text-xs text-destructive">
