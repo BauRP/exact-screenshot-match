@@ -120,10 +120,12 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
                             if (text == null || text.trim().isEmpty() || box == null || box.length < 4) continue;
                             JSObject line = new JSObject();
                             line.put("text", text.trim());
-                            line.put("x", (double)box[0] / bitmap.getWidth());
-                            line.put("y", (double)box[1] / bitmap.getHeight());
-                            line.put("width", (double)(box[2] - box[0]) / bitmap.getWidth());
-                            line.put("height", (double)(box[3] - box[1]) / bitmap.getHeight());
+                            // Match ML Kit's left/top/right/bottom layout. Both
+                            // recognizers now report fractions of the same oriented image.
+                            line.put("left", (double)box[0] / bitmap.getWidth());
+                            line.put("top", (double)box[1] / bitmap.getHeight());
+                            line.put("right", (double)box[2] / bitmap.getWidth());
+                            line.put("bottom", (double)box[3] / bitmap.getHeight());
                             line.put("confidence", iterator.confidence(TessBaseAPI.PageIteratorLevel.RIL_TEXTLINE));
                             lines.put(line);
                         } while (iterator.next(TessBaseAPI.PageIteratorLevel.RIL_TEXTLINE));
