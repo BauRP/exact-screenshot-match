@@ -8,6 +8,7 @@ import { ocrTextToEditorHtml } from "@/lib/ocr-note";
 import { useT } from "@/lib/i18n";
 import { toast } from "sonner";
 import { mergeOcrCandidates, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
+import { linesFromMlKit } from "@/lib/ocr-geometry";
 
 export const Route = createFileRoute("/camera")({
   head: () => ({ meta: [
@@ -116,30 +117,6 @@ function composeRecognizedText(result: {
 }
 
 type OcrMode = "auto" | "latin" | "cyrillic" | "chinese" | "japanese" | "korean" | "devanagari";
-type OcrRectangle = { left?: number; top?: number; right?: number; bottom?: number; x?: number; y?: number; width?: number; height?: number };
-function linesFromMlKit(
-  data: { blocks?: { lines?: unknown[] }[] },
-  script: OcrScript,
-  width: number,
-  height: number,
-): OcrLine[] {
-  // Different versions of ML Kit expose either a rect or a boundingBox.
-  const lines: OcrLine[] = [];
-  for (const block of data.blocks ?? []) {
-    for (const raw of block.lines ?? []) {
-      const item = raw as { text?: string; boundingBox?: OcrRectangle; rect?: OcrRectangle; frame?: OcrRectangle; confidence?: number; recognizedLanguage?: string };
-      const box = item.boundingBox ?? item.rect ?? item.frame;
-      // ML Kit returns pixel rectangles; convert to oriented image fractions.
-      if (!box || !item.text) continue;
-      const left = box.left ?? box.x, top = box.top ?? box.y;
-      const right = box.right ?? (left !== undefined && box.width !== undefined ? left + box.width : undefined);
-      const bottom = box.bottom ?? (top !== undefined && box.height !== undefined ? top + box.height : undefined);
-      if ([left, top, right, bottom].some(v => v === undefined)) continue;
-      lines.push({ text: item.text, left: left! / width, top: top! / height, right: right! / width, bottom: bottom! / height, script, confidence: item.confidence, language: item.recognizedLanguage });
-    }
-  }
-  return lines;
-}
 function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([

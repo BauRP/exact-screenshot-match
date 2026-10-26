@@ -1,5 +1,6 @@
 import { strict as assert } from "node:assert";
 import { ocrTextToEditorHtml } from "../src/lib/ocr-note";
+import { linesFromMlKit } from "../src/lib/ocr-geometry";
 import { lineScore, mergeOcrCandidates, type OcrCandidate } from "../src/lib/ocr-merge";
 
 const line = (text: string, script: OcrCandidate["script"], top: number) =>
@@ -49,4 +50,18 @@ assert.equal(ocrTextToEditorHtml("<img src=x onerror=alert(1)>"), "<p>&lt;img sr
 assert.equal(ocrTextToEditorHtml("first\n\nsecond"), "<p>first</p><p><br></p><p>second</p>");
 assert.equal(ocrTextToEditorHtml("x\r\ny"), "<p>x</p><p>y</p>");
 assert.equal(ocrTextToEditorHtml("a  b"), "<p>a&nbsp;&nbsp;b</p>");
-console.log("OCR selection/merge and safe note persistence: assertions passed.");
+const mlkitPixels = linesFromMlKit({
+  blocks: [{ lines: [
+    {text:"Қазақша", recognizedLanguage:"kk", boundingBox:{left:100,top:50,right:800,bottom:130}},
+    {text:"日本語", recognizedLanguage:"ja", boundingBox:{left:100,top:250,right:600,bottom:330}},
+  ]}],
+}, "latin", 1000, 1000);
+assert.equal(mlkitPixels.length, 2);
+assert.equal(mlkitPixels[0].left, 0.1);
+assert.equal(mlkitPixels[0].right, 0.8);
+assert.equal(mlkitPixels[0].language, "kk");
+assert.equal(mlkitPixels[1].top, 0.25);
+assert.equal(linesFromMlKit({blocks:[{lines:[{text:"Bad",boundingBox:{left:Infinity,top:1,right:200,bottom:50}}]}]},"latin",1000,1000).length,0);
+assert.equal(linesFromMlKit({blocks:[{lines:[{text:"Bad",boundingBox:{left:10,top:10,right:0,bottom:0}}]}]},"latin",1000,1000).length,0);
+assert.equal(linesFromMlKit({blocks:[]},"latin",0,1000).length,0);
+console.log("OCR selection, ML Kit geometry and note preservation: assertions passed.");
