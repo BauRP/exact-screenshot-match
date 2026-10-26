@@ -9,7 +9,6 @@ type NativeFeed = {
   resume(): void;
   invalidateLayout(): Promise<void>;
   destroy(): Promise<void>;
-  addListener(event: string, listener: (event: Record<string, unknown>) => void): Promise<{ remove(): Promise<void> }>;
 };
 
 function onAndroid(): boolean {
