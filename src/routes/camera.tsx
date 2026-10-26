@@ -31,7 +31,7 @@ type NativeCameraBundle = typeof import("@capacitor/camera");
 type NativeTextRecognitionBundle = typeof import("@capacitor-mlkit/text-recognition");
 
 type OcrEngine = {
-  processImage: (path: string, mode?: OcrMode) => Promise<string>;
+  processImage: (path: string, mode?: OcrMode, onProgress?: (stage: string) => void) => Promise<string>;
 };
 
 type CameraErrorBoundaryState = {
@@ -134,15 +134,15 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
   const native = Capacitor.getPlatform() === "android"
     ? registerPlugin<{ recognize(input: {path:string; language:string}): Promise<{text:string; confidence:number; lines?: Omit<OcrLine, "script">[]}>; prepareImage(input:{path:string}):Promise<{path:string;width:number;height:number}>; releaseImage(input:{path:string}):Promise<void> }>("OfflineCyrillicOcr")
     : null;
-  const scripts: Array<{id:OcrScript; script: (typeof mlkit.Script)[keyof typeof mlkit.Script]}> = [
-    {id:"latin",script:mlkit.Script.Latin},
-    {id:"japanese",script:mlkit.Script.Japanese},
-    {id:"chinese",script:mlkit.Script.Chinese},
-    {id:"korean",script:mlkit.Script.Korean},
-    {id:"devanagari",script:mlkit.Script.Devanagari},
+  const scripts: Array<{id:OcrScript; script: (typeof mlkit.Script)[keyof typeof mlkit.Script]; label: string}> = [
+    {id:"latin",script:mlkit.Script.Latin,label:"Латиница"},
+    {id:"japanese",script:mlkit.Script.Japanese,label:"Японский"},
+    {id:"chinese",script:mlkit.Script.Chinese,label:"Китайский"},
+    {id:"korean",script:mlkit.Script.Korean,label:"Корейский"},
+    {id:"devanagari",script:mlkit.Script.Devanagari,label:"Деванагари"},
   ];
   return {
-    processImage: async (path: string, mode: OcrMode = "auto") => {
+    processImage: async (path: string, mode: OcrMode = "auto", onProgress: (stage: string) => void = () => undefined) => {
       const releaseSession = native ? nativeOcrGate.enter() : () => undefined;
       const results: OcrCandidate[] = [];
       // Track all native work, including operations that outlive the UI deadline.
@@ -154,6 +154,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         return withDeadline(task, duration);
       };
       try {
+        onProgress("Подготовка фотографии");
         const preparation = native ? native.prepareImage({path}) : null;
         if (preparation) {
           outstanding.push(preparation);
@@ -173,6 +174,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         const height = prepared?.height ?? 1;
       // A timed-out model must not trigger any more native scans on this photo.
       const recognize = async (item: typeof scripts[number]) => {
+        onProgress(`Распознавание: ${item.label}`);
         try {
           const data = await timed(mlkit.TextRecognition.processImage({path:scanPath,script:item.script}), 15000);
           const value = composeRecognizedText(data);
@@ -196,6 +198,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         }
       }
       if (!timedOut && native && (mode === "auto" || mode === "cyrillic")) {
+        onProgress("Распознавание: русский и казахский");
         try {
           const data = await timed(native.recognize({path:scanPath,language:"rus+kaz"}), 18000);
           if (data.text.trim()) {
@@ -210,6 +213,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       // Until all model frames can be normalized using image dimensions, merge
       // only when at least one valid geometry source is available. The fallback
       // deliberately chooses a single result instead of duplicating page text.
+      onProgress("Объединение распознанных строк");
       const text = mergeOcrCandidates(results);
       if (!text) throw new Error("Не удалось распознать текст. Попробуйте другое фото.");
       return text;
@@ -271,6 +275,7 @@ function CameraPage() {
   const [status, setStatus] = useState<CaptureStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [ocrMode, setOcrMode] = useState<OcrMode>("auto");
+  const [ocrStage, setOcrStage] = useState("");
 
   useEffect(() => {
     mountedRef.current = true;
@@ -288,6 +293,7 @@ function CameraPage() {
   const closeCamera = () => {
     operationIdRef.current += 1;
     setStatus("idle");
+    setOcrStage("");
     setError(null);
     setModalOpen(false);
     navigate({ to: "/" });
@@ -308,14 +314,23 @@ function CameraPage() {
 
   const scanNativeImage = async (source: CaptureSource) => {
     if (inFlightRef.current) return;
+    if (nativeOcrGate.busy) {
+      const message = readableOcrFailure(new Error("OCR_SCAN_BUSY"));
+      setError(message);
+      setStatus("error");
+      setModalOpen(true);
+      return;
+    }
     inFlightRef.current = true;
     const operationId = operationIdRef.current + 1;
     operationIdRef.current = operationId;
     setError(null);
+    setOcrStage("Подготовка камеры");
     setStatus("preparing");
 
     try {
       await yieldToMainThread();
+      if (!mountedRef.current || operationId !== operationIdRef.current) return;
       safeSetStatus("picking", operationId);
       const imagePath = await captureNativePhoto(source);
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
@@ -323,7 +338,9 @@ function CameraPage() {
       safeSetStatus("scanning", operationId);
       const engine = await initializeOcrEngine();
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
-      const text = await engine.processImage(imagePath, ocrMode);
+      const text = await engine.processImage(imagePath, ocrMode, (stage) => {
+        if (mountedRef.current && operationId === operationIdRef.current) setOcrStage(stage);
+      });
 
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
 
@@ -332,6 +349,7 @@ function CameraPage() {
         return;
       }
 
+      setOcrStage("Сохранение заметки");
       finishWithText(text);
     } catch (caught) {
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
@@ -458,7 +476,7 @@ function CameraPage() {
           Распознавание текста на разных языках — без отправки фото на сервер
         </p>
         <h2 className="mt-3 px-4 text-center font-display text-base font-semibold leading-snug">
-          {busy ? t("ocr_scanning") : "Выберите фотографию с текстом, чтобы извлечь его и добавить в заметку"}
+          {busy ? (ocrStage || t("ocr_scanning")) : "Выберите фотографию с текстом, чтобы извлечь его и добавить в заметку"}
         </h2>
         {error && <p className="mt-3 max-w-sm text-sm text-destructive">{error}</p>}
 

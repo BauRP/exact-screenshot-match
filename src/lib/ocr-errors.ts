@@ -15,6 +15,11 @@ export function isCameraCancellation(error: unknown): boolean {
 }
 
 export function readableOcrFailure(error: unknown): string {
+  // A persisted note can fail even though OCR recognized text successfully.
+  const detail = error instanceof Error ? error.message : "";
+  if (/Unable to save notes|Notes storage has an error|Storage write failed|quota.exceeded|local notes storage is unavailable/i.test(detail)) {
+    return "Текст распознан, но заметку сохранить не удалось. Проверьте свободное место и состояние хранилища.";
+  }
   if (error instanceof Error && error.message === "OCR_SCAN_BUSY") {
     return "Предыдущее сканирование ещё завершается. Повторите попытку после его окончания.";
   }

@@ -127,4 +127,6 @@ releaseGate();
 releaseGate();
 assert.equal(scanGate.busy, false);
 scanGate.enter()();
+assert.match(readableOcrFailure(new Error("Unable to save notes: QuotaExceededError")), /сохранить/);
+assert.match(readableOcrFailure(new Error("Notes storage has an error")), /хранилища/);
 console.log("OCR selection, geometry, camera cancellation, scan serialization and note safety: assertions passed.");
