@@ -15,4 +15,10 @@ const duplicate: OcrCandidate = {script:"latin",text:"Hello",lines:[line("Hello"
 assert.equal(mergeOcrCandidates([duplicate,duplicate]), "Hello");
 const noFrames: OcrCandidate = {script:"latin",text:"Long full scanned English text",lines:[]};
 assert.equal(mergeOcrCandidates([russian,noFrames]), "Long full scanned English text");
+const japanese: OcrCandidate = {script:"japanese",text:"こんにちは日本語",lines:[line("こんにちは日本語","japanese",.6)]};
+const chinese: OcrCandidate = {script:"chinese",text:"中文测试文字",lines:[line("中文测试文字","chinese",.8)]};
+assert.equal(mergeOcrCandidates([russian, korean, japanese, chinese]), "Привет мир\n\n한국어 문장\n\nこんにちは日本語\n\n中文测试文字");
+const unlocatedNoise: OcrCandidate = {script:"latin",text:"abc",lines:[]};
+assert.equal(mergeOcrCandidates([russian,korean,unlocatedNoise]), "Привет мир\n\n한국어 문장");
+assert.equal(mergeOcrCandidates([japanese,japanese]), "こんにちは日本語");
 console.log("OCR selection/merge logic: assertions passed.");
