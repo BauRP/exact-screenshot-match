@@ -2,6 +2,8 @@ package app.lovable.supernotes;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
+import android.media.ExifInterface;
 import android.net.Uri;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -135,10 +137,36 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
                 || Math.max(bounds.outWidth, bounds.outHeight) / options.inSampleSize > 4500) {
             options.inSampleSize *= 2;
         }
+        Bitmap bitmap;
         try (InputStream input = openLocalImage(source)) {
-            Bitmap bitmap = BitmapFactory.decodeStream(input, null, options);
-            if (bitmap == null) throw new IllegalArgumentException("Cannot decode selected image");
-            return bitmap;
+            bitmap = BitmapFactory.decodeStream(input, null, options);
         }
+        if (bitmap == null) throw new IllegalArgumentException("Cannot decode selected image");
+        // Gallery imports may retain EXIF orientation even when their pixels are
+        // unrotated. Apply rotation/mirror BEFORE OCR and before extracting boxes.
+        int orientation = ExifInterface.ORIENTATION_NORMAL;
+        try (InputStream input = openLocalImage(source)) {
+            orientation = new ExifInterface(input).getAttributeInt(
+                    ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+        } catch (Exception ignored) {
+            // Some image providers strip EXIF; in that case use decoded pixels.
+        }
+        Matrix matrix = new Matrix();
+        switch (orientation) {
+            case ExifInterface.ORIENTATION_FLIP_HORIZONTAL: matrix.setScale(-1f, 1f); break;
+            case ExifInterface.ORIENTATION_ROTATE_180: matrix.setRotate(180f); break;
+            case ExifInterface.ORIENTATION_FLIP_VERTICAL: matrix.setScale(1f, -1f); break;
+            case ExifInterface.ORIENTATION_TRANSPOSE: matrix.setRotate(90f); matrix.postScale(-1f, 1f); break;
+            case ExifInterface.ORIENTATION_ROTATE_90: matrix.setRotate(90f); break;
+            case ExifInterface.ORIENTATION_TRANSVERSE: matrix.setRotate(270f); matrix.postScale(-1f, 1f); break;
+            case ExifInterface.ORIENTATION_ROTATE_270: matrix.setRotate(270f); break;
+            default: break;
+        }
+        if (!matrix.isIdentity()) {
+            Bitmap corrected = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+            if (corrected != bitmap) bitmap.recycle();
+            bitmap = corrected;
+        }
+        return bitmap;
     }
 }
