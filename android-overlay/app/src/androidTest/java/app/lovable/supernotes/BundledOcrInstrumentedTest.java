@@ -1,0 +1,116 @@
+package app.lovable.supernotes;
+
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Typeface;
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
+import com.googlecode.tesseract.android.TessBaseAPI;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.text.Normalizer;
+import java.util.Locale;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import static org.junit.Assert.*;
+
+/**
+ * Real Android runtime smoke tests, separate from the desktop Tesseract tests.
+ * Images are generated with Android Canvas. They verify that the packaged
+ * models can be read and initialized on the Android platform without download.
+ * These are not substitutes for physical-camera and gallery tests.
+ */
+@RunWith(AndroidJUnit4.class)
+public class BundledOcrInstrumentedTest {
+    private static File modelsRoot;
+
+    @BeforeClass
+    public static void unpackBundledModels() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        modelsRoot = new File(context.getCacheDir(), "ocr-instrumented-models");
+        File data = new File(modelsRoot, "tessdata");
+        assertTrue(data.isDirectory() || data.mkdirs());
+        for (String language : new String[]{"rus", "kaz"}) {
+            File file = new File(data, language + ".traineddata");
+            try (InputStream in = context.getAssets().open("tessdata/" + language + ".traineddata");
+                 FileOutputStream out = new FileOutputStream(file)) {
+                byte[] buffer = new byte[65536];
+                int length;
+                while ((length = in.read(buffer)) != -1) out.write(buffer, 0, length);
+            }
+            assertTrue("Model missing or corrupt: " + language, file.length() > 1000000);
+        }
+    }
+
+    @Test
+    public void russianTextIsRecognizedOnAndroid() {
+        verifyRecognition("Привет мир\nЭто тест распознавания", .25);
+    }
+
+    @Test
+    public void kazakhTextIsRecognizedOnAndroid() {
+        verifyRecognition("Қазақ тілі\nСәлем әлем", .28);
+    }
+
+    @Test
+    public void mixedRussianKazakhTextIsRecognizedOnAndroid() {
+        verifyRecognition("Привет мир\nСәлем әлем\nМосква 2026", .30);
+    }
+
+    private static void verifyRecognition(String reference, double maxCer) {
+        Bitmap bitmap = Bitmap.createBitmap(1500, 430, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(Color.WHITE);
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
+        paint.setColor(Color.BLACK);
+        paint.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
+        paint.setTextSize(68f);
+        String[] lines = reference.split("\n");
+        int y = 110;
+        for (String line : lines) {
+            canvas.drawText(line, 55, y, paint);
+            y += 112;
+        }
+        TessBaseAPI api = new TessBaseAPI();
+        try {
+            assertTrue("Bundled models failed to initialize", api.init(modelsRoot.getAbsolutePath(), "kaz+rus"));
+            api.setPageSegMode(TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK);
+            api.setImage(bitmap);
+            String recognized = api.getUTF8Text();
+            double rate = characterErrorRate(reference, recognized == null ? "" : recognized);
+            assertTrue("Android OCR CER=" + rate + ", recognized: " + recognized +
+                    ", expected: " + reference, rate <= maxCer);
+        } finally {
+            api.recycle();
+            bitmap.recycle();
+        }
+    }
+
+    private static double characterErrorRate(String original, String output) {
+        String expected = clean(original), actual = clean(output);
+        int[] previous = new int[actual.length() + 1];
+        for (int j = 0; j <= actual.length(); j++) previous[j] = j;
+        for (int i = 1; i <= expected.length(); i++) {
+            int[] current = new int[actual.length() + 1];
+            current[0] = i;
+            for (int j = 1; j <= actual.length(); j++) {
+                int substitution = expected.charAt(i - 1) == actual.charAt(j - 1) ? 0 : 1;
+                current[j] = Math.min(
+                    Math.min(previous[j] + 1, current[j - 1] + 1),
+                    previous[j - 1] + substitution);
+            }
+            previous = current;
+        }
+        return (double) previous[actual.length()] / Math.max(1, expected.length());
+    }
+
+    private static String clean(String text) {
+        return Normalizer.normalize(text, Normalizer.Form.NFKC)
+            .replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
+    }
+}
