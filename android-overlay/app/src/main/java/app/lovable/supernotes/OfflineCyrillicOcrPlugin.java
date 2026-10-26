@@ -209,6 +209,12 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
         bounds.inJustDecodeBounds = true;
         try (InputStream input = openLocalImage(source)) { BitmapFactory.decodeStream(input, null, bounds); }
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw new IllegalArgumentException("Invalid image");
+        // Reject unreasonable decoder metadata before allocating a bitmap.
+        // This protects older phones against malicious or corrupted images.
+        if (bounds.outWidth > 100000 || bounds.outHeight > 100000
+                || (long) bounds.outWidth * (long) bounds.outHeight > 200000000L) {
+            throw new IllegalArgumentException("Image dimensions exceed safe OCR limits");
+        }
         BitmapFactory.Options options = new BitmapFactory.Options();
         options.inSampleSize = 1;
         while ((long)(bounds.outWidth / options.inSampleSize) * (bounds.outHeight / options.inSampleSize) > 12000000L
