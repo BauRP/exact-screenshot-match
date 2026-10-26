@@ -550,19 +550,27 @@ export function moveNotesToFolder(sourceId: string, destinationId = "all") {
   commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
 }
 
-export function clearAll() {
+export async function clearAll(): Promise<void> {
   ensureReadyForMutation();
-  const notesBeforeClear = state.notes;
-  const pdfIds = notesBeforeClear.filter((note) => note.kind === "pdf").map((note) => note.id);
+  const before = state.notes;
+  const pdfIds = before.filter((note) => note.kind === "pdf").map((note) => note.id);
+  const [{ deletePdfFile }, { audioIdsInHtml, deleteAudioFile }] = await Promise.all([
+    import("./pdf-files"), import("./audio-files"),
+  ]);
+  // Save the empty list before removing binary attachments: failed writes leave
+  // existing notes and their files intact. Await cleanup before reporting success.
   persistNotes([]);
   commit({ notes: [], hydrated: true, status: "ready", error: null });
-  void import("./pdf-files").then(async ({ deletePdfFile }) => {
-    await Promise.all(pdfIds.map((id) => deletePdfFile(id)));
-  }).catch((error) => console.error("Unable to clear PDF files", error));
-  void import("./audio-files").then(async ({ audioIdsInHtml, deleteAudioFile }) => {
-    const ids = new Set(notesBeforeClear.flatMap((note) => audioIdsInHtml(note.body)));
-    await Promise.all([...ids].map((id) => deleteAudioFile(id)));
-  }).catch((error) => console.error("Unable to clear audio files", error));
+  const audioIds = [...new Set(before.flatMap((note) => audioIdsInHtml(note.body)))];
+  const results = await Promise.allSettled([
+    ...pdfIds.map((id) => deletePdfFile(id)),
+    ...audioIds.map((id) => deleteAudioFile(id)),
+  ]);
+  const failed = results.filter((result) => result.status === "rejected");
+  if (failed.length > 0) {
+    console.error("Some local attachments could not be deleted", failed);
+    throw new Error("Заметки удалены, но некоторые вложения удалить не удалось. Очистите данные приложения в настройках Android, чтобы удалить оставшиеся файлы.");
+  }
 }
 
 export function exportNotes(): string {
