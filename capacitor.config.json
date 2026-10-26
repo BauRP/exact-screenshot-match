@@ -1,6 +1,6 @@
 {
   "appId": "app.lovable.supernotes",
-  "appName": "Супер заметки",
+  "appName": "Wave Notes",
   "webDir": "dist/client",
   "bundledWebRuntime": false,
   "server": {
