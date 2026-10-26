@@ -301,9 +301,11 @@ function CameraPage() {
       await yieldToMainThread();
       safeSetStatus("picking", operationId);
       const imagePath = await captureNativePhoto(source);
+      if (!mountedRef.current || operationId !== operationIdRef.current) return;
       await yieldToMainThread();
       safeSetStatus("scanning", operationId);
       const engine = await initializeOcrEngine();
+      if (!mountedRef.current || operationId !== operationIdRef.current) return;
       const text = await engine.processImage(imagePath, ocrMode);
 
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
@@ -351,6 +353,7 @@ function CameraPage() {
   };
 
   const startCapture = (source: CaptureSource) => {
+    if (inFlightRef.current) return;
     setModalOpen(false);
     if (isNativePlatform()) {
       void scanNativeImage(source);
