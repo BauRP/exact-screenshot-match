@@ -60,6 +60,9 @@ jobs:
       - name: TypeScript static checks
         run: bunx tsc --noEmit
 
+      - name: Prepare bundled offline OCR models
+        run: bash scripts/prepare-ocr-models.sh
+
       - name: Prepare Android project
         run: |
           set -euo pipefail
@@ -67,6 +70,8 @@ jobs:
           npx cap sync android
 
           cp -R android-overlay/app/src/main/res/. android/app/src/main/res/
+          mkdir -p android/app/src/main/assets
+          cp -R android-overlay/app/src/main/assets/. android/app/src/main/assets/
           cp -R android-overlay/app/src/main/java/. android/app/src/main/java/
           cp android-overlay/app/build.gradle android/app/build.gradle
           cp android-overlay/app/proguard-rules.pro android/app/proguard-rules.pro
@@ -99,6 +104,8 @@ jobs:
           mkdir -p output
           cp android/app/build/outputs/apk/debug/app-debug.apk output/SuperNotes-debug.apk
           unzip -t output/SuperNotes-debug.apk >/dev/null
+          unzip -l output/SuperNotes-debug.apk | grep -F 'assets/tessdata/rus.traineddata'
+          unzip -l output/SuperNotes-debug.apk | grep -F 'assets/tessdata/kaz.traineddata'
           unzip -l output/SuperNotes-debug.apk | grep -F 'assets/public/index.html'
           ls -lh output/SuperNotes-debug.apk
 
