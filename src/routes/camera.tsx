@@ -126,7 +126,7 @@ function linesFromMlKit(
   const lines: OcrLine[] = [];
   for (const block of data.blocks ?? []) {
     for (const raw of block.lines ?? []) {
-      const item = raw as { text?: string; boundingBox?: OcrRectangle; rect?: OcrRectangle; frame?: OcrRectangle; confidence?: number };
+      const item = raw as { text?: string; boundingBox?: OcrRectangle; rect?: OcrRectangle; frame?: OcrRectangle; confidence?: number; recognizedLanguage?: string };
       const box = item.boundingBox ?? item.rect ?? item.frame;
       // ML Kit returns pixel rectangles; convert to oriented image fractions.
       if (!box || !item.text) continue;
@@ -134,7 +134,7 @@ function linesFromMlKit(
       const right = box.right ?? (left !== undefined && box.width !== undefined ? left + box.width : undefined);
       const bottom = box.bottom ?? (top !== undefined && box.height !== undefined ? top + box.height : undefined);
       if ([left, top, right, bottom].some(v => v === undefined)) continue;
-      lines.push({ text: item.text, left: left! / width, top: top! / height, right: right! / width, bottom: bottom! / height, script, confidence: item.confidence });
+      lines.push({ text: item.text, left: left! / width, top: top! / height, right: right! / width, bottom: bottom! / height, script, confidence: item.confidence, language: item.recognizedLanguage });
     }
   }
   return lines;
