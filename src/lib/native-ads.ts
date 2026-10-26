@@ -55,7 +55,7 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
         return;
       }
       if (!navigator.onLine) {
-        report("Offline: native ad request postponed");
+        updateAdDiagnostic("offline", "Нет подключения к интернету");
         return;
       }
       starting = true;
@@ -133,7 +133,12 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
         setReady(true);
         report("Native feed ready; awaiting slot ad response");
       } catch (error) {
-        // Notes and PDF must continue working with an empty ad slot.
+        // A partially created feed blocks all subsequent create() attempts.
+        // Tear it down before retrying, without disrupting notes or PDF.
+        for (const handle of handles.splice(0)) void handle.remove().catch(console.warn);
+        const failedFeed = feedRef.current;
+        feedRef.current = null;
+        if (failedFeed) await failedFeed.destroy().catch(console.warn);
         console.warn("[SuperNotes AdMob] Initialization failed; preserving placeholder", error);
         updateAdDiagnostic("failed", "Ошибка запуска AdMob", { error: String(error) });
         if (!disposed) scheduleRetry();
