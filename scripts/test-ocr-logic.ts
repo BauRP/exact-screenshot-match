@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { ocrTextToEditorHtml } from "../src/lib/ocr-note";
 import { linesFromMlKit } from "../src/lib/ocr-geometry";
+import { isCameraCancellation, readableOcrFailure } from "../src/lib/ocr-errors";
 import { lineScore, mergeOcrCandidates, type OcrCandidate } from "../src/lib/ocr-merge";
 
 const line = (text: string, script: OcrCandidate["script"], top: number) =>
@@ -106,4 +107,13 @@ assert.equal(mergeOcrCandidates([firstColumn,secondColumn]),"English\nРусск
 assert.equal(mergeOcrCandidates([duplicate,duplicate,duplicate]),"Hello");
 const noGeometryWrong: OcrCandidate = {script:"chinese",text:"Hello",lines:[]};
 assert.equal(mergeOcrCandidates([russian,noGeometryWrong]),"Привет мир");
-console.log("OCR selection, ML Kit geometry and note preservation: assertions passed.");
+// Canceling the system picker is not a failure or a reason to create a note.
+assert.equal(isCameraCancellation(new Error("User cancelled photos app")), true);
+assert.equal(isCameraCancellation({code:"OS-PLUG-CAMR-0006",message:"Canceled"}), true);
+assert.equal(isCameraCancellation({code:"OS-PLUG-CAMR-0020",message:"Canceled"}), true);
+assert.equal(isCameraCancellation(new Error("Camera permission denied")), false);
+assert.equal(isCameraCancellation({code:"OS-PLUG-CAMR-0003",message:"Camera unavailable"}), false);
+assert.match(readableOcrFailure(new Error("OCR timed out")), /времени/);
+assert.match(readableOcrFailure(new Error("Permission denied")), /доступа/);
+assert.match(readableOcrFailure(new Error("Cannot decode selected image")), /Фотография/);
+console.log("OCR selection, geometry, camera cancellation and note safety: assertions passed.");

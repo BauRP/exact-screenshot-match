@@ -9,6 +9,7 @@ import { useT } from "@/lib/i18n";
 import { toast } from "sonner";
 import { mergeOcrCandidates, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
 import { linesFromMlKit } from "@/lib/ocr-geometry";
+import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 
 export const Route = createFileRoute("/camera")({
   head: () => ({ meta: [
@@ -220,7 +221,10 @@ async function captureNativePhoto(source: CaptureSource): Promise<string> {
   });
 
   const path = photo.path ?? photo.webPath;
-  if (!path) throw new Error("Selected image has no readable local path.");
+  // Native OCR only accepts local image paths, never a WebView URL.
+  if (!path || (!path.startsWith("/") && !/^file:\/\//i.test(path) && !/^content:\/\//i.test(path))) {
+    throw new Error("Selected image has no readable local path.");
+  }
   return path;
 }
 
@@ -310,8 +314,14 @@ function CameraPage() {
 
       finishWithText(text);
     } catch (caught) {
-      const message = caught instanceof Error && caught.message ? caught.message : t("ocr_unavailable");
-      handleFailure(message, operationId);
+      if (!mountedRef.current || operationId !== operationIdRef.current) return;
+      if (isCameraCancellation(caught)) {
+        // Backing out of camera/photo picker is normal user intent.
+        setStatus("idle");
+        setModalOpen(true);
+        return;
+      }
+      handleFailure(readableOcrFailure(caught), operationId);
     } finally {
       inFlightRef.current = false;
     }
