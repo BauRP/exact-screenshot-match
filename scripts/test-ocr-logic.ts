@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { ocrTextToEditorHtml } from "../src/lib/ocr-note";
 import { linesFromMlKit } from "../src/lib/ocr-geometry";
+import { OcrSessionGate } from "../src/lib/ocr-session";
 import { isCameraCancellation, readableOcrFailure } from "../src/lib/ocr-errors";
 import { lineScore, mergeOcrCandidates, type OcrCandidate } from "../src/lib/ocr-merge";
 
@@ -116,4 +117,14 @@ assert.equal(isCameraCancellation({code:"OS-PLUG-CAMR-0003",message:"Camera unav
 assert.match(readableOcrFailure(new Error("OCR timed out")), /времени/);
 assert.match(readableOcrFailure(new Error("Permission denied")), /доступа/);
 assert.match(readableOcrFailure(new Error("Cannot decode selected image")), /Фотография/);
-console.log("OCR selection, geometry, camera cancellation and note safety: assertions passed.");
+const scanGate = new OcrSessionGate();
+assert.equal(scanGate.busy, false);
+const releaseGate = scanGate.enter();
+assert.equal(scanGate.busy, true);
+assert.throws(() => scanGate.enter(), /OCR_SCAN_BUSY/);
+assert.match(readableOcrFailure(new Error("OCR_SCAN_BUSY")), /Предыдущее/);
+releaseGate();
+releaseGate();
+assert.equal(scanGate.busy, false);
+scanGate.enter()();
+console.log("OCR selection, geometry, camera cancellation, scan serialization and note safety: assertions passed.");

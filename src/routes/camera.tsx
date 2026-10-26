@@ -9,6 +9,7 @@ import { useT } from "@/lib/i18n";
 import { toast } from "sonner";
 import { mergeOcrCandidates, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
 import { linesFromMlKit } from "@/lib/ocr-geometry";
+import { OcrSessionGate } from "@/lib/ocr-session";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 
 export const Route = createFileRoute("/camera")({
@@ -118,6 +119,7 @@ function composeRecognizedText(result: {
 }
 
 type OcrMode = "auto" | "latin" | "cyrillic" | "chinese" | "japanese" | "korean" | "devanagari";
+const nativeOcrGate = new OcrSessionGate();
 function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
@@ -141,33 +143,34 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
   ];
   return {
     processImage: async (path: string, mode: OcrMode = "auto") => {
+      const releaseSession = native ? nativeOcrGate.enter() : () => undefined;
       const results: OcrCandidate[] = [];
-      // A timeout does not cancel a native promise. Track unfinished work and
-      // do not delete the image while a native recognizer may still read it.
+      // Track all native work, including operations that outlive the UI deadline.
       const outstanding: Promise<unknown>[] = [];
+      let prepared: {path:string;width:number;height:number} | null = null;
       let timedOut = false;
       const timed = <T,>(task: Promise<T>, duration: number): Promise<T> => {
         outstanding.push(task);
         return withDeadline(task, duration);
       };
-      // Preparing an unusually large or unreadable file must not block the UI
-      // forever. Late native completion is cleaned up without starting OCR.
-      const preparation = native ? native.prepareImage({path}) : null;
-      let prepared: {path:string;width:number;height:number} | null = null;
-      if (preparation) {
-        try {
-          prepared = await withDeadline(preparation, 20000);
-        } catch (error) {
-          void preparation.then(late =>
-            native?.releaseImage({path: late.path}).catch(console.warn),
-            () => undefined);
-          throw error;
-        }
-      }
-      const scanPath = prepared?.path ?? path;
-      const width = prepared?.width ?? 1;
-      const height = prepared?.height ?? 1;
       try {
+        const preparation = native ? native.prepareImage({path}) : null;
+        if (preparation) {
+          outstanding.push(preparation);
+          try {
+            prepared = await withDeadline(preparation, 20000);
+          } catch (error) {
+            // In a timeout race the image may be created later. Cleanup is
+            // deferred and keeps the session locked until that happens.
+            outstanding.push(preparation.then(late =>
+              native!.releaseImage({path:late.path}).catch(console.warn),
+              () => undefined));
+            throw error;
+          }
+        }
+        const scanPath = prepared?.path ?? path;
+        const width = prepared?.width ?? 1;
+        const height = prepared?.height ?? 1;
       // A timed-out model must not trigger any more native scans on this photo.
       const recognize = async (item: typeof scripts[number]) => {
         try {
@@ -211,12 +214,16 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       if (!text) throw new Error("Не удалось распознать текст. Попробуйте другое фото.");
       return text;
       } finally {
-        if (native && prepared) {
-          // If the UI timed out, cleanup is deferred until the native read ends.
-          // No more model runs are launched after a timeout.
-          void Promise.allSettled(outstanding).then(() =>
-            native.releaseImage({path: prepared.path}).catch(console.warn));
-        }
+        // Releasing an image while ML Kit still reads it causes intermittent
+        // failures. Hold the gate until every underlying promise has settled.
+        void Promise.allSettled(outstanding)
+          .then(async () => {
+            if (native && prepared) {
+              await native.releaseImage({path:prepared.path});
+            }
+          })
+          .catch(console.warn)
+          .finally(releaseSession);
       }
     }
   };

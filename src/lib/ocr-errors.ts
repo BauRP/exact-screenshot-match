@@ -15,6 +15,9 @@ export function isCameraCancellation(error: unknown): boolean {
 }
 
 export function readableOcrFailure(error: unknown): string {
+  if (error instanceof Error && error.message === "OCR_SCAN_BUSY") {
+    return "Предыдущее сканирование ещё завершается. Повторите попытку после его окончания.";
+  }
   if (error instanceof Error && error.message === "OCR timed out") {
     return "Сканирование заняло слишком много времени. Попробуйте выбрать язык вручную или другое фото.";
   }
