@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { mergeOcrCandidates, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
 import { linesFromMlKit } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
+import { OcrTimeBudget } from "@/lib/ocr-budget";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText } from "@/lib/ocr-text";
 import { ocrScanPlan, type OcrMode } from "@/lib/ocr-plan";
@@ -123,9 +124,11 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       const outstanding: Promise<unknown>[] = [];
       let prepared: {path:string;width:number;height:number} | null = null;
       let timedOut = false;
+      let timeBudget: OcrTimeBudget | null = null;
       const timed = <T,>(task: Promise<T>, duration: number): Promise<T> => {
         outstanding.push(task);
-        return withDeadline(task, duration);
+        if (!timeBudget) throw new Error("OCR budget was not initialized");
+        return withDeadline(task, timeBudget.remaining(duration));
       };
       try {
         onProgress("Подготовка фотографии");
@@ -143,6 +146,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
             throw error;
           }
         }
+        timeBudget = new OcrTimeBudget(mode === "auto" ? 60000 : 25000);
         const scanPath = prepared?.path ?? path;
         const width = prepared?.width ?? 1;
         const height = prepared?.height ?? 1;
@@ -181,6 +185,9 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         }
         await yieldToMainThread();
       }
+      // A timeout leaves an incomplete multilingual page. Do not silently
+      // save partial results as if every configured recognizer had completed.
+      if (timedOut) throw new Error("OCR timed out");
       if (!results.length) throw new Error("Не удалось распознать текст. Попробуйте другое фото.");
       // Until all model frames can be normalized using image dimensions, merge
       // only when at least one valid geometry source is available. The fallback

@@ -60,6 +60,9 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
                 response.put("width", bitmap.getWidth());
                 response.put("height", bitmap.getHeight());
                 call.resolve(response);
+            } catch (OutOfMemoryError e) {
+                if (target != null) target.delete();
+                call.reject("Insufficient memory preparing OCR photo", e);
             } catch (Exception e) {
                 if (target != null) target.delete();
                 call.reject("Photo preparation failed: " + e.getMessage(), e);
@@ -154,6 +157,8 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
                 response.put("confidence", confidence);
                 response.put("lines", lines);
                 call.resolve(response);
+            } catch (OutOfMemoryError e) {
+                call.reject("Insufficient memory for offline Russian/Kazakh OCR", e);
             } catch (Exception e) {
                 call.reject("Offline Russian/Kazakh OCR failed: " + e.getMessage(), e);
             } finally {

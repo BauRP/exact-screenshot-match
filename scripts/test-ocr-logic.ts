@@ -4,6 +4,7 @@ import { composeRecognizedText } from "../src/lib/ocr-text";
 import { ocrScanPlan } from "../src/lib/ocr-plan";
 import { linesFromMlKit } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
+import { OcrTimeBudget } from "../src/lib/ocr-budget";
 import { isCameraCancellation, readableOcrFailure } from "../src/lib/ocr-errors";
 import { lineScore, mergeOcrCandidates, type OcrCandidate } from "../src/lib/ocr-merge";
 
@@ -143,4 +144,12 @@ assert.equal(composeRecognizedText({text:"A B",blocks:[{lines:[{text:"A"}]}]}),"
 assert.equal(composeRecognizedText({text:"Сәлем Hello",blocks:[{lines:[{text:"Сәлем"}]}]}),"Сәлем Hello");
 assert.equal(composeRecognizedText({text:"А 123",blocks:[{lines:[{text:"А"}]}]}),"А 123");
 assert.equal(composeRecognizedText({text:"новая строка",blocks:[{lines:[{text:"новая строка"}]}]}),"новая строка");
-console.log("OCR text fallback, scan order, geometry, cancellation, session gate, note safety: passed.");
+// A slow phone gets a total OCR time cap, not six independent 15s waits.
+const budget = new OcrTimeBudget(60000, 1000);
+assert.equal(budget.remaining(15000, 1000), 15000);
+assert.equal(budget.remaining(15000, 55000), 6000);
+assert.equal(budget.remaining(18000, 60999), 1);
+assert.throws(() => budget.remaining(15000, 61000), /OCR timed out/);
+assert.throws(() => new OcrTimeBudget(0, 0), /Invalid OCR budget/);
+assert.match(readableOcrFailure(new Error("Insufficient memory for offline Russian/Kazakh OCR")), /памяти/);
+console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");

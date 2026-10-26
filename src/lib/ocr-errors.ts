@@ -35,7 +35,7 @@ export function readableOcrFailure(error: unknown): string {
   if (/invalid image|unreadable|cannot decode|could not prepare the photo/i.test(message)) {
     return "Фотография не читается. Выберите другое изображение.";
   }
-  if (/not enough memory|outofmemory|allocation/i.test(message)) {
+  if (/not enough memory|outofmemory|out of memory|insufficient memory|allocation/i.test(message)) {
     return "Не хватило памяти для обработки фотографии. Попробуйте снимок меньшего размера.";
   }
   return "Не удалось распознать текст. Попробуйте другое фото или укажите язык вручную.";
