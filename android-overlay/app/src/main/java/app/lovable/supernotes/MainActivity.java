@@ -12,6 +12,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(PdfPrinterPlugin.class);
+        registerPlugin(PrivacyLinkPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Android 15+ may enforce edge-to-edge even when status bar overlay is off.
