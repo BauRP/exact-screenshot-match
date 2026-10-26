@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ViewMode } from "@/lib/notes-store";
+import { waitForPlugin } from "@/lib/native-ready";
+import { updateAdDiagnostic } from "@/lib/ad-diagnostics";
 
 export const HOME_AD_FEED_ID = "super-notes-home";
 const NATIVE_AD_UNIT_ID = "ca-app-pub-9902253594429663/7940562510";
@@ -9,6 +11,7 @@ type NativeFeed = {
   resume(): void;
   invalidateLayout(): Promise<void>;
   destroy(): Promise<void>;
+  reload(slotKey: string): Promise<void>;
 };
 
 function onAndroid(): boolean {
@@ -30,16 +33,26 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    if (!onAndroid()) return;
     let disposed = false;
+    const abort = new AbortController();
     let starting = false;
     let attempts = 0;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const slotRetries = new Map<string, number>();
+    const slotTimers = new Set<ReturnType<typeof setTimeout>>();
     const handles: Array<{ remove(): Promise<void> }> = [];
     const report = (state: string, details?: unknown) => console.info(`[SuperNotes AdMob] ${state}`, details ?? "");
 
     const initialize = async () => {
       if (starting || disposed || feedRef.current) return;
+      updateAdDiagnostic("bridge", "Проверка подключения AdMob");
+      const bridgeReady = await waitForPlugin("AdMob", 12_000, abort.signal);
+      if (disposed) return;
+      if (!bridgeReady) {
+        updateAdDiagnostic("failed", "Android-плагин AdMob недоступен");
+        scheduleRetry();
+        return;
+      }
       if (!navigator.onLine) {
         report("Offline: native ad request postponed");
         return;
@@ -52,18 +65,18 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
         } = await import("@capacitor-community/admob");
 
         // Google's UMP consent must be checked before any ad request.
-        report("Checking consent");
+        updateAdDiagnostic("consent", "Проверка согласия Google");
         let consent = await AdMob.requestConsentInfo();
         if (disposed) return;
         if (consent.isConsentFormAvailable && consent.status === AdmobConsentStatus.REQUIRED) {
           consent = await AdMob.showConsentForm();
         }
         if (disposed || !consent.canRequestAds) {
-          report("Ad loading blocked by consent state", { status: consent.status });
+          updateAdDiagnostic("blocked", "Запрос рекламы пока не разрешён Google");
           return;
         }
 
-        report("Initializing Google Mobile Ads SDK");
+        updateAdDiagnostic("initializing", "Запуск Google Mobile Ads");
         await AdMob.initialize();
         if (disposed) return;
 
@@ -71,7 +84,7 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
         // only for a real release, after validating the native UI on a device.
         // APK built by this workflow is a debug build: use Google test inventory.
         const testAds = import.meta.env.VITE_ADMOB_LIVE_ADS !== "true";
-        report("Creating native feed (Small 120px test ads)", { testing: testAds });
+        updateAdDiagnostic("loading", "Загрузка тестового нативного объявления");
         const feed = await NativeAdFeed.create({
           feedId: HOME_AD_FEED_ID,
           template: NativeAdTemplate.Small,
@@ -91,10 +104,26 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
         feedRef.current = feed;
         const failed = await feed.addListener(NativeAdPluginEvents.FailedToLoad, (event) => {
           console.warn("[SuperNotes AdMob] Native ad failed to load", event);
+          const slot = event.slotKey;
+          updateAdDiagnostic("failed", `Ошибка Google: ${event.code} — ${event.message}`, { error: `${event.code}: ${event.message}`, slot });
+          if (slot && !disposed) {
+            const retries = slotRetries.get(slot) ?? 0;
+            if (retries < 3) {
+              slotRetries.set(slot, retries + 1);
+              const timer = setTimeout(() => {
+                slotTimers.delete(timer);
+                if (!disposed && navigator.onLine && !pausedRef.current) {
+                  void feed.reload(slot).catch((reason) => console.warn("[SuperNotes AdMob] Retry failed", reason));
+                }
+              }, Math.min(3000 * (retries + 1), 12000));
+              slotTimers.add(timer);
+            }
+          }
         });
         handles.push(failed);
         const loaded = await feed.addListener(NativeAdPluginEvents.Loaded, (event) => {
-          report("Native test ad loaded", event);
+          slotRetries.delete(event.slotKey);
+          updateAdDiagnostic("loaded", "Тестовое объявление загружено", { slot: event.slotKey });
         });
         handles.push(loaded);
         if (pausedRef.current) await feed.pause();
@@ -103,20 +132,28 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
       } catch (error) {
         // Notes and PDF must continue working with an empty ad slot.
         console.warn("[SuperNotes AdMob] Initialization failed; preserving placeholder", error);
-        if (!disposed && attempts < 3 && navigator.onLine) {
-          retryTimer = setTimeout(() => { retryTimer = null; void initialize(); }, Math.min(2000 * attempts, 6000));
-        }
+        updateAdDiagnostic("failed", "Ошибка запуска AdMob", { error: String(error) });
+        if (!disposed) scheduleRetry();
       } finally {
         starting = false;
       }
     };
 
-    const onOnline = () => { void initialize(); };
+    const scheduleRetry = () => {
+      if (disposed || retryTimer !== null || attempts >= 8) return;
+      retryTimer = setTimeout(() => { retryTimer = null; void initialize(); }, Math.min(2000 * (attempts + 1), 15000));
+    };
+    const onOnline = () => { updateAdDiagnostic("waiting", "Интернет доступен, повторяем запрос"); void initialize(); };
+    const onRetry = () => { attempts = 0; slotRetries.clear(); if (retryTimer) clearTimeout(retryTimer); retryTimer = null; void initialize(); };
+    window.addEventListener("supernotes-admob-retry", onRetry);
     window.addEventListener("online", onOnline);
     void initialize();
     return () => {
       disposed = true;
+      abort.abort();
       window.removeEventListener("online", onOnline);
+      window.removeEventListener("supernotes-admob-retry", onRetry);
+      for (const timer of slotTimers) clearTimeout(timer);
       if (retryTimer !== null) clearTimeout(retryTimer);
       for (const handle of handles) void handle.remove().catch(console.warn);
       setReady(false);
