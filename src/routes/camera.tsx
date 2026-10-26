@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { createNote } from "@/lib/notes-store";
 import { useT } from "@/lib/i18n";
 import { toast } from "sonner";
+import { mergeOcrCandidates, hasStrongText, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
 
 export const Route = createFileRoute("/camera")({
   head: () => ({ meta: [
@@ -114,63 +115,98 @@ function composeRecognizedText(result: {
 }
 
 type OcrMode = "auto" | "latin" | "cyrillic" | "chinese" | "japanese" | "korean" | "devanagari";
-type OcrCandidate = { text: string; script: OcrMode; quality: number };
-const SCRIPT_SYMBOLS: Record<string, RegExp> = {
-  cyrillic: /[\u0400-\u052f]/g,
-  chinese: /[\u3400-\u9fff]/g,
-  japanese: /[\u3040-\u30ff]/g,
-  korean: /[\uac00-\ud7af\u1100-\u11ff]/g,
-  devanagari: /[\u0900-\u097f]/g,
-  latin: /[A-Za-z\u00c0-\u024f]/g,
-};
-function qualityOf(text: string, script: OcrMode, confidence?: number): number {
-  const readable = (text.match(/[\p{L}\p{N}]/gu) ?? []).length;
-  if (!readable) return -1;
-  const pattern = SCRIPT_SYMBOLS[script];
-  const match = pattern ? (text.match(pattern) ?? []).length : readable;
-  const ratio = match / readable;
-  const noise = (text.match(/[\ufffd\u25a1]/g) ?? []).length;
-  return ratio * 100 + Math.min(readable, 300) / 10 - noise * 15 + (confidence ?? 0) * 0.10;
+type OcrRectangle = { left?: number; top?: number; right?: number; bottom?: number; x?: number; y?: number; width?: number; height?: number };
+function linesFromMlKit(
+  data: { blocks?: { lines?: unknown[] }[] },
+  script: OcrScript,
+): OcrLine[] {
+  // Different versions of ML Kit expose either a rect or a boundingBox.
+  const lines: OcrLine[] = [];
+  for (const block of data.blocks ?? []) {
+    for (const raw of block.lines ?? []) {
+      const item = raw as { text?: string; boundingBox?: OcrRectangle; rect?: OcrRectangle; frame?: OcrRectangle; confidence?: number };
+      const box = item.boundingBox ?? item.rect ?? item.frame;
+      // ML Kit rectangles are absolute pixel coordinates. Only native Tesseract
+      // currently guarantees normalized coordinates; don't mix coordinate systems.
+      if (!box || !item.text) continue;
+      const left = box.left ?? box.x, top = box.top ?? box.y;
+      const right = box.right ?? (left !== undefined && box.width !== undefined ? left + box.width : undefined);
+      const bottom = box.bottom ?? (top !== undefined && box.height !== undefined ? top + box.height : undefined);
+      if ([left, top, right, bottom].some(v => v === undefined)) continue;
+      // Do not assume the ML Kit frame is normalized.
+      if (right! > 1 || bottom! > 1) continue;
+      lines.push({ text: item.text, left: left!, top: top!, right: right!, bottom: bottom!, script, confidence: item.confidence });
+    }
+  }
+  return lines;
+}
+function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    work,
+    new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("OCR timed out")), ms); }),
+  ]).finally(() => clearTimeout(timer));
 }
 async function initializeOcrEngine(): Promise<OcrEngine> {
   if (!isNativePlatform()) throw new Error("OCR доступно только в установленном приложении Android");
   const mlkit: NativeTextRecognitionBundle = await import("@capacitor-mlkit/text-recognition");
   const { Capacitor, registerPlugin } = await import("@capacitor/core");
   const native = Capacitor.getPlatform() === "android"
-    ? registerPlugin<{ recognize(input: {path:string; language:string}): Promise<{text:string; confidence:number}> }>("OfflineCyrillicOcr")
+    ? registerPlugin<{ recognize(input: {path:string; language:string}): Promise<{text:string; confidence:number; lines?: Omit<OcrLine, "script">[]}> }>("OfflineCyrillicOcr")
     : null;
-  const scripts: Array<{id:OcrMode; script: (typeof mlkit.Script)[keyof typeof mlkit.Script]}> = [
+  const scripts: Array<{id:OcrScript; script: (typeof mlkit.Script)[keyof typeof mlkit.Script]}> = [
     {id:"latin",script:mlkit.Script.Latin},
-    {id:"chinese",script:mlkit.Script.Chinese},
     {id:"japanese",script:mlkit.Script.Japanese},
+    {id:"chinese",script:mlkit.Script.Chinese},
     {id:"korean",script:mlkit.Script.Korean},
     {id:"devanagari",script:mlkit.Script.Devanagari},
   ];
   return {
     processImage: async (path: string, mode: OcrMode = "auto") => {
       const results: OcrCandidate[] = [];
-      // Run serially to avoid peak memory pressure on lower-end Android phones.
-      for (const item of scripts) {
-        if (mode !== "auto" && mode !== item.id) continue;
+      // Keep native recognizers serialized to avoid an ML Kit memory spike.
+      const recognize = async (item: typeof scripts[number]) => {
         try {
-          const data = await mlkit.TextRecognition.processImage({path,script:item.script});
+          const data = await withDeadline(mlkit.TextRecognition.processImage({path,script:item.script}), 15000);
           const value = composeRecognizedText(data);
-          if (value.trim()) results.push({text:value,script:item.id,quality:qualityOf(value,item.id)});
+          if (value.trim()) results.push({text:value,script:item.id,lines:linesFromMlKit(data,item.id)});
         } catch(error) {
-          console.warn("OCR model unavailable",item.id,error);
+          console.warn("OCR model failed",item.id,error);
+        }
+      };
+      // Explicit mode scans just one model.
+      if (mode !== "auto" && mode !== "cyrillic") {
+        const item = scripts.find(item => item.id === mode);
+        if (item) await recognize(item);
+      } else if (mode === "auto") {
+        // Common Latin text first. Chinese and Japanese must BOTH be checked
+        // when a Han-script image is suspected; first-model wins is unsafe.
+        for (const item of scripts) {
+          await recognize(item);
+          await yieldToMainThread();
+          // With a strong Latin result, avoid five extra model runs.
+          if (item.id === "latin" && hasStrongText(results) &&
+              /^[\p{Script=Latin}\p{N}\p{P}\p{Z}\p{S}\n\r\t]+$/u.test(results[0].text)) break;
         }
       }
       if (native && (mode === "auto" || mode === "cyrillic")) {
         try {
-          const data = await native.recognize({path,language:"rus+kaz"});
-          if (data.text.trim()) results.push({text:data.text.trim(),script:"cyrillic",quality:qualityOf(data.text,"cyrillic",data.confidence)});
+          const data = await withDeadline(native.recognize({path,language:"rus+kaz"}), 18000);
+          if (data.text.trim()) {
+            const lines: OcrLine[] = (data.lines ?? []).map(line => ({...line,script:"cyrillic"}));
+            results.push({text:data.text,script:"cyrillic",lines,confidence:data.confidence});
+          }
         } catch(error) {
-          console.warn("Bundled Russian/Kazakh OCR unavailable",error);
+          console.warn("Bundled Russian/Kazakh OCR failed",error);
         }
       }
       if (!results.length) throw new Error("Не удалось распознать текст. Попробуйте другое фото.");
-      results.sort((a,b)=>b.quality-a.quality);
-      return results[0].text;
+      // Until all model frames can be normalized using image dimensions, merge
+      // only when at least one valid geometry source is available. The fallback
+      // deliberately chooses a single result instead of duplicating page text.
+      const text = mergeOcrCandidates(results);
+      if (!text) throw new Error("Не удалось распознать текст. Попробуйте другое фото.");
+      return text;
     }
   };
 }
