@@ -11,6 +11,8 @@ import { mergeOcrCandidates, type OcrCandidate, type OcrLine, type OcrScript } f
 import { linesFromMlKit } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
+import { composeRecognizedText } from "@/lib/ocr-text";
+import { ocrScanPlan, type OcrMode } from "@/lib/ocr-plan";
 
 export const Route = createFileRoute("/camera")({
   head: () => ({ meta: [
@@ -91,34 +93,6 @@ async function loadCameraBundle(): Promise<NativeCameraBundle> {
   return import("@capacitor/camera");
 }
 
-/**
- * Rebuilds the recognised text preserving the original photo layout:
- * every ML Kit line becomes its own `\n`-separated row, every block becomes a
- * paragraph (blank line), and the horizontal spaces inside a line are kept
- * exactly as ML Kit reports them (no trimming, no re-flowing).
- */
-function composeRecognizedText(result: {
-  text: string;
-  blocks?: { lines?: { text: string }[] }[];
-}): string {
-  const blocks = result.blocks ?? [];
-  if (blocks.length === 0) {
-    return result.text.replace(/\r\n/g, "\n").replace(/[ \t]+$/gm, "");
-  }
-
-  const paragraphs = blocks
-    .map((block) =>
-      (block.lines ?? [])
-        .map((line) => line.text.replace(/\s+$/g, ""))
-        .filter((line) => line.length > 0)
-        .join("\n"),
-    )
-    .filter((paragraph) => paragraph.length > 0);
-
-  return paragraphs.join("\n\n");
-}
-
-type OcrMode = "auto" | "latin" | "cyrillic" | "chinese" | "japanese" | "korean" | "devanagari";
 const nativeOcrGate = new OcrSessionGate();
 function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -184,30 +158,28 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
           if (error instanceof Error && error.message === "OCR timed out") timedOut = true;
         }
       };
-      // Explicit mode scans just one model.
-      if (mode !== "auto" && mode !== "cyrillic") {
-        const item = scripts.find(item => item.id === mode);
-        if (item) await recognize(item);
-      } else if (mode === "auto") {
-        // Common Latin text first. Chinese and Japanese must BOTH be checked
-        // when a Han-script image is suspected; first-model wins is unsafe.
-        for (const item of scripts) {
-          await recognize(item);
-          if (timedOut) break;
-          await yieldToMainThread();
-        }
-      }
-      if (!timedOut && native && (mode === "auto" || mode === "cyrillic")) {
-        onProgress("Распознавание: русский и казахский");
-        try {
-          const data = await timed(native.recognize({path:scanPath,language:"rus+kaz"}), 18000);
-          if (data.text.trim()) {
-            const lines: OcrLine[] = (data.lines ?? []).map(line => ({...line,script:"cyrillic"}));
-            results.push({text:data.text,script:"cyrillic",lines,confidence:data.confidence});
+      // Scan one recognizer at a time. Cyrillic now runs immediately after
+      // Latin, rather than being starved by all five ML Kit recognizers.
+      for (const script of ocrScanPlan(mode)) {
+        if (timedOut) break; // Native work cannot be cancelled safely.
+        if (script === "cyrillic") {
+          if (!native) continue;
+          onProgress("Распознавание: русский и казахский");
+          try {
+            const data = await timed(native.recognize({path:scanPath,language:"rus+kaz"}), 18000);
+            if (data.text.trim()) {
+              const lines: OcrLine[] = (data.lines ?? []).map(line => ({...line,script:"cyrillic"}));
+              results.push({text:data.text,script:"cyrillic",lines,confidence:data.confidence});
+            }
+          } catch (error) {
+            console.warn("Bundled Russian/Kazakh OCR failed",error);
+            if (error instanceof Error && error.message === "OCR timed out") timedOut = true;
           }
-        } catch(error) {
-          console.warn("Bundled Russian/Kazakh OCR failed",error);
+        } else {
+          const item = scripts.find(item => item.id === script);
+          if (item) await recognize(item);
         }
+        await yieldToMainThread();
       }
       if (!results.length) throw new Error("Не удалось распознать текст. Попробуйте другое фото.");
       // Until all model frames can be normalized using image dimensions, merge
