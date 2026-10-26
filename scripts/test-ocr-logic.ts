@@ -139,4 +139,8 @@ assert.equal(composeRecognizedText({text:"Привет мир",blocks:[{lines:[]
 assert.equal(composeRecognizedText({text:"Казахский\nEnglish\n日本語",blocks:[{lines:[{text:"Казахский"}]}]}),"Казахский\nEnglish\n日本語");
 assert.equal(composeRecognizedText({text:"one\r\ntwo",blocks:[]}),"one\ntwo");
 assert.equal(composeRecognizedText({text:"first second",blocks:[{lines:[{text:"first"},{text:"second"}]}]}),"first\nsecond");
+assert.equal(composeRecognizedText({text:"A B",blocks:[{lines:[{text:"A"}]}]}),"A B");
+assert.equal(composeRecognizedText({text:"Сәлем Hello",blocks:[{lines:[{text:"Сәлем"}]}]}),"Сәлем Hello");
+assert.equal(composeRecognizedText({text:"А 123",blocks:[{lines:[{text:"А"}]}]}),"А 123");
+assert.equal(composeRecognizedText({text:"новая строка",blocks:[{lines:[{text:"новая строка"}]}]}),"новая строка");
 console.log("OCR text fallback, scan order, geometry, cancellation, session gate, note safety: passed.");

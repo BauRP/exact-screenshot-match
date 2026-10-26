@@ -20,9 +20,16 @@ export function composeRecognizedText(result: TextScanResult): string {
   // full text instead of saving nothing or dropping large parts of the page.
   if (!paragraphs.length) return fallback;
   const structured = paragraphs.join("\n\n");
-  // If structure contains a tiny subset of the native text, keep the full
-  // native result; geometry merging still uses available lines independently.
-  if (fallback.trim().length > structured.trim().length * 1.7 &&
-      fallback.trim().length - structured.trim().length > 20) return fallback;
+  // A recognizer may return only some lines in blocks while "text" contains
+  // the complete page. Compare actual characters instead of raw lengths:
+  // a missing short word in a mixed-language photo is still important.
+  const compact = (value: string) => value.replace(/\s+/gu, "");
+  const full = compact(fallback);
+  const partial = compact(structured);
+  if (full.length > partial.length &&
+      full.length >= partial.length * 1.12 &&
+      (full.includes(partial) || paragraphs.every(p => full.includes(compact(p))))) {
+    return fallback;
+  }
   return structured;
 }
