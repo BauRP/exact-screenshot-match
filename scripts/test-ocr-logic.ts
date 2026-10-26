@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { ocrTextToEditorHtml } from "../src/lib/ocr-note";
 import { lineScore, mergeOcrCandidates, type OcrCandidate } from "../src/lib/ocr-merge";
 
 const line = (text: string, script: OcrCandidate["script"], top: number) =>
@@ -42,4 +43,10 @@ assert.equal(mergeOcrCandidates([singleHan]), "年");
 assert.ok(lineScore("7", "latin") > 20);
 assert.ok(lineScore("年", "chinese") > 20);
 assert.ok(lineScore("▒", "latin") < 0);
-console.log("OCR selection/merge logic: assertions passed.");
+assert.equal(ocrTextToEditorHtml("Привет\nҚазақша\n日本語"), "<p>Привет</p><p>Қазақша</p><p>日本語</p>");
+assert.equal(ocrTextToEditorHtml("A < B & C > D"), "<p>A &lt; B &amp; C &gt; D</p>");
+assert.equal(ocrTextToEditorHtml("<img src=x onerror=alert(1)>"), "<p>&lt;img src=x onerror=alert(1)&gt;</p>");
+assert.equal(ocrTextToEditorHtml("first\n\nsecond"), "<p>first</p><p><br></p><p>second</p>");
+assert.equal(ocrTextToEditorHtml("x\r\ny"), "<p>x</p><p>y</p>");
+assert.equal(ocrTextToEditorHtml("a  b"), "<p>a&nbsp;&nbsp;b</p>");
+console.log("OCR selection/merge and safe note persistence: assertions passed.");

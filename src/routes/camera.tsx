@@ -4,6 +4,7 @@ import { Camera as CameraIcon, ImagePlus, Loader2, ScanLine, X } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { createNote } from "@/lib/notes-store";
+import { ocrTextToEditorHtml } from "@/lib/ocr-note";
 import { useT } from "@/lib/i18n";
 import { toast } from "sonner";
 import { mergeOcrCandidates, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
@@ -253,7 +254,7 @@ function createOcrNote(text: string, title: string) {
     .find((line) => line.length > 0);
   return createNote({
     title: firstLine ? firstLine.slice(0, 80) : title,
-    body: text,
+    body: ocrTextToEditorHtml(text),
   });
 }
 
