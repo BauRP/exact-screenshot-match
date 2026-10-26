@@ -36,8 +36,12 @@ const HAN = /[\u3400-\u9fff]/u;
 export function lineScore(text: string, script: OcrScript, language?: string, confidence?: number): number {
   const letters = (text.match(/\p{L}/gu) ?? []).length;
   const digits = (text.match(/\p{N}/gu) ?? []).length;
-  if (letters < 2 && digits < 4) return -100;
+  // Numeric-only lines (dates, prices, page numbers) and one-character
+  // labels are legitimate OCR results. Do not drop them just for being short.
+  if (!letters && !digits) return -100;
   const matches = (text.match(MATCH[script]) ?? []).length;
+  if (!letters) return 24 + Math.min(digits, 8) * 2 - (text.match(/[\ufffd\u25a1\u25af]/gu) ?? []).length * 20;
+  if (letters === 1 && matches === 0) return -100;
   const ratio = matches / Math.max(1, letters);
   const invalid = (text.match(/[\ufffd\u25a1\u25af]/gu) ?? []).length;
   const expected = language?.toLowerCase() ?? "";

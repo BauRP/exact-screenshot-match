@@ -28,4 +28,18 @@ const mixed: OcrCandidate[] = [
 ];
 assert.equal(mergeOcrCandidates(mixed), "Қазақ тіліндегі мәтін\n\nEnglish language\n\n日本語の文章");
 assert.equal(mergeOcrCandidates([{script:"cyrillic",text:"Тест",lines:[line("Тест","cyrillic",.1)]}]), "Тест");
+// Important single-symbol, numeric and receipt lines must survive selection.
+const receiptNumbers: OcrCandidate = {
+  script: "latin", text: "2026\n1590\n7", lines: [
+    line("2026", "latin", .10),
+    line("1590", "latin", .22),
+    line("7", "latin", .34),
+  ],
+};
+assert.equal(mergeOcrCandidates([receiptNumbers]), "2026\n\n1590\n\n7");
+const singleHan: OcrCandidate = { script: "chinese", text: "年", lines: [line("年", "chinese", .15)] };
+assert.equal(mergeOcrCandidates([singleHan]), "年");
+assert.ok(lineScore("7", "latin") > 20);
+assert.ok(lineScore("年", "chinese") > 20);
+assert.ok(lineScore("▒", "latin") < 0);
 console.log("OCR selection/merge logic: assertions passed.");
