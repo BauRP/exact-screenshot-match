@@ -424,7 +424,20 @@ function SettingsPage() {
           </Row>
           <div className="h-px bg-border" />
           <Row icon={<Shield className="h-4 w-4" />} title={t("privacy_policy")}>
-            <Btn onClick={() => window.open("https://baurp.github.io/privacy/wave-notes/", "_blank", "noopener,noreferrer")}>Перейти на сайт</Btn>
+            <Btn onClick={async () => {
+              try {
+                const { Capacitor, registerPlugin } = await import("@capacitor/core");
+                if (Capacitor.getPlatform() === "android" && Capacitor.isNativePlatform()) {
+                  const browser = registerPlugin<{ openPolicy(): Promise<void> }>("PrivacyLink");
+                  await browser.openPolicy();
+                } else {
+                  window.open("https://baurp.github.io/privacy/wave-notes/", "_blank", "noopener,noreferrer");
+                }
+              } catch (error) {
+                toast.error("Не удалось открыть сайт политики конфиденциальности");
+                console.error("Cannot open privacy policy", error);
+              }
+            }}>Перейти на сайт</Btn>
           </Row>
           <div className="h-px bg-border" />
           <Row icon={<MessageSquarePlus className="h-4 w-4" />} title={t("ideas_wishes")}>
