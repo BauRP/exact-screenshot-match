@@ -152,4 +152,10 @@ assert.equal(budget.remaining(18000, 60999), 1);
 assert.throws(() => budget.remaining(15000, 61000), /OCR timed out/);
 assert.throws(() => new OcrTimeBudget(0, 0), /Invalid OCR budget/);
 assert.match(readableOcrFailure(new Error("Insufficient memory for offline Russian/Kazakh OCR")), /памяти/);
+assert.equal(linesFromMlKit({blocks:[{lines:[{
+  text:"outside", boundingBox:{left:1200,top:1200,right:1300,bottom:1300}
+}]}]},"latin",1000,1000).length,0);
+assert.equal(linesFromMlKit({blocks:[{lines:[{
+  text:"partly visible", boundingBox:{left:-10,top:20,right:50,bottom:80}
+}]}]},"latin",1000,1000)[0].left,0);
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");

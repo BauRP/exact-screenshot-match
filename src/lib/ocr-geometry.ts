@@ -27,6 +27,9 @@ export function linesFromMlKit(
       const y1 = Math.max(0, Math.min(1, top / imageHeight));
       const y2 = Math.max(0, Math.min(1, bottom / imageHeight));
       if (x2 <= x1 || y2 <= y1) continue;
+      // Some camera/gallery providers yield boxes far outside the actual
+      // decoded image. Do not clamp those to misleading edge labels.
+      if (right <= 0 || bottom <= 0 || left >= imageWidth || top >= imageHeight) continue;
       lines.push({ text: line.text, left: x1, top: y1, right: x2, bottom: y2,
         script, language: line.recognizedLanguage });
     }
