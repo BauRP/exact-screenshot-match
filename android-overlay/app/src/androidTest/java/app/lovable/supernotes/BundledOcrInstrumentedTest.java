@@ -43,7 +43,25 @@ public class BundledOcrInstrumentedTest {
                 int length;
                 while ((length = in.read(buffer)) != -1) out.write(buffer, 0, length);
             }
-            assertTrue("Model missing or corrupt: " + language, file.length() > 1000000);
+            long expectedSize = "rus".equals(language) ? 3861738L : 4734644L;
+            assertEquals("Bundled model size mismatch: " + language, expectedSize, file.length());
+        }
+    }
+
+    @Test
+    public void emptyPhotoDoesNotInventText() {
+        Bitmap bitmap = Bitmap.createBitmap(900, 240, Bitmap.Config.ARGB_8888);
+        bitmap.eraseColor(Color.WHITE);
+        TessBaseAPI api = new TessBaseAPI();
+        try {
+            assertTrue(api.init(modelsRoot.getAbsolutePath(), "kaz+rus"));
+            api.setPageSegMode(TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK);
+            api.setImage(bitmap);
+            String output = api.getUTF8Text();
+            assertTrue("Blank image produced text: " + output, output == null || output.trim().isEmpty());
+        } finally {
+            api.recycle();
+            bitmap.recycle();
         }
     }
 

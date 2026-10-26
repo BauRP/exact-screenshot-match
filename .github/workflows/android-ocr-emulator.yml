@@ -16,6 +16,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: super-notes-ocr-emulator-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   emulator:
     name: Android 34 — bundled OCR engine integration
@@ -44,6 +48,16 @@ jobs:
         with:
           packages: "platform-tools platforms;android-36 build-tools;36.0.0"
 
+      # The emulator runner requires /dev/kvm access for hardware acceleration.
+      - name: Enable KVM acceleration
+        run: |
+          set -euo pipefail
+          test -c /dev/kvm || { echo "KVM unavailable on runner"; exit 1; }
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
       - name: Generate Android app with bundled OCR models
         run: |
           set -euo pipefail
@@ -70,6 +84,10 @@ jobs:
           test -s android/app/src/main/assets/tessdata/kaz.traineddata
           chmod +x android/gradlew
 
+      - name: Compile Android instrumentation APK before starting emulator
+        working-directory: android
+        run: ./gradlew assembleDebugAndroidTest --no-daemon --stacktrace
+
       - name: Android instrumented OCR tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -78,7 +96,11 @@ jobs:
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
-          script: cd android && ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace
+          script: |
+            adb shell svc wifi disable
+            adb shell svc data disable
+            cd android
+            ./gradlew connectedDebugAndroidTest --offline --no-daemon --stacktrace
 
       - name: Summarize device-level verification
         if: always()
