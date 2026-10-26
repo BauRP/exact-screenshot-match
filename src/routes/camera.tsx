@@ -139,7 +139,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
   const native = Capacitor.getPlatform() === "android"
     ? registerPlugin<{ recognize(input: {path:string; language:string}): Promise<{text:string; confidence:number}> }>("OfflineCyrillicOcr")
     : null;
-  const scripts: Array<{id:OcrMode; script: NativeTextRecognitionBundle["Script"]}> = [
+  const scripts: Array<{id:OcrMode; script: (typeof mlkit.Script)[keyof typeof mlkit.Script]}> = [
     {id:"latin",script:mlkit.Script.Latin},
     {id:"chinese",script:mlkit.Script.Chinese},
     {id:"japanese",script:mlkit.Script.Japanese},
