@@ -45,6 +45,9 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
             File target = null;
             try {
                 bitmap = loadBitmap(source);
+                // Remove only abandoned OCR snapshots from older sessions.
+                // Never touch recently created images that another scan may still use.
+                purgeOldSnapshots();
                 target = new File(getContext().getCacheDir(), "wave-ocr-" + UUID.randomUUID() + ".jpg");
                 try (FileOutputStream out = new FileOutputStream(target)) {
                     if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)) {
@@ -64,6 +67,19 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
                 if (bitmap != null && !bitmap.isRecycled()) bitmap.recycle();
             }
         });
+    }
+
+    private void purgeOldSnapshots() {
+        File cache = getContext().getCacheDir();
+        File[] files = cache.listFiles((dir, name) ->
+                name.startsWith("wave-ocr-") && name.endsWith(".jpg"));
+        if (files == null) return;
+        long cutoff = System.currentTimeMillis() - 24L * 60L * 60L * 1000L;
+        for (File file : files) {
+            if (file.isFile() && file.lastModified() > 0 && file.lastModified() < cutoff) {
+                file.delete();
+            }
+        }
     }
 
     @PluginMethod
