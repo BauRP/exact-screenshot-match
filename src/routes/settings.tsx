@@ -15,8 +15,11 @@ import {
   MessageSquarePlus,
   Download,
   Upload,
+  Radio,
+  RefreshCw,
 } from "lucide-react";
 import { sendFeedback } from "@/lib/feedback.functions";
+import { useAdDiagnostic, requestAdRetry } from "@/lib/ad-diagnostics";
 import { createFullBackup, restoreFullBackup, shareFullBackup } from "@/lib/backup";
 import { AppHeader } from "@/components/AppHeader";
 import { BottomNav } from "@/components/BottomNav";
@@ -200,6 +203,7 @@ function SettingsPage() {
   const [fbText, setFbText] = useState("");
   const [fbSending, setFbSending] = useState(false);
   const [backupBusy, setBackupBusy] = useState(false);
+  const adDiagnostic = useAdDiagnostic();
   const backupPickerRef = useRef<HTMLInputElement>(null);
 
   const makeBackup = async () => {
@@ -426,6 +430,28 @@ function SettingsPage() {
             <Btn onClick={() => setFeedbackOpen(true)}>{t("fb_send")}</Btn>
           </Row>
         </Section>
+
+        {import.meta.env.DEV || import.meta.env.VITE_ADMOB_LIVE_ADS !== "true" ? (
+          <Section title="Диагностика тестовой рекламы" eyebrow="06">
+            <Row
+              icon={<Radio className="h-4 w-4" />}
+              title={adDiagnostic.message}
+              hint={`Состояние: ${adDiagnostic.status}; загрузок: ${adDiagnostic.loadedCount}; ошибок: ${adDiagnostic.failedCount}`}
+            >
+              <Btn onClick={requestAdRetry}><RefreshCw className="mr-1 inline h-3 w-3" />Повторить</Btn>
+            </Row>
+            {adDiagnostic.lastError ? (
+              <p className="break-words px-3 pb-2 text-xs text-destructive">
+                Последняя ошибка: {adDiagnostic.lastError}
+              </p>
+            ) : null}
+            {adDiagnostic.lastSlot ? (
+              <p className="break-words px-3 pb-2 text-[10px] text-muted-foreground">
+                Место: {adDiagnostic.lastSlot}
+              </p>
+            ) : null}
+          </Section>
+        ) : null}
 
         <p className="pt-4 text-center font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
           {t("offline_note")}
