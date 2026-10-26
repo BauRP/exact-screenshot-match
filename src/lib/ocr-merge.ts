@@ -83,7 +83,7 @@ export function mergeOcrCandidates(candidates: OcrCandidate[]): string {
     ...line, confidence: line.confidence ?? c.confidence,
   }))).filter(valid);
 
-  if (!lines.length) {
+  if (!lines.length || candidates.some(c => c.text.trim() && c.lines.length === 0)) {
     return candidates
       .filter(c => c.text.trim())
       .sort((a, b) => lineScore(b.text, b.script, undefined, b.confidence) -
