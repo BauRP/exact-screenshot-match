@@ -63,6 +63,9 @@ jobs:
       - name: Verify OCR selection and mixed-language safeguards
         run: bun scripts/test-ocr-logic.ts
 
+      - name: Verify OCR note storage and error handling
+        run: bun scripts/test-ocr-persistence.ts
+
       - name: Prepare bundled offline OCR models
         run: bash scripts/prepare-ocr-models.sh
 

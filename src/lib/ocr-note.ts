@@ -17,3 +17,13 @@ export function ocrTextToEditorHtml(value: string): string {
     return escaped ? "<p>" + escaped + "</p>" : "<p><br></p>";
   }).join("");
 }
+
+/** The OCR route writes plain text as a normal, safely encoded local note. */
+export function buildOcrNoteDraft(text: string, fallbackTitle: string): { title: string; body: string } {
+  if (!text.trim()) throw new Error("OCR_EMPTY_TEXT");
+  const firstLine = text.split(/\r?\n/u).map(line => line.trim()).find(Boolean);
+  return {
+    title: firstLine ? firstLine.slice(0, 80) : fallbackTitle,
+    body: ocrTextToEditorHtml(text),
+  };
+}
