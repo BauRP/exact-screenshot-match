@@ -81,13 +81,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         name: "viewport",
         content: "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover",
       },
-      { title: "Супер заметки — умный офлайн-блокнот" },
+      { title: "Wave Notes — умный офлайн-блокнот" },
       {
         name: "description",
         content:
-          "Супер заметки: премиальный офлайн-блокнот с распознаванием текста с камеры, стильным редактором и полной приватностью.",
+          "Wave Notes: премиальный офлайн-блокнот с распознаванием текста с камеры, стильным редактором и полной приватностью.",
       },
-      { property: "og:title", content: "Супер заметки" },
+      { property: "og:title", content: "Wave Notes" },
       {
         property: "og:description",
         content:
