@@ -60,6 +60,9 @@ jobs:
       - name: TypeScript static checks
         run: bunx tsc --noEmit
 
+      - name: Verify OCR selection and mixed-language safeguards
+        run: bun scripts/test-ocr-logic.ts
+
       - name: Prepare bundled offline OCR models
         run: bash scripts/prepare-ocr-models.sh
 
