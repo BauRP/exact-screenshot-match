@@ -23,7 +23,11 @@ concurrency:
 
 jobs:
   emulator:
-    name: Android 34 — bundled OCR engine integration
+    name: Android ${{ matrix.api-level }} — bundled OCR engine integration
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [29, 34]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -110,7 +114,7 @@ jobs:
       - name: Android instrumented OCR tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: ${{ matrix.api-level }}
           arch: x86_64
           target: google_apis
           disable-animations: true
@@ -145,7 +149,7 @@ jobs:
           names = [case.attrib.get('name','') for case in cases]
           path = os.environ['GITHUB_STEP_SUMMARY']
           with open(path,'a',encoding='utf-8') as out:
-              out.write("## Android OCR emulator — observed results\n\n")
+              out.write("## Android OCR emulator API ${{ matrix.api-level }} — observed results\n\n")
               out.write(f"- Tests recorded: **{len(cases)}**\n")
               out.write(f"- Failed: **{len(failures)}**\n")
               out.write("- These are synthetic Android Canvas images, not camera photographs.\n")
