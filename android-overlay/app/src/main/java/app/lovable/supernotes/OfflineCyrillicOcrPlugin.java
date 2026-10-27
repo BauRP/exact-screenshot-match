@@ -1,5 +1,6 @@
 package app.lovable.supernotes;
 
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
@@ -193,11 +194,11 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
         if (!temp.renameTo(target)) throw new IllegalStateException("Cannot install bundled OCR model");
     }
 
-    private InputStream openLocalImage(String source) throws Exception {
+    private static InputStream openLocalImage(Context context, String source) throws Exception {
         Uri uri = Uri.parse(source);
         String scheme = uri.getScheme();
         if ("content".equals(scheme) || "android.resource".equals(scheme)) {
-            InputStream stream = getContext().getContentResolver().openInputStream(uri);
+            InputStream stream = context.getContentResolver().openInputStream(uri);
             if (stream == null) throw new IllegalArgumentException("Selected image is unreadable");
             return stream;
         }
@@ -210,9 +211,15 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
     }
 
     private Bitmap loadBitmap(String source) throws Exception {
+        return loadBitmap(getContext(), source);
+    }
+
+    // Testable against a real Android ContentResolver without initializing
+    // Capacitor's entire camera UI. Both paths use the SAME decoder.
+    static Bitmap loadBitmap(Context context, String source) throws Exception {
         BitmapFactory.Options bounds = new BitmapFactory.Options();
         bounds.inJustDecodeBounds = true;
-        try (InputStream input = openLocalImage(source)) { BitmapFactory.decodeStream(input, null, bounds); }
+        try (InputStream input = openLocalImage(context, source)) { BitmapFactory.decodeStream(input, null, bounds); }
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) throw new IllegalArgumentException("Invalid image");
         // Reject unreasonable decoder metadata before allocating a bitmap.
         // This protects older phones against malicious or corrupted images.
@@ -227,14 +234,14 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
             options.inSampleSize *= 2;
         }
         Bitmap bitmap;
-        try (InputStream input = openLocalImage(source)) {
+        try (InputStream input = openLocalImage(context, source)) {
             bitmap = BitmapFactory.decodeStream(input, null, options);
         }
         if (bitmap == null) throw new IllegalArgumentException("Cannot decode selected image");
         // Gallery imports may retain EXIF orientation even when their pixels are
         // unrotated. Apply rotation/mirror BEFORE OCR and before extracting boxes.
         int orientation = ExifInterface.ORIENTATION_NORMAL;
-        try (InputStream input = openLocalImage(source)) {
+        try (InputStream input = openLocalImage(context, source)) {
             orientation = new ExifInterface(input).getAttributeInt(
                     ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
         } catch (Exception ignored) {

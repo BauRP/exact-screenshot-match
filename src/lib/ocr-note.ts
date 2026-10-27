@@ -3,6 +3,25 @@
  * Never pass untrusted OCR text to the editor as markup.
  * Each physical OCR line becomes its own paragraph; empty lines stay empty.
  */
+/** Keep titles intact across emoji ZWJ sequences, flags and combining marks.
+ * Modern Android WebView supports Intl.Segmenter; fallback still prevents
+ * dangling UTF-16 surrogate halves on older engines.
+ */
+export function truncateOcrTitle(value: string, maxGraphemes = 80): string {
+  if (!Number.isSafeInteger(maxGraphemes) || maxGraphemes < 0) {
+    throw new Error("Invalid OCR title limit");
+  }
+  type IntlSegmenter = new (locale: string, options: { granularity: "grapheme" }) =>
+    { segment: (input: string) => Iterable<{ segment: string }> };
+  const Segmenter = (Intl as unknown as { Segmenter?: IntlSegmenter }).Segmenter;
+  if (Segmenter) {
+    return Array.from(new Segmenter("und", { granularity: "grapheme" })
+      .segment(value), item => item.segment).slice(0, maxGraphemes).join("");
+  }
+  // Fallback to valid Unicode code points rather than slicing UTF-16 units.
+  return Array.from(value).slice(0, maxGraphemes).join("");
+}
+
 export function ocrTextToEditorHtml(value: string): string {
   const normalized = value.replace(/\r\n?/g, "\n");
   return normalized.split("\n").map(line => {
@@ -12,8 +31,10 @@ export function ocrTextToEditorHtml(value: string): string {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;")
-      // Keep alignment when source text contains repeated spaces.
-      .replace(/ {2,}/g, spaces => "&nbsp;".repeat(spaces.length));
+      // HTML collapses leading/trailing spaces and tabs. Preserve document
+      // indentation, multi-space columns and tab-separated receipt data.
+      .replace(/(^ +| +$| {2,}|\t+)/g, whitespace =>
+        Array.from(whitespace, ch => ch === "\t" ? "&nbsp;".repeat(4) : "&nbsp;").join(""));
     return escaped ? "<p>" + escaped + "</p>" : "<p><br></p>";
   }).join("");
 }
@@ -23,9 +44,7 @@ export function buildOcrNoteDraft(text: string, fallbackTitle: string): { title:
   if (!text.trim()) throw new Error("OCR_EMPTY_TEXT");
   const firstLine = text.split(/\r?\n/u).map(line => line.trim()).find(Boolean);
   return {
-    // JS .slice() operates on UTF-16 code units and can break a non-BMP
-    // character halfway through. Keep the title Unicode-valid on truncation.
-    title: firstLine ? Array.from(firstLine).slice(0, 80).join("") : fallbackTitle,
+    title: firstLine ? truncateOcrTitle(firstLine) : fallbackTitle,
     body: ocrTextToEditorHtml(text),
   };
 }

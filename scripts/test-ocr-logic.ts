@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { ocrTextToEditorHtml, buildOcrNoteDraft } from "../src/lib/ocr-note";
+import { ocrTextToEditorHtml, buildOcrNoteDraft, truncateOcrTitle } from "../src/lib/ocr-note";
 import { composeRecognizedText } from "../src/lib/ocr-text";
 import { ocrScanPlan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
 import { linesFromMlKit } from "../src/lib/ocr-geometry";
@@ -269,4 +269,13 @@ assert.equal(Array.from(buildOcrNoteDraft(emojiTitle,"OCR").title).length,80);
 const manyEmojiTitle = "📷".repeat(100);
 assert.equal(buildOcrNoteDraft(manyEmojiTitle,"OCR").title, "📷".repeat(80));
 assert.equal(buildOcrNoteDraft("\n\n日本語 Title\nrest","OCR").title,"日本語 Title");
+// Formatting must not silently collapse photographed indentation or tab columns.
+assert.equal(ocrTextToEditorHtml("  Таблица\nA\t2500\n Итого "),"<p>&nbsp;&nbsp;Таблица</p><p>A&nbsp;&nbsp;&nbsp;&nbsp;2500</p><p>&nbsp;Итого&nbsp;</p>");
+assert.equal(ocrTextToEditorHtml("A\t\tB"),"<p>A&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;B</p>");
+assert.equal(ocrTextToEditorHtml("<b>\tИтого & 5"),
+  "<p>&lt;b&gt;&nbsp;&nbsp;&nbsp;&nbsp;Итого &amp; 5</p>");
+assert.equal(truncateOcrTitle("x".repeat(79)+"👩‍💻"+"z",80),"x".repeat(79)+"👩‍💻");
+assert.equal(truncateOcrTitle("x".repeat(79)+"🇰🇿"+"z",80),"x".repeat(79)+"🇰🇿");
+assert.equal(truncateOcrTitle("x".repeat(79)+"e\u0301"+"z",80),"x".repeat(79)+"e\u0301");
+assert.throws(() => truncateOcrTitle("abc",-1),/Invalid OCR title limit/);
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");

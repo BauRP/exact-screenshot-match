@@ -25,3 +25,6 @@ ML Kit five-script tests run on the Android emulator with network radios disable
 **Partial-result safety:** In automatic mode, a failed script recognizer now blocks note creation instead of silently saving the other recognizers' text. The user is asked to retry in manual language mode. This does not prove the missing text can be recovered automatically.
 
 **Android image decoder:** Instrumented tests exercise the real `OfflineCyrillicOcrPlugin.loadBitmap` path for absolute JPEG paths, file:// JPEG URIs, EXIF rotation and corrupt input. These checks cannot replace camera/gallery picker tests on physical phones.
+
+**Gallery content URI:** an Android emulator test now creates an app-owned JPEG through `MediaStore`, reads it via its `content://` URI with the real native OCR image decoder, and cleans the fixture up. This verifies image decode, not Android's interactive picker UI.
+**Editor text fidelity:** OCR note tests preserve leading/trailing spaces and tabs and use grapheme-aware truncation for titles when available.

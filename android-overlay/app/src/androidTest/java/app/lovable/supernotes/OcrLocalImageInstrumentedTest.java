@@ -1,5 +1,8 @@
 package app.lovable.supernotes;
 
+import android.content.ContentResolver;
+import android.content.ContentValues;
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
@@ -7,6 +10,9 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.media.ExifInterface;
 import android.net.Uri;
+import android.provider.MediaStore;
+import java.io.InputStream;
+import java.io.OutputStream;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import java.io.File;
@@ -77,6 +83,44 @@ public class OcrLocalImageInstrumentedTest {
         } finally {
             if (decoded != null) decoded.recycle();
             assertTrue(photo.delete());
+        }
+    }
+
+    @Test
+    public void actualMediaStoreContentUriCanBeDecodedOffline() throws Exception {
+        // Android's photo picker commonly returns content:// URIs.
+        // Create an app-owned gallery image and verify OUR native decoder
+        // reads it through ContentResolver, not just a file:// shortcut.
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        ContentResolver resolver = context.getContentResolver();
+        ContentValues metadata = new ContentValues();
+        metadata.put(MediaStore.Images.Media.DISPLAY_NAME, "wave-notes-ocr-integration.jpg");
+        metadata.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+        metadata.put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/WaveNotesOcrTests");
+        Uri content = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, metadata);
+        assertNotNull("MediaStore image insertion failed", content);
+        Bitmap source = Bitmap.createBitmap(640, 320, Bitmap.Config.ARGB_8888);
+        Bitmap decoded = null;
+        try {
+            Canvas canvas = new Canvas(source);
+            canvas.drawColor(Color.WHITE);
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            paint.setColor(Color.BLACK);
+            paint.setTextSize(56f);
+            canvas.drawText("Gallery OCR", 40, 130, paint);
+            try (OutputStream out = resolver.openOutputStream(content)) {
+                assertNotNull("MediaStore returned no output stream", out);
+                assertTrue("Could not create MediaStore JPEG",
+                    source.compress(Bitmap.CompressFormat.JPEG, 95, out));
+            }
+            decoded = OfflineCyrillicOcrPlugin.loadBitmap(context, content.toString());
+            assertNotNull(decoded);
+            assertEquals(640, decoded.getWidth());
+            assertEquals(320, decoded.getHeight());
+        } finally {
+            if (decoded != null) decoded.recycle();
+            source.recycle();
+            resolver.delete(content, null, null);
         }
     }
 
