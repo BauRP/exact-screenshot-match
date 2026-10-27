@@ -227,4 +227,18 @@ await assert.rejects(() => withOcrDeadline(new Promise<void>(()=>{}),8),/OCR tim
 await assert.rejects(() => withOcrDeadline(Promise.resolve("done"),0),/Invalid OCR limit/);
 assert.equal(readableOcrFailure(new Error("Selected image has no readable local path.")),
   "Фотография не читается. Выберите другое изображение.");
+// A one-letter/digit loss is still unacceptable, even below the former 12% cutoff.
+assert.equal(composeRecognizedText({
+  text:"Платёж 2026 №7",blocks:[{lines:[{text:"Платёж 2026"}]}],
+}),"Платёж 2026 №7");
+assert.equal(composeRecognizedText({
+  text:"Сәлем! Hello",blocks:[{lines:[{text:"Сәлем"},{text:"Hello"}]}],
+}),"Сәлем! Hello");
+assert.equal(composeRecognizedText({
+  text:"first small middle last",blocks:[{lines:[{text:"first"},{text:"last"}]}],
+}),"first small middle last");
+// A structurally inconsistent full text must not overwrite reliable block text.
+assert.equal(composeRecognizedText({
+  text:"last and first, another paragraph",blocks:[{lines:[{text:"first"},{text:"last"}]}],
+}),"first\nlast");
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");

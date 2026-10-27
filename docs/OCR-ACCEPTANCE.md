@@ -11,7 +11,7 @@ Two independent numbers are tracked in reports:
 | Offline operation | Tesseract runs on emulator after Wi-Fi/data are disabled | Independently exercise full camera-to-note workflow without network |
 | Camera / gallery | Local URI admission tests, Android project compiled | Real camera and gallery selection on various devices |
 | Russian / Kazakh OCR | 11 Tesseract fixture images; native Android OCR tests | Real photographs and handwriting/low-light |
-| Chinese / Japanese / Korean / Devanagari | Script selection/merge regression tests | Real ML Kit native model and quality on Android |
+| Chinese / Japanese / Korean / Devanagari | Script selection/merge logic and 5 native ML Kit recognizer smoke tests | Real photos and document-level accuracy on Android |
 | Automatic language detection | Six model scan-order assertions and script-score checks | Real mixed-script photos with quality metrics |
 | Line merging | Anchors, columns, missing geometry, duplicates tests | Document-level mixed-language comparisons |
 | Note saving | Real notes-store serialization, HTML escaping, failed storage writes | App navigation, editor open and restart on Android |

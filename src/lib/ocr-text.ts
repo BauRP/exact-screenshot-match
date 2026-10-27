@@ -26,10 +26,20 @@ export function composeRecognizedText(result: TextScanResult): string {
   const compact = (value: string) => value.replace(/\s+/gu, "");
   const full = compact(fallback);
   const partial = compact(structured);
-  if (full.length > partial.length &&
-      full.length >= partial.length * 1.12 &&
-      (full.includes(partial) || paragraphs.every(p => full.includes(compact(p))))) {
-    return fallback;
+  if (full.length > partial.length) {
+    // The difference could be one Kazakh letter, a price digit or a single
+    // punctuation mark. There is no safe percentage threshold for data loss.
+    // Trust the complete result only when EVERY line from native blocks
+    // appears within it IN ORDER. Otherwise keep structured geometry text.
+    let offset = 0;
+    const ordered = paragraphs.flatMap(p => p.split("\n")).map(compact).filter(Boolean)
+      .every(piece => {
+        const index = full.indexOf(piece, offset);
+        if (index < 0) return false;
+        offset = index + piece.length;
+        return true;
+      });
+    if (ordered) return fallback;
   }
   return structured;
 }
