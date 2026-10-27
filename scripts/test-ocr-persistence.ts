@@ -35,8 +35,12 @@ assert.equal(getNote(created.id)?.body,draft.body);
 assert.ok(storedNotes[0].body.includes("<p><br></p>"),"Blank lines must survive the editor conversion");
 assert.ok(storedNotes[0].body.includes("&lt;"),"OCR input must not be interpreted as HTML");
 
-const beforeFailure = saved;
+const second = createNote(buildOcrNoteDraft("Привет\nСәлем әлем\nनमस्ते", "OCR"));
+assert.equal(getNote(second.id)?.body,"<p>Привет</p><p>Сәлем әлем</p><p>नमस्ते</p>");
+assert.equal(JSON.parse(stored.get("sn.notes.v1") ?? "[]").length,2);
+const beforeFailure = stored.get("sn.notes.v1");
 rejectWrites = true;
 assert.throws(() => createNote(buildOcrNoteDraft("Новое распознавание","OCR")), /Unable to save notes/);
 assert.equal(stored.get("sn.notes.v1"),beforeFailure,"Storage failure must preserve prior notes");
+assert.equal(getNote(second.id)?.body,"<p>Привет</p><p>Сәлем әлем</p><p>नमस्ते</p>");
 console.log("OCR -> HTML -> real notes-store -> persistent storage: assertions passed.");

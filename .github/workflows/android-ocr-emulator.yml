@@ -70,6 +70,9 @@ jobs:
           mkdir -p android/app/src/main/assets
           cp -R android-overlay/app/src/main/assets/. android/app/src/main/assets/
           cp -R android-overlay/app/src/main/java/. android/app/src/main/java/
+          # Capacitor generates a sample instrumented test with a generic package
+          # expectation. It is not a Wave Notes test and fails even when OCR passes.
+          rm -f android/app/src/androidTest/java/com/getcapacitor/myapp/ExampleInstrumentedTest.java
           mkdir -p android/app/src/androidTest
           cp -R android-overlay/app/src/androidTest/. android/app/src/androidTest/
           cp android-overlay/app/build.gradle android/app/build.gradle

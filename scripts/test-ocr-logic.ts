@@ -4,7 +4,8 @@ import { composeRecognizedText } from "../src/lib/ocr-text";
 import { ocrScanPlan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
 import { linesFromMlKit } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
-import { OcrTimeBudget } from "../src/lib/ocr-budget";
+import { OcrTimeBudget, withOcrDeadline } from "../src/lib/ocr-budget";
+import { isLocalOcrImagePath } from "../src/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "../src/lib/ocr-errors";
 import { lineScore, mergeOcrCandidates, type OcrCandidate } from "../src/lib/ocr-merge";
 
@@ -188,4 +189,42 @@ const copiedPage: OcrCandidate = {
   script:"latin",text:"Привет мир\nHello world",lines:[],
 };
 assert.equal(mergeOcrCandidates([confirmedCyr,confirmedEng,copiedPage]),"Привет мир\n\nHello world");
+
+const badPaths: unknown[] = [
+ "", " ", "https://example.com/image.jpg", "http://example.com/i.png",
+ "javascript:alert(1)", "data:image/png;base64,AAAA", "blob:local/image",
+ "file://", "file://remote.example/image.jpg", "content://",
+ "/\\n", "//server/share", " file:///storage/emulated/0/pic.jpg ",
+];
+for (const path of badPaths) {
+  assert.equal(isLocalOcrImagePath(path),false,"Must refuse untrusted/non-local path: "+String(path));
+}
+for (const path of ["/storage/emulated/0/DCIM/camera.jpg",
+  "file:///data/user/0/app/cache/photo.jpg",
+  "content://media/external/images/media/5"]) {
+  assert.equal(isLocalOcrImagePath(path),true,"Must allow provider path: "+path);
+}
+assert.deepEqual(ocrScanPlan("chinese"),["chinese"]);
+assert.deepEqual(ocrScanPlan("korean"),["korean"]);
+assert.deepEqual(ocrScanPlan("devanagari"),["devanagari"]);
+const devanagariLine: OcrCandidate = {script:"devanagari",text:"हिन्दी भाषा",
+  lines:[line("हिन्दी भाषा","devanagari",.73)]};
+const koreanLine: OcrCandidate = {script:"korean",text:"한국어",
+  lines:[line("한국어","korean",.44)]};
+const japaneseLine: OcrCandidate = {script:"japanese",text:"かな",
+  lines:[line("かな","japanese",.20)]};
+assert.equal(mergeOcrCandidates([koreanLine,devanagariLine,japaneseLine]),
+  "かな\n\n한국어\n\nहिन्दी भाषा");
+assert.ok(lineScore("हिन्दी","devanagari") > lineScore("हिन्दी","latin"));
+assert.ok(lineScore("かな","japanese") > lineScore("かな","chinese"));
+const testGate = new OcrSessionGate();
+const hold = testGate.enter();
+assert.throws(() => testGate.enter(),/OCR_SCAN_BUSY/);
+hold();
+assert.equal(testGate.busy,false);
+assert.equal(await withOcrDeadline(Promise.resolve("done"),200),"done");
+await assert.rejects(() => withOcrDeadline(new Promise<void>(()=>{}),8),/OCR timed out/);
+await assert.rejects(() => withOcrDeadline(Promise.resolve("done"),0),/Invalid OCR limit/);
+assert.equal(readableOcrFailure(new Error("Selected image has no readable local path.")),
+  "Фотография не читается. Выберите другое изображение.");
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");

@@ -10,7 +10,8 @@ import { toast } from "sonner";
 import { mergeOcrCandidates, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
 import { linesFromMlKit } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
-import { OcrTimeBudget } from "@/lib/ocr-budget";
+import { OcrTimeBudget, withOcrDeadline } from "@/lib/ocr-budget";
+import { isLocalOcrImagePath } from "@/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText } from "@/lib/ocr-text";
 import { ocrScanPlan, CYRILLIC_OCR_LANGUAGES, type OcrMode } from "@/lib/ocr-plan";
@@ -95,13 +96,6 @@ async function loadCameraBundle(): Promise<NativeCameraBundle> {
 }
 
 const nativeOcrGate = new OcrSessionGate();
-function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  return Promise.race([
-    work,
-    new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("OCR timed out")), ms); }),
-  ]).finally(() => clearTimeout(timer));
-}
 async function initializeOcrEngine(): Promise<OcrEngine> {
   if (!isNativePlatform()) throw new Error("OCR доступно только в установленном приложении Android");
   const mlkit: NativeTextRecognitionBundle = await import("@capacitor-mlkit/text-recognition");
@@ -128,7 +122,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       const timed = <T,>(task: Promise<T>, duration: number): Promise<T> => {
         outstanding.push(task);
         if (!timeBudget) throw new Error("OCR budget was not initialized");
-        return withDeadline(task, timeBudget.remaining(duration));
+        return withOcrDeadline(task, timeBudget.remaining(duration));
       };
       try {
         onProgress("Подготовка фотографии");
@@ -136,7 +130,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         if (preparation) {
           outstanding.push(preparation);
           try {
-            prepared = await withDeadline(preparation, 20000);
+            prepared = await withOcrDeadline(preparation, 20000);
           } catch (error) {
             // In a timeout race the image may be created later. Cleanup is
             // deferred and keeps the session locked until that happens.
@@ -225,7 +219,7 @@ async function captureNativePhoto(source: CaptureSource): Promise<string> {
 
   const path = photo.path ?? photo.webPath;
   // Native OCR only accepts local image paths, never a WebView URL.
-  if (!path || (!path.startsWith("/") && !/^file:\/\//i.test(path) && !/^content:\/\//i.test(path))) {
+  if (!isLocalOcrImagePath(path)) {
     throw new Error("Selected image has no readable local path.");
   }
   return path;

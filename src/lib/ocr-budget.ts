@@ -19,3 +19,21 @@ export class OcrTimeBudget {
     return Math.min(perModelLimit, available);
   }
 }
+
+/** Limits the UI wait; it does NOT cancel an already running native operation.
+ * Callers must keep their native session locked until the underlying task settles.
+ */
+export async function withOcrDeadline<T>(task: Promise<T>, milliseconds: number): Promise<T> {
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) throw new Error("Invalid OCR limit");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      task,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("OCR timed out")), milliseconds);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
