@@ -1,6 +1,11 @@
 package app.lovable.supernotes;
 
+import android.content.Context;
 import android.graphics.Bitmap;
+import android.net.Uri;
+import androidx.test.platform.app.InstrumentationRegistry;
+import java.io.File;
+import java.io.FileOutputStream;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -60,6 +65,56 @@ public class BundledMlKitInstrumentedTest {
     public void devanagariModelRunsOffline() throws Exception {
         verify("नमस्ते हिन्दी", Character.UnicodeScript.DEVANAGARI,
             TextRecognition.getClient(new DevanagariTextRecognizerOptions.Builder().build()));
+    }
+
+    @Test
+    public void compressedJpegGoesThroughRealDecoderAndLatinMlKitOffline() throws Exception {
+        verifyCompressedPhoto("HELLO WORLD 2026", Character.UnicodeScript.LATIN,
+            TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS));
+    }
+
+    @Test
+    public void compressedJpegGoesThroughRealDecoderAndKoreanMlKitOffline() throws Exception {
+        verifyCompressedPhoto("안녕하세요 한국어", Character.UnicodeScript.HANGUL,
+            TextRecognition.getClient(new KoreanTextRecognizerOptions.Builder().build()));
+    }
+
+    private static void verifyCompressedPhoto(
+            String sample, Character.UnicodeScript expectedScript, TextRecognizer recognizer)
+            throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File jpeg = File.createTempFile("wave-mlkit-jpeg-", ".jpg", context.getCacheDir());
+        Bitmap source = Bitmap.createBitmap(1600, 360, Bitmap.Config.ARGB_8888);
+        Bitmap decoded = null;
+        try {
+            Canvas canvas = new Canvas(source);
+            canvas.drawColor(Color.WHITE);
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
+            paint.setColor(Color.BLACK);
+            paint.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
+            paint.setTextSize(100f);
+            canvas.drawText(sample, 65, 185, paint);
+            try (FileOutputStream out = new FileOutputStream(jpeg)) {
+                assertTrue(source.compress(Bitmap.CompressFormat.JPEG, 97, out));
+            }
+            decoded = OfflineCyrillicOcrPlugin.loadBitmap(context,
+                Uri.fromFile(jpeg).toString());
+            assertEquals(1600, decoded.getWidth());
+            assertEquals(360, decoded.getHeight());
+            Text result = Tasks.await(recognizer.process(InputImage.fromBitmap(decoded, 0)),
+                40, TimeUnit.SECONDS);
+            String output = result.getText() == null ? "" : result.getText().trim();
+            assertTrue("Compressed " + expectedScript + " JPEG OCR was empty", !output.isEmpty());
+            long matching = output.codePoints()
+                .filter(cp -> Character.UnicodeScript.of(cp) == expectedScript).count();
+            assertTrue("Compressed JPEG lost " + expectedScript + " letters: " + output,
+                matching >= 2);
+        } finally {
+            recognizer.close();
+            source.recycle();
+            if (decoded != null) decoded.recycle();
+            assertTrue(jpeg.delete());
+        }
     }
 
     private static void verify(String sample, Character.UnicodeScript expectedScript,

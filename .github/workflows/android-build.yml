@@ -72,6 +72,9 @@ jobs:
       - name: Verify corrupted notes cannot be overwritten at startup
         run: bun scripts/test-ocr-corrupt-start.ts
 
+      - name: Verify many long mixed-language OCR notes survive storage
+        run: bun scripts/test-ocr-stress.ts
+
       - name: Prepare bundled offline OCR models
         run: bash scripts/prepare-ocr-models.sh
 

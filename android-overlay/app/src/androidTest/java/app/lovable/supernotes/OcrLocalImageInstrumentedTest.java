@@ -141,6 +141,42 @@ public class OcrLocalImageInstrumentedTest {
     }
 
     @Test
+    public void rotate270ExifHasCorrectOcrCoordinates() throws Exception {
+        File photo = makePhoto(640, 320);
+        Bitmap corrected = null;
+        try {
+            ExifInterface exif = new ExifInterface(photo.getAbsolutePath());
+            exif.setAttribute(ExifInterface.TAG_ORIENTATION,
+                String.valueOf(ExifInterface.ORIENTATION_ROTATE_270));
+            exif.saveAttributes();
+            corrected = loadWithActualPlugin(Uri.fromFile(photo).toString());
+            assertEquals("270 degree rotation swaps OCR width", 320, corrected.getWidth());
+            assertEquals("270 degree rotation swaps OCR height", 640, corrected.getHeight());
+        } finally {
+            if (corrected != null) corrected.recycle();
+            assertTrue(photo.delete());
+        }
+    }
+
+    @Test
+    public void horizontalExifMirroringPreservesPhotoDimensions() throws Exception {
+        File photo = makePhoto(640, 320);
+        Bitmap corrected = null;
+        try {
+            ExifInterface exif = new ExifInterface(photo.getAbsolutePath());
+            exif.setAttribute(ExifInterface.TAG_ORIENTATION,
+                String.valueOf(ExifInterface.ORIENTATION_FLIP_HORIZONTAL));
+            exif.saveAttributes();
+            corrected = loadWithActualPlugin(photo.getAbsolutePath());
+            assertEquals(640, corrected.getWidth());
+            assertEquals(320, corrected.getHeight());
+        } finally {
+            if (corrected != null) corrected.recycle();
+            assertTrue(photo.delete());
+        }
+    }
+
+    @Test
     public void galleryPngIsDecodedByNativeImageLoader() throws Exception {
         File png = File.createTempFile("wave-ocr-png-", ".png",
             InstrumentationRegistry.getInstrumentation().getTargetContext().getCacheDir());

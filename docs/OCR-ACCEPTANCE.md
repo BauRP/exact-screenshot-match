@@ -39,3 +39,6 @@ not exercise the interactive picker or real camera hardware.
 **Compressed JPEG-to-text:** an Android instrumented test now creates a real JPEG, decodes it through the production decoder and runs the bundled Russian/Kazakh Tesseract recognizer. It does not yet test the photo picker, editor UI, or real photos.
 
 **Cold restart and safe recovery:** CI now loads a real previously persisted multilingual OCR note through the actual notes-store, creates another note without overwriting it, and verifies that corrupt preexisting storage rejects writes without touching its original bytes. This remains a simulated WebView store rather than a physical-device reinstall.
+
+**Compressed native images:** Android instruments actual JPEG->native decoder->ML Kit Latin/Korean pipelines, alongside JPEG->native decoder->Tesseract Russian/Kazakh. Further EXIF 270° and front-image mirror orientation smoke tests supplement the 90° rotation test.
+**Sizable notes:** An isolated CI test saves 25 sizable mixed-language OCR documents into the real notes-store and verifies all persisted IDs and bodies. This test does not guarantee a physical WebView's available quota.
