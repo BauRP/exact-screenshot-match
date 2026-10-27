@@ -42,5 +42,7 @@ const beforeFailure = stored.get("sn.notes.v1");
 rejectWrites = true;
 assert.throws(() => createNote(buildOcrNoteDraft("Новое распознавание","OCR")), /Unable to save notes/);
 assert.equal(stored.get("sn.notes.v1"),beforeFailure,"Storage failure must preserve prior notes");
-assert.equal(getNote(second.id)?.body,"<p>Привет</p><p>Сәлем әлем</p><p>नमस्ते</p>");
+// The store deliberately blocks reads/writes via its mutation guard after a
+// storage error; persisted bytes must still be unchanged.
+assert.throws(() => getNote(second.id),/Notes storage has an error/);
 console.log("OCR -> HTML -> real notes-store -> persistent storage: assertions passed.");
