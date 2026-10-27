@@ -23,6 +23,9 @@ export function readableOcrFailure(error: unknown): string {
   if (error instanceof Error && error.message === "OCR_SCAN_BUSY") {
     return "Предыдущее сканирование ещё завершается. Повторите попытку после его окончания.";
   }
+  if (error instanceof Error && error.message === "OCR_MODELS_INCOMPLETE") {
+    return "Не все языковые модели смогли завершить распознавание. Неполная заметка не сохранена. Выберите язык вручную и повторите сканирование.";
+  }
   if (error instanceof Error && error.message === "OCR timed out") {
     return "Сканирование заняло слишком много времени. Попробуйте выбрать язык вручную или другое фото.";
   }

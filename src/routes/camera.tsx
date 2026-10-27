@@ -11,6 +11,7 @@ import { mergeOcrCandidates, type OcrCandidate, type OcrLine, type OcrScript } f
 import { linesFromMlKit } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline } from "@/lib/ocr-budget";
+import { OcrScanCoverage } from "@/lib/ocr-coverage";
 import { isLocalOcrImagePath } from "@/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText } from "@/lib/ocr-text";
@@ -114,6 +115,8 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
     processImage: async (path: string, mode: OcrMode = "auto", onProgress: (stage: string) => void = () => undefined) => {
       const releaseSession = native ? nativeOcrGate.enter() : () => undefined;
       const results: OcrCandidate[] = [];
+      const scanPlan = ocrScanPlan(mode);
+      const coverage = new OcrScanCoverage(scanPlan);
       // Track all native work, including operations that outlive the UI deadline.
       const outstanding: Promise<unknown>[] = [];
       let prepared: {path:string;width:number;height:number} | null = null;
@@ -149,28 +152,35 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         onProgress(`Распознавание: ${item.label}`);
         try {
           const data = await timed(mlkit.TextRecognition.processImage({path:scanPath,script:item.script}), 15000);
+          coverage.markCompleted(item.id);
           const value = composeRecognizedText(data);
           if (value.trim()) results.push({text:value,script:item.id,lines:linesFromMlKit(data,item.id,width,height)});
         } catch(error) {
           console.warn("OCR model failed",item.id,error);
+          coverage.markFailed(item.id);
           if (error instanceof Error && error.message === "OCR timed out") timedOut = true;
         }
       };
       // Scan one recognizer at a time. Cyrillic now runs immediately after
       // Latin, rather than being starved by all five ML Kit recognizers.
-      for (const script of ocrScanPlan(mode)) {
+      for (const script of scanPlan) {
         if (timedOut) break; // Native work cannot be cancelled safely.
         if (script === "cyrillic") {
-          if (!native) continue;
+          if (!native) {
+            coverage.markFailed("cyrillic");
+            continue;
+          }
           onProgress("Распознавание: русский и казахский");
           try {
             const data = await timed(native.recognize({path:scanPath,language:CYRILLIC_OCR_LANGUAGES}), 18000);
+            coverage.markCompleted("cyrillic");
             if (data.text.trim()) {
               const lines: OcrLine[] = (data.lines ?? []).map(line => ({...line,script:"cyrillic"}));
               results.push({text:data.text,script:"cyrillic",lines,confidence:data.confidence});
             }
           } catch (error) {
             console.warn("Bundled Russian/Kazakh OCR failed",error);
+            coverage.markFailed("cyrillic");
             if (error instanceof Error && error.message === "OCR timed out") timedOut = true;
           }
         } else {
@@ -182,6 +192,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       // A timeout leaves an incomplete multilingual page. Do not silently
       // save partial results as if every configured recognizer had completed.
       if (timedOut) throw new Error("OCR timed out");
+      coverage.ensureComplete();
       if (!results.length) throw new Error("Не удалось распознать текст. Попробуйте другое фото.");
       // Until all model frames can be normalized using image dimensions, merge
       // only when at least one valid geometry source is available. The fallback

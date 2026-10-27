@@ -21,3 +21,5 @@ Two independent numbers are tracked in reports:
 Never report a simulated fixture's 0% CER as zero errors on actual camera photographs.
 
 ML Kit five-script tests run on the Android emulator with network radios disabled. The Android app build.gradle explicitly uses `com.google.mlkit:text-recognition*` bundled model artifacts, not `play-services-mlkit-*` downloadable models. Tests do not establish document-level accuracy.
+
+**Partial-result safety:** In automatic mode, a failed script recognizer now blocks note creation instead of silently saving the other recognizers' text. The user is asked to retry in manual language mode. This does not prove the missing text can be recovered automatically.

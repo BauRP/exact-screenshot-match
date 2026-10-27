@@ -4,6 +4,7 @@ import { composeRecognizedText } from "../src/lib/ocr-text";
 import { ocrScanPlan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
 import { linesFromMlKit } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
+import { OcrScanCoverage } from "../src/lib/ocr-coverage";
 import { OcrTimeBudget, withOcrDeadline } from "../src/lib/ocr-budget";
 import { isLocalOcrImagePath } from "../src/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "../src/lib/ocr-errors";
@@ -241,4 +242,24 @@ assert.equal(composeRecognizedText({
 assert.equal(composeRecognizedText({
   text:"last and first, another paragraph",blocks:[{lines:[{text:"first"},{text:"last"}]}],
 }),"first\nlast");
+// The photo must not be saved as complete if ANY selected OCR engine fails.
+const fullScan = new OcrScanCoverage(["latin","cyrillic","japanese"]);
+fullScan.markCompleted("latin");
+fullScan.markCompleted("cyrillic");
+assert.throws(() => fullScan.ensureComplete(),/OCR_MODELS_INCOMPLETE/);
+fullScan.markFailed("japanese");
+assert.throws(() => fullScan.ensureComplete(),/OCR_MODELS_INCOMPLETE/);
+assert.match(readableOcrFailure(new Error("OCR_MODELS_INCOMPLETE")),/Неполная заметка не сохранена/);
+fullScan.markCompleted("japanese");
+fullScan.ensureComplete();
+fullScan.markFailed("latin");
+assert.throws(() => fullScan.ensureComplete(),/OCR_MODELS_INCOMPLETE/);
+fullScan.markCompleted("latin");
+fullScan.ensureComplete();
+assert.throws(() => fullScan.markCompleted("korean"),/Unexpected OCR script/);
+assert.throws(() => new OcrScanCoverage([]),/Invalid OCR scan plan/);
+assert.throws(() => new OcrScanCoverage(["latin","latin"]),/Invalid OCR scan plan/);
+const manualScan = new OcrScanCoverage(["cyrillic"]);
+manualScan.markCompleted("cyrillic"); // Empty result still completes the engine.
+manualScan.ensureComplete();
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");
