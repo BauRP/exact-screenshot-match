@@ -113,11 +113,14 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           # The runner executes each script line in a separate shell;
           # keep "cd android" and Gradle in a SINGLE shell command.
-          script: adb shell svc wifi disable && adb shell svc data disable && cd android && test -x ./gradlew && ./gradlew connectedDebugAndroidTest --offline --no-daemon --stacktrace
+          # Emulator itself has no Wi-Fi/mobile data. Gradle on the CI HOST may
+          # download Android Unified Test Platform tooling as needed.
+          # Only run tests for our app, never unrelated Capacitor subprojects.
+          script: adb shell svc wifi disable && adb shell svc data disable && cd android && test -x ./gradlew && ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
 
       - name: Summarize device-level verification
         if: always()
         run: |
           echo "## Android OCR integration" >> "$GITHUB_STEP_SUMMARY"
-          echo "Executed or attempted Tesseract rus/kaz on an Android 34 emulator." >> "$GITHUB_STEP_SUMMARY"
+          echo "Android 34: test outcome must be read from the test job, not this summary." >> "$GITHUB_STEP_SUMMARY"
           echo "This does NOT cover real camera/gallery or physical devices." >> "$GITHUB_STEP_SUMMARY"
