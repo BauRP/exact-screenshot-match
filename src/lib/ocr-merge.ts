@@ -113,8 +113,29 @@ export function mergeOcrCandidates(candidates: OcrCandidate[]): string {
     .filter(c => c.score >= 20)
     .sort((a,b) => b.score-a.score);
   const unlocated = plausible.filter(c => c.candidate.lines.length === 0);
-  if (!lines.length || (lines.length < 2 && unlocated.length)) {
-    return plausible[0]?.candidate.text.trim() ?? "";
+  if (!lines.length) return plausible[0]?.candidate.text.trim() ?? "";
+  // A single located line must not be discarded just because a second
+  // model omitted bounding boxes. Only combine when scripts are independent.
+  if (lines.length === 1 && unlocated.length) {
+    const anchor = lines[0];
+    const normalize = (value: string) => value.normalize("NFKC").toLocaleLowerCase().replace(/\s+/gu, " ").trim();
+    const exact = unlocated.find(c => normalize(c.candidate.text).includes(normalize(anchor.text)) &&
+      normalize(c.candidate.text).length > normalize(anchor.text).length && c.score >= 58);
+    if (exact) return exact.candidate.text.trim();
+    const different = unlocated.find(c => {
+      const other = c.candidate;
+      if (other.script === anchor.script ||
+          (anchor.script === "japanese" && other.script === "chinese") ||
+          (anchor.script === "chinese" && other.script === "japanese") ||
+          c.score < 58 || other.text.trim().length < 30) return false;
+      const matching = (other.text.match(MATCH[other.script]) ?? []).length;
+      const shared = (other.text.match(MATCH[anchor.script]) ?? []).length;
+      return matching >= 8 && matching > shared * 2 &&
+        !normalize(other.text).includes(normalize(anchor.text));
+    });
+    if (different && lineScore(anchor.text, anchor.script, anchor.language, anchor.confidence) >= 20) {
+      return anchor.text.trim() + "\n\n" + different.candidate.text.trim();
+    }
   }
 
   // Prefer spatial fusion of located lines over a lower-quality unlocated result.
