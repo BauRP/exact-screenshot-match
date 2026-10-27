@@ -23,7 +23,9 @@ export function truncateOcrTitle(value: string, maxGraphemes = 80): string {
 }
 
 export function ocrTextToEditorHtml(value: string): string {
-  const normalized = value.replace(/\r\n?/g, "\n");
+  // OCR libraries may return CR, CRLF, Unicode line and paragraph separators.
+  // Treat all of them as real editor paragraphs, without deleting any text.
+  const normalized = value.replace(/\r\n?|\u2028|\u2029/g, "\n");
   return normalized.split("\n").map(line => {
     const escaped = line
       .replace(/&/g, "&amp;")
@@ -42,7 +44,7 @@ export function ocrTextToEditorHtml(value: string): string {
 /** The OCR route writes plain text as a normal, safely encoded local note. */
 export function buildOcrNoteDraft(text: string, fallbackTitle: string): { title: string; body: string } {
   if (!text.trim()) throw new Error("OCR_EMPTY_TEXT");
-  const firstLine = text.split(/\r?\n/u).map(line => line.trim()).find(Boolean);
+  const firstLine = text.split(/\r\n?|\n|\u2028|\u2029/u).map(line => line.trim()).find(Boolean);
   return {
     title: firstLine ? truncateOcrTitle(firstLine) : fallbackTitle,
     body: ocrTextToEditorHtml(text),

@@ -295,4 +295,8 @@ assert.throws(() => startOcrWithinBudget(new OcrTimeBudget(5000,Date.now()),0,
   () => { startedNative++; return Promise.resolve("wrong"); },
   () => { trackedNative++; }),/Invalid OCR limit/);
 assert.equal(startedNative,1);
+// OCR providers emit several newline conventions; each is a real text line.
+assert.equal(ocrTextToEditorHtml("Первая\rВторая\u2028Третья\u2029Четвёртая"),"<p>Первая</p><p>Вторая</p><p>Третья</p><p>Четвёртая</p>");
+assert.equal(buildOcrNoteDraft("\r\n\u2028Қазақ тілі\u2029English", "OCR").title,"Қазақ тілі");
+assert.equal(ocrTextToEditorHtml("A\r\n\rB"),"<p>A</p><p><br></p><p>B</p>");
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");

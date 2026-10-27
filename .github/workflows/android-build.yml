@@ -66,6 +66,12 @@ jobs:
       - name: Verify OCR note storage and error handling
         run: bun scripts/test-ocr-persistence.ts
 
+      - name: Verify OCR saved notes survive a cold restart
+        run: bun scripts/test-ocr-cold-start.ts
+
+      - name: Verify corrupted notes cannot be overwritten at startup
+        run: bun scripts/test-ocr-corrupt-start.ts
+
       - name: Prepare bundled offline OCR models
         run: bash scripts/prepare-ocr-models.sh
 
