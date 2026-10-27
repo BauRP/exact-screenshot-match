@@ -72,7 +72,11 @@ public class BundledMlKitInstrumentedTest {
             paint.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
             paint.setTextSize(100f);
             paint.setColor(Color.BLACK);
-            assertTrue("Missing Android font glyphs for: " + sample, paint.hasGlyph(sample));
+            // Paint.hasGlyph() accepts a SINGLE grapheme cluster; asking whether
+            // an entire sentence is one glyph returns false even for Latin.
+            // Validate a representative base character before drawing the line.
+            String representative = new String(Character.toChars(sample.codePointAt(0)));
+            assertTrue("Missing Android font glyph for: " + representative, paint.hasGlyph(representative));
             canvas.drawText(sample, 65, 185, paint);
             Text output = Tasks.await(recognizer.process(InputImage.fromBitmap(bitmap, 0)),
                     40, TimeUnit.SECONDS);
