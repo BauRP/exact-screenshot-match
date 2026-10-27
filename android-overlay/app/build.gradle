@@ -39,6 +39,14 @@ repositories {
 }
 
 dependencies {
+    // Offline OCR: bundle all five ML Kit text-recognition models in the
+    // production APK. Never use the Play Services downloadable variants.
+    // Explicit app-level dependencies also expose their APIs to androidTest.
+    implementation 'com.google.mlkit:text-recognition:16.0.1'
+    implementation 'com.google.mlkit:text-recognition-chinese:16.0.1'
+    implementation 'com.google.mlkit:text-recognition-japanese:16.0.1'
+    implementation 'com.google.mlkit:text-recognition-korean:16.0.1'
+    implementation 'com.google.mlkit:text-recognition-devanagari:16.0.1'
     implementation 'cz.adaptech.tesseract4android:tesseract4android:4.9.0'
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"

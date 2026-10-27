@@ -9,6 +9,7 @@ on:
       - chatgpt/super-notes-stability-20261025
     paths:
       - 'android-overlay/app/src/androidTest/**'
+      - 'android-overlay/app/build.gradle'
       - '.github/workflows/android-ocr-emulator.yml'
       - 'android-overlay/app/src/main/java/app/lovable/supernotes/OfflineCyrillicOcrPlugin.java'
       - 'scripts/prepare-ocr-models.sh'
@@ -121,9 +122,36 @@ jobs:
           # Only run tests for our app, never unrelated Capacitor subprojects.
           script: adb shell svc wifi disable && adb shell svc data disable && cd android && test -x ./gradlew && ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
 
-      - name: Summarize device-level verification
+      - name: Record actual Android OCR instrumentation results
         if: always()
+        shell: bash
         run: |
-          echo "## Android OCR integration" >> "$GITHUB_STEP_SUMMARY"
-          echo "Android 34: test outcome must be read from the test job, not this summary." >> "$GITHUB_STEP_SUMMARY"
-          echo "This does NOT cover real camera/gallery or physical devices." >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PY'
+          from pathlib import Path
+          from xml.etree import ElementTree
+          import os
+          reports = list(Path('android/app/build/outputs/androidTest-results').rglob('*.xml'))
+          suites = []
+          for path in reports:
+              try:
+                  root = ElementTree.parse(path).getroot()
+              except ElementTree.ParseError:
+                  continue
+              if root.tag == 'testsuite':
+                  suites.append(root)
+              suites.extend(root.findall('.//testsuite'))
+          cases = [case for suite in suites for case in suite.findall('testcase')]
+          failures = [case for case in cases if case.find('failure') is not None or case.find('error') is not None]
+          names = [case.attrib.get('name','') for case in cases]
+          path = os.environ['GITHUB_STEP_SUMMARY']
+          with open(path,'a',encoding='utf-8') as out:
+              out.write("## Android OCR emulator — observed results\n\n")
+              out.write(f"- Tests recorded: **{len(cases)}**\n")
+              out.write(f"- Failed: **{len(failures)}**\n")
+              out.write("- These are synthetic Android Canvas images, not camera photographs.\n")
+              for name in names:
+                  out.write(f"  - {name}\n")
+              if not cases:
+                  out.write("- **No runnable test results found; no Android success may be claimed.**\n")
+          print(f"Android tests recorded={len(cases)}, failures={len(failures)}")
+          PY

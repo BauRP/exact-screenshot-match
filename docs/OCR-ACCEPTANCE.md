@@ -19,3 +19,5 @@ Two independent numbers are tracked in reports:
 | Android verification | Instrumentation tests on API 34 emulator | More Android API levels and physical devices |
 
 Never report a simulated fixture's 0% CER as zero errors on actual camera photographs.
+
+ML Kit five-script tests run on the Android emulator with network radios disabled. The Android app build.gradle explicitly uses `com.google.mlkit:text-recognition*` bundled model artifacts, not `play-services-mlkit-*` downloadable models. Tests do not establish document-level accuracy.
