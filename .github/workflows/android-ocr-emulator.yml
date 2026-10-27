@@ -84,6 +84,21 @@ jobs:
           test -s android/app/src/main/assets/tessdata/kaz.traineddata
           chmod +x android/gradlew
 
+          # Only Android instrumentation test classpaths: old Cordova test
+          # dependencies include Kotlin 1.6 jdk7/jdk8 duplicates, while the
+          # generated app already contains consolidated Kotlin stdlib 1.8.
+          # Do not change the actual APK runtime dependencies or app overlay.
+          cat >> android/build.gradle <<'GRADLE'
+          subprojects {
+              configurations.configureEach { configuration ->
+                  if (configuration.name.toLowerCase().contains('androidtest')) {
+                      configuration.exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk7'
+                      configuration.exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib-jdk8'
+                  }
+              }
+          }
+          GRADLE
+
       - name: Compile Android instrumentation APK before starting emulator
         working-directory: android
         run: ./gradlew assembleDebugAndroidTest --no-daemon --stacktrace
