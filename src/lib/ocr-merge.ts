@@ -135,7 +135,7 @@ export function mergeOcrCandidates(candidates: OcrCandidate[]): string {
   // line in the same reading order, preserve extra lines rather than silently
   // discarding them. Do not append unlocated text: that duplicates paragraphs.
   const normalize = (text: string) => text.normalize("NFKC").toLocaleLowerCase().replace(/\s+/gu, " ").trim();
-  const anchorLines = selected.map(line => normalize(line.text));
+  const anchorLines = [...selected].sort((a, b) => ((a.top + a.bottom) / 2) - ((b.top + b.bottom) / 2) || a.left - b.left).map(line => normalize(line.text));
   const unlocatedFull = candidates
     .filter(c => c.lines.length === 0 && c.text.trim())
     .filter(c => {
