@@ -170,4 +170,22 @@ assert.deepEqual(buildOcrNoteDraft("Сәлем әлем\nHello & <World>", "Ск
 });
 assert.throws(() => buildOcrNoteDraft(" \n  ", "Сканирование"), /OCR_EMPTY_TEXT/);
 assert.equal(buildOcrNoteDraft("X".repeat(110), "Scan").title.length,80);
+const confirmedCyr: OcrCandidate = {script:"cyrillic",text:"Привет мир",lines:[line("Привет мир","cyrillic",.12)]};
+const confirmedEng: OcrCandidate = {script:"latin",text:"Hello world",lines:[line("Hello world","latin",.26)]};
+const fullUnlocated: OcrCandidate = {
+  script:"japanese",text:"Привет мир\nHello world\n日本語の説明",lines:[],
+};
+assert.equal(mergeOcrCandidates([confirmedCyr,confirmedEng,fullUnlocated]),fullUnlocated.text);
+const incompleteUnlocated: OcrCandidate = {
+  script:"japanese",text:"Привет мир\n日本語の説明",lines:[],
+};
+assert.equal(mergeOcrCandidates([confirmedCyr,confirmedEng,incompleteUnlocated]),"Привет мир\n\nHello world");
+const reorderedUnlocated: OcrCandidate = {
+  script:"japanese",text:"Hello world\nПривет мир\n日本語の説明",lines:[],
+};
+assert.equal(mergeOcrCandidates([confirmedCyr,confirmedEng,reorderedUnlocated]),"Привет мир\n\nHello world");
+const copiedPage: OcrCandidate = {
+  script:"latin",text:"Привет мир\nHello world",lines:[],
+};
+assert.equal(mergeOcrCandidates([confirmedCyr,confirmedEng,copiedPage]),"Привет мир\n\nHello world");
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");

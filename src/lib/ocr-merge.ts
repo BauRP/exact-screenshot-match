@@ -129,6 +129,32 @@ export function mergeOcrCandidates(candidates: OcrCandidate[]): string {
     selected.push(line);
   }
   if (!selected.length) return plausible[0]?.candidate.text.trim() ?? "";
+
+  // A model occasionally recognizes a whole multilingual page but omits its
+  // bounding boxes. If its COMPLETE text includes every spatially confirmed
+  // line in the same reading order, preserve extra lines rather than silently
+  // discarding them. Do not append unlocated text: that duplicates paragraphs.
+  const normalize = (text: string) => text.normalize("NFKC").toLocaleLowerCase().replace(/\s+/gu, " ").trim();
+  const anchorLines = selected.map(line => normalize(line.text));
+  const unlocatedFull = candidates
+    .filter(c => c.lines.length === 0 && c.text.trim())
+    .filter(c => {
+      const parts = c.text.split(/\r?\n/u).map(normalize).filter(Boolean);
+      if (parts.length <= anchorLines.length) return false;
+      if (!parts.some(part => !anchorLines.includes(part) && /\p{L}/u.test(part))) return false;
+      // Only trust an unlocated page if ALL confirmed text is still present.
+      // Matching in reading order prevents choosing an unrelated model.
+      let index = 0;
+      for (const anchor of anchorLines) {
+        const found = parts.findIndex((part, at) => at >= index && part.includes(anchor));
+        if (found < 0) return false;
+        index = found + 1;
+      }
+      return true;
+    })
+    .sort((a,b) => b.text.trim().length - a.text.trim().length)[0];
+  if (unlocatedFull) return unlocatedFull.text.trim();
+
   selected.sort((a, b) => {
     const centerA = (a.top + a.bottom) / 2;
     const centerB = (b.top + b.bottom) / 2;
