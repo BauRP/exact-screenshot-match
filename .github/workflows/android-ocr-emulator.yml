@@ -111,11 +111,9 @@ jobs:
           target: google_apis
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
-          script: |
-            adb shell svc wifi disable
-            adb shell svc data disable
-            cd android
-            ./gradlew connectedDebugAndroidTest --offline --no-daemon --stacktrace
+          # The runner executes each script line in a separate shell;
+          # keep "cd android" and Gradle in a SINGLE shell command.
+          script: adb shell svc wifi disable && adb shell svc data disable && cd android && test -x ./gradlew && ./gradlew connectedDebugAndroidTest --offline --no-daemon --stacktrace
 
       - name: Summarize device-level verification
         if: always()
