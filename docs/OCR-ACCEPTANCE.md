@@ -28,3 +28,9 @@ ML Kit five-script tests run on the Android emulator with network radios disable
 
 **Gallery content URI:** an Android emulator test now creates an app-owned JPEG through `MediaStore`, reads it via its `content://` URI with the real native OCR image decoder, and cleans the fixture up. This verifies image decode, not Android's interactive picker UI.
 **Editor text fidelity:** OCR note tests preserve leading/trailing spaces and tabs and use grapheme-aware truncation for titles when available.
+
+**Native image decoding regression:** Test the actual Android decoding helper with a
+real Instrumentation Context (not an uninitialized Capacitor Plugin), verify
+MediaStore content:// URI, local JPEG and PNG, EXIF orientation, invalid URLs,
+corrupt images, and bounded downsampling of a 4800px photo. These still do
+not exercise the interactive picker or real camera hardware.

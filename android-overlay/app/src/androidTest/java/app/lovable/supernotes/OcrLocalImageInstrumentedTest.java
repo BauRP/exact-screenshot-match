@@ -4,7 +4,6 @@ import android.content.ContentResolver;
 import android.content.ContentValues;
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -17,8 +16,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import static org.junit.Assert.*;
@@ -32,10 +29,11 @@ import static org.junit.Assert.*;
 @RunWith(AndroidJUnit4.class)
 public class OcrLocalImageInstrumentedTest {
     private static Bitmap loadWithActualPlugin(String source) throws Exception {
-        OfflineCyrillicOcrPlugin plugin = new OfflineCyrillicOcrPlugin();
-        Method method = OfflineCyrillicOcrPlugin.class.getDeclaredMethod("loadBitmap", String.class);
-        method.setAccessible(true);
-        return (Bitmap) method.invoke(plugin, source);
+        // The Capacitor Plugin requires a live Bridge for getContext().
+        // Call the EXACT SAME production decoder with the real test Context,
+        // not an uninitialized plugin instance (which caused 4 false failures).
+        return OfflineCyrillicOcrPlugin.loadBitmap(
+            InstrumentationRegistry.getInstrumentation().getTargetContext(), source);
     }
 
     private static File makePhoto(int width, int height) throws Exception {
@@ -143,6 +141,54 @@ public class OcrLocalImageInstrumentedTest {
     }
 
     @Test
+    public void galleryPngIsDecodedByNativeImageLoader() throws Exception {
+        File png = File.createTempFile("wave-ocr-png-", ".png",
+            InstrumentationRegistry.getInstrumentation().getTargetContext().getCacheDir());
+        Bitmap original = Bitmap.createBitmap(360, 240, Bitmap.Config.ARGB_8888);
+        Bitmap decoded = null;
+        try {
+            original.eraseColor(Color.WHITE);
+            try (FileOutputStream out = new FileOutputStream(png)) {
+                assertTrue(original.compress(Bitmap.CompressFormat.PNG, 100, out));
+            }
+            decoded = loadWithActualPlugin(png.getAbsolutePath());
+            assertEquals(360, decoded.getWidth());
+            assertEquals(240, decoded.getHeight());
+        } finally {
+            original.recycle();
+            if (decoded != null) decoded.recycle();
+            assertTrue(png.delete());
+        }
+    }
+
+    @Test
+    public void oversizedPhotoIsDownsampledBeforeOcr() throws Exception {
+        // 4800px exceeds the OCR 4500px edge cap. The native loader
+        // must sample x2 instead of allocating a full-resolution OCR bitmap.
+        File photo = makePhoto(4800, 1000);
+        Bitmap decoded = null;
+        try {
+            decoded = loadWithActualPlugin(photo.getAbsolutePath());
+            assertEquals(2400, decoded.getWidth());
+            assertEquals(500, decoded.getHeight());
+        } finally {
+            if (decoded != null) decoded.recycle();
+            assertTrue(photo.delete());
+        }
+    }
+
+    @Test
+    public void remoteUriIsRejectedWithoutNetwork() throws Exception {
+        try {
+            Bitmap decoded = loadWithActualPlugin("https://example.invalid/photo.jpg");
+            if (decoded != null) decoded.recycle();
+            fail("Remote URLs must not be opened by native offline OCR");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Only local photos"));
+        }
+    }
+
+    @Test
     public void damagedPhotoIsRejectedBeforeOcr() throws Exception {
         File broken = File.createTempFile("wave-ocr-corrupt-", ".jpg",
             InstrumentationRegistry.getInstrumentation().getTargetContext().getCacheDir());
@@ -154,9 +200,8 @@ public class OcrLocalImageInstrumentedTest {
                 Bitmap unexpected = loadWithActualPlugin(broken.getAbsolutePath());
                 if (unexpected != null) unexpected.recycle();
                 fail("Corrupt image should be rejected before OCR");
-            } catch (InvocationTargetException expected) {
-                assertTrue("Incorrect failure: " + expected.getCause(),
-                    expected.getCause() instanceof IllegalArgumentException);
+            } catch (IllegalArgumentException expected) {
+                assertTrue("Corrupt file must be rejected", expected.getMessage() != null);
             }
         } finally {
             assertTrue(broken.delete());
