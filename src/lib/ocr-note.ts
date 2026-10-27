@@ -23,7 +23,9 @@ export function buildOcrNoteDraft(text: string, fallbackTitle: string): { title:
   if (!text.trim()) throw new Error("OCR_EMPTY_TEXT");
   const firstLine = text.split(/\r?\n/u).map(line => line.trim()).find(Boolean);
   return {
-    title: firstLine ? firstLine.slice(0, 80) : fallbackTitle,
+    // JS .slice() operates on UTF-16 code units and can break a non-BMP
+    // character halfway through. Keep the title Unicode-valid on truncation.
+    title: firstLine ? Array.from(firstLine).slice(0, 80).join("") : fallbackTitle,
     body: ocrTextToEditorHtml(text),
   };
 }

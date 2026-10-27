@@ -23,3 +23,5 @@ Never report a simulated fixture's 0% CER as zero errors on actual camera photog
 ML Kit five-script tests run on the Android emulator with network radios disabled. The Android app build.gradle explicitly uses `com.google.mlkit:text-recognition*` bundled model artifacts, not `play-services-mlkit-*` downloadable models. Tests do not establish document-level accuracy.
 
 **Partial-result safety:** In automatic mode, a failed script recognizer now blocks note creation instead of silently saving the other recognizers' text. The user is asked to retry in manual language mode. This does not prove the missing text can be recovered automatically.
+
+**Android image decoder:** Instrumented tests exercise the real `OfflineCyrillicOcrPlugin.loadBitmap` path for absolute JPEG paths, file:// JPEG URIs, EXIF rotation and corrupt input. These checks cannot replace camera/gallery picker tests on physical phones.

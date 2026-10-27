@@ -262,4 +262,11 @@ assert.throws(() => new OcrScanCoverage(["latin","latin"]),/Invalid OCR scan pla
 const manualScan = new OcrScanCoverage(["cyrillic"]);
 manualScan.markCompleted("cyrillic"); // Empty result still completes the engine.
 manualScan.ensureComplete();
+// 80 code points should never leave an unmatched UTF-16 surrogate.
+const emojiTitle = "A".repeat(79) + "📷" + " after the limit";
+assert.equal(buildOcrNoteDraft(emojiTitle, "OCR").title, "A".repeat(79) + "📷");
+assert.equal(Array.from(buildOcrNoteDraft(emojiTitle,"OCR").title).length,80);
+const manyEmojiTitle = "📷".repeat(100);
+assert.equal(buildOcrNoteDraft(manyEmojiTitle,"OCR").title, "📷".repeat(80));
+assert.equal(buildOcrNoteDraft("\n\n日本語 Title\nrest","OCR").title,"日本語 Title");
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");
