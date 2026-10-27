@@ -194,7 +194,7 @@ const badPaths: unknown[] = [
  "", " ", "https://example.com/image.jpg", "http://example.com/i.png",
  "javascript:alert(1)", "data:image/png;base64,AAAA", "blob:local/image",
  "file://", "file://remote.example/image.jpg", "content://",
- "/\\n", "//server/share", " file:///storage/emulated/0/pic.jpg ",
+ "/\n", "//server/share", " file:///storage/emulated/0/pic.jpg ",
 ];
 for (const path of badPaths) {
   assert.equal(isLocalOcrImagePath(path),false,"Must refuse untrusted/non-local path: "+String(path));
