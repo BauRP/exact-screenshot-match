@@ -6,6 +6,7 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Typeface;
+import android.net.Uri;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import com.googlecode.tesseract.android.TessBaseAPI;
@@ -73,6 +74,44 @@ public class BundledOcrInstrumentedTest {
     @Test
     public void kazakhTextIsRecognizedOnAndroid() {
         verifyRecognition("Қазақ тілі\nСәлем әлем", .28);
+    }
+
+    @Test
+    public void cameraJpegPassesRealDecoderAndRecognizesBothCyrillicLanguages() throws Exception {
+        // Unlike Canvas-only smoke tests, read a compressed JPEG with the
+        // app's ACTUAL offline photo decoder before invoking Tesseract.
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File jpeg = File.createTempFile("ocr-real-jpeg-", ".jpg", context.getCacheDir());
+        Bitmap original = Bitmap.createBitmap(1600, 400, Bitmap.Config.ARGB_8888);
+        Bitmap decoded = null;
+        TessBaseAPI api = new TessBaseAPI();
+        try {
+            Canvas canvas = new Canvas(original);
+            canvas.drawColor(Color.WHITE);
+            Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
+            paint.setColor(Color.BLACK);
+            paint.setTypeface(Typeface.create("sans-serif", Typeface.NORMAL));
+            paint.setTextSize(92f);
+            canvas.drawText("Привет мир", 80, 135, paint);
+            canvas.drawText("Сәлем әлем", 80, 275, paint);
+            try (FileOutputStream out = new FileOutputStream(jpeg)) {
+                assertTrue("JPEG creation failed", original.compress(Bitmap.CompressFormat.JPEG, 95, out));
+            }
+            decoded = OfflineCyrillicOcrPlugin.loadBitmap(context, Uri.fromFile(jpeg).toString());
+            assertEquals(1600, decoded.getWidth());
+            assertEquals(400, decoded.getHeight());
+            assertTrue("Bundled models did not load", api.init(modelsRoot.getAbsolutePath(), "kaz+rus"));
+            api.setPageSegMode(TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK);
+            api.setImage(decoded);
+            String output = clean(api.getUTF8Text() == null ? "" : api.getUTF8Text());
+            assertTrue("JPEG lost Russian words: " + output, output.contains("привет"));
+            assertTrue("JPEG lost Kazakh words: " + output, output.contains("сәлем"));
+        } finally {
+            api.recycle();
+            original.recycle();
+            if (decoded != null) decoded.recycle();
+            assertTrue(jpeg.delete());
+        }
     }
 
     @Test

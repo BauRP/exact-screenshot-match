@@ -34,3 +34,6 @@ real Instrumentation Context (not an uninitialized Capacitor Plugin), verify
 MediaStore content:// URI, local JPEG and PNG, EXIF orientation, invalid URLs,
 corrupt images, and bounded downsampling of a 4800px photo. These still do
 not exercise the interactive picker or real camera hardware.
+
+**Budget launch safety:** the remaining OCR deadline is checked before starting each native recognizer. An expired budget launches no new model and leaves no untracked native task. Verified by automated logic tests.
+**Compressed JPEG-to-text:** an Android instrumented test now creates a real JPEG, decodes it through the production decoder and runs the bundled Russian/Kazakh Tesseract recognizer. It does not yet test the photo picker, editor UI, or real photos.

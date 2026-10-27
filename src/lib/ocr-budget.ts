@@ -37,3 +37,21 @@ export async function withOcrDeadline<T>(task: Promise<T>, milliseconds: number)
     if (timer !== undefined) clearTimeout(timer);
   }
 }
+
+
+/**
+ * Check the total remaining scan budget BEFORE starting a native recognizer.
+ * A rejected deadline must not spawn invisible work or hold the camera session.
+ * Native work already started is tracked until its real promise settles.
+ */
+export function startOcrWithinBudget<T>(
+  budget: OcrTimeBudget,
+  perModelLimit: number,
+  start: () => Promise<T>,
+  track: (task: Promise<unknown>) => void,
+): Promise<T> {
+  const remaining = budget.remaining(perModelLimit);
+  const task = start();
+  track(task);
+  return withOcrDeadline(task, remaining);
+}

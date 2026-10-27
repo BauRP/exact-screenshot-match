@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { mergeOcrCandidates, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
 import { linesFromMlKit } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
-import { OcrTimeBudget, withOcrDeadline } from "@/lib/ocr-budget";
+import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
 import { isLocalOcrImagePath } from "@/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
@@ -122,10 +122,9 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       let prepared: {path:string;width:number;height:number} | null = null;
       let timedOut = false;
       let timeBudget: OcrTimeBudget | null = null;
-      const timed = <T,>(task: Promise<T>, duration: number): Promise<T> => {
-        outstanding.push(task);
+      const timed = <T,>(start: () => Promise<T>, duration: number): Promise<T> => {
         if (!timeBudget) throw new Error("OCR budget was not initialized");
-        return withOcrDeadline(task, timeBudget.remaining(duration));
+        return startOcrWithinBudget(timeBudget, duration, start, task => outstanding.push(task));
       };
       try {
         onProgress("Подготовка фотографии");
@@ -151,7 +150,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       const recognize = async (item: typeof scripts[number]) => {
         onProgress(`Распознавание: ${item.label}`);
         try {
-          const data = await timed(mlkit.TextRecognition.processImage({path:scanPath,script:item.script}), 15000);
+          const data = await timed(() => mlkit.TextRecognition.processImage({path:scanPath,script:item.script}), 15000);
           coverage.markCompleted(item.id);
           const value = composeRecognizedText(data);
           if (value.trim()) results.push({text:value,script:item.id,lines:linesFromMlKit(data,item.id,width,height)});
@@ -172,7 +171,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
           }
           onProgress("Распознавание: русский и казахский");
           try {
-            const data = await timed(native.recognize({path:scanPath,language:CYRILLIC_OCR_LANGUAGES}), 18000);
+            const data = await timed(() => native.recognize({path:scanPath,language:CYRILLIC_OCR_LANGUAGES}), 18000);
             coverage.markCompleted("cyrillic");
             if (data.text.trim()) {
               const lines: OcrLine[] = (data.lines ?? []).map(line => ({...line,script:"cyrillic"}));

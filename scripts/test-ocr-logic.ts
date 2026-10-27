@@ -5,7 +5,7 @@ import { ocrScanPlan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
 import { linesFromMlKit } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
 import { OcrScanCoverage } from "../src/lib/ocr-coverage";
-import { OcrTimeBudget, withOcrDeadline } from "../src/lib/ocr-budget";
+import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "../src/lib/ocr-budget";
 import { isLocalOcrImagePath } from "../src/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "../src/lib/ocr-errors";
 import { lineScore, mergeOcrCandidates, type OcrCandidate } from "../src/lib/ocr-merge";
@@ -278,4 +278,21 @@ assert.equal(truncateOcrTitle("x".repeat(79)+"👩‍💻"+"z",80),"x".repeat(79
 assert.equal(truncateOcrTitle("x".repeat(79)+"🇰🇿"+"z",80),"x".repeat(79)+"🇰🇿");
 assert.equal(truncateOcrTitle("x".repeat(79)+"e\u0301"+"z",80),"x".repeat(79)+"e\u0301");
 assert.throws(() => truncateOcrTitle("abc",-1),/Invalid OCR title limit/);
+// Expired budgets MUST NOT start a native recognizer at all.
+let startedNative = 0;
+let trackedNative = 0;
+assert.throws(() => startOcrWithinBudget(new OcrTimeBudget(10,0),18000,
+  () => { startedNative++; return Promise.resolve("wrong"); },
+  () => { trackedNative++; }), /OCR timed out/);
+assert.equal(startedNative,0);
+assert.equal(trackedNative,0);
+assert.equal(await startOcrWithinBudget(new OcrTimeBudget(3000,Date.now()),1000,
+  () => { startedNative++; return Promise.resolve("ok"); },
+  () => { trackedNative++; }),"ok");
+assert.equal(startedNative,1);
+assert.equal(trackedNative,1);
+assert.throws(() => startOcrWithinBudget(new OcrTimeBudget(5000,Date.now()),0,
+  () => { startedNative++; return Promise.resolve("wrong"); },
+  () => { trackedNative++; }),/Invalid OCR limit/);
+assert.equal(startedNative,1);
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");
