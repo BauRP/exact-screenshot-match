@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { ocrTextToEditorHtml, buildOcrNoteDraft, truncateOcrTitle } from "../src/lib/ocr-note";
 import { composeRecognizedText, hasConflictingNativeOcrText, extractNativeTextAlternative } from "../src/lib/ocr-text";
 import { ocrScanPlan, selectedOcrScanPlan, readOcrScanPreferences, saveOcrScanPreferences, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
-import { linesFromMlKit, linesFromMlKitBounded } from "../src/lib/ocr-geometry";
+import { linesFromMlKit, linesFromMlKitBounded, mlKitReportedLanguages } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
 import { OcrScanCoverage } from "../src/lib/ocr-coverage";
 import { OcrIncompleteScanError, markIncompleteOcrText, OCR_SCRIPT_LABELS, hanAlternativesFromCandidates, previewHanAlternatives, cyrillicTextWithLineFallback } from "../src/lib/ocr-partial";
@@ -671,3 +671,40 @@ assert.equal(overMultipleBlocks.lines.length,OCR_SPATIAL_LINE_LIMIT);
 assert.deepEqual(linesFromMlKitBounded(hugeMlKitResult,"japanese",0,2000),
   {lines:[],truncated:false});
 console.log("All ML Kit recognizers now bound expensive text geometry before fusion: passed.");
+
+
+// Language evidence returned by already-completed bundled recognizers changes
+// only the order, NOT which script models run. Han characters alone cannot
+// select Chinese vs Japanese. Unsupported and malformed hints are ignored.
+assert.deepEqual(prioritizeRemainingOcrScripts(
+  ["japanese","chinese","korean","devanagari"],"上海中文漢字",["zh-Hant"]),
+  ["chinese","japanese","korean","devanagari"]);
+assert.deepEqual(prioritizeRemainingOcrScripts(
+  ["chinese","japanese","korean"],"学校日本語",["ja-JP"]),
+  ["japanese","chinese","korean"]);
+assert.deepEqual(prioritizeRemainingOcrScripts(
+  ["japanese","chinese","korean","devanagari"],"韓國文章",["ko-KR"]),
+  ["korean","japanese","chinese","devanagari"]);
+assert.deepEqual(prioritizeRemainingOcrScripts(
+  ["korean","japanese","devanagari"],"नमस्ते",["hi-IN"]),
+  ["devanagari","korean","japanese"]);
+assert.deepEqual(prioritizeRemainingOcrScripts(
+  ["japanese","chinese","korean"],"漢字",[ "und","unknown","invalid",
+  "x".repeat(100)]),["japanese","chinese","korean"]);
+assert.deepEqual(prioritizeRemainingOcrScripts(
+  ["japanese","chinese","korean"],"漢字",["zh"]),["chinese","japanese","korean"]);
+const reported=mlKitReportedLanguages({blocks:[{lines:[
+  {text:"",recognizedLanguage:"ja-JP"},
+  {text:"abc",recognizedLanguage:"und"},
+  {text:"한국어",recognizedLanguage:"ko-KR"},
+  {text:"",recognizedLanguage:"ja-JP"},
+  {text:"",recognizedLanguage:"".padEnd(33,"x")}
+]}]});
+assert.deepEqual(reported,["ja-jp","ko-kr"]);
+assert.deepEqual(mlKitReportedLanguages({blocks:[{lines:[]},{}]}),[]);
+for (const hinted of ["ja-JP","zh-CN","ko-KR","hi-IN","ru-RU","en-US"]) {
+  const result=prioritizeRemainingOcrScripts(AUTO_SCAN_ORDER,"", [hinted]);
+  assert.equal(result.length,6);
+  assert.deepEqual(new Set(result),new Set(AUTO_SCAN_ORDER));
+}
+console.log("Native language hints prioritize offline models without dropping any scripts: passed.");

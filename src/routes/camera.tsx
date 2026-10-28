@@ -8,7 +8,7 @@ import { saveOcrNoteAndOpenEditor, reopenSavedOcrNote, OcrEditorNavigationError 
 import { useT } from "@/lib/i18n";
 import { toast } from "sonner";
 import { mergeOcrCandidates, exceedsOcrSpatialBudget, mergeOversizedOcrForReview, hasAmbiguousHanCandidates, hasUncertainMixedScriptLayout, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
-import { linesFromMlKitBounded } from "@/lib/ocr-geometry";
+import { linesFromMlKitBounded, mlKitReportedLanguages } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
@@ -124,6 +124,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       let prepared: {path:string;width:number;height:number} | null = null;
       let timedOut = false;
       const nativeAlternatives: OcrNativeTextAlternative[] = [];
+      const languageHints: string[] = [];
       let nativeGeometryTruncated = false;
       let timeBudget: OcrTimeBudget | null = null;
       const timed = <T,>(start: () => Promise<T>, duration: number): Promise<T> => {
@@ -156,6 +157,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         try {
           const data = await timed(() => mlkit.TextRecognition.processImage({path:scanPath,script:item.script}), 15000);
           coverage.markCompleted(item.id);
+          languageHints.push(...mlKitReportedLanguages(data));
           const value = composeRecognizedText(data);
           if (value.trim()) {
             const alternative = extractNativeTextAlternative(item.id,data);
@@ -205,7 +207,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         // based on unambiguous characters already detected, but none is skipped.
         if (mode === "auto" && index >= 1 && index + 1 < scanPlan.length) {
           const ordered = prioritizeRemainingOcrScripts(
-            scanPlan.slice(index + 1), results.map(result => result.text).join("\n"));
+            scanPlan.slice(index + 1), results.map(result => result.text).join("\n"),languageHints);
           scanPlan.splice(index + 1, ordered.length, ...ordered);
         }
         await yieldToMainThread();

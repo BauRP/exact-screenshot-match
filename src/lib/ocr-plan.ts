@@ -32,14 +32,34 @@ export function ocrScanPlan(request: OcrScanRequest): OcrScript[] {
  */
 export function prioritizeRemainingOcrScripts(
   remaining: readonly OcrScript[], recognized: string,
+  reportedLanguages: readonly string[] = [],
 ): OcrScript[] {
   const text = recognized.slice(0, 12000);
   const kana = (text.match(/[\p{Script=Hiragana}\p{Script=Katakana}]/gu) ?? []).length;
-  const korean = (text.match(/\p{Script=Hangul}/gu) ?? []).length;
+  const hangul = (text.match(/\p{Script=Hangul}/gu) ?? []).length;
   const devanagari = (text.match(/\p{Script=Devanagari}/gu) ?? []).length;
+  const cyrillic = (text.match(/\p{Script=Cyrillic}/gu) ?? []).length;
+  const latin = (text.match(/\p{Script=Latin}/gu) ?? []).length;
   const evidence: Partial<Record<OcrScript,number>> = {
-    japanese: kana, korean, devanagari,
+    japanese:kana, korean:hangul, devanagari, cyrillic, latin,
   };
+
+  // Only BCP-47 language tags returned by an already completed on-device
+  // recognizer are treated as hints. Labels never prove page coverage:
+  // EVERY model in 'remaining' is still attempted, in a stable order.
+  for (const raw of reportedLanguages.slice(0,100)) {
+    if (typeof raw !== "string" || raw.length > 32) continue;
+    const lang=raw.trim().toLowerCase().replace(/_/gu,"-").split("-")[0];
+    const model: OcrScript | undefined =
+      lang === "ja" ? "japanese" : lang === "zh" ? "chinese" :
+      lang === "ko" ? "korean" :
+      ["hi","mr","ne","sa"].includes(lang) ? "devanagari" :
+      ["ru","kk","uk"].includes(lang) ? "cyrillic" :
+      ["en","fr","de","es"].includes(lang) ? "latin" : undefined;
+    if (model) evidence[model]=(evidence[model] ?? 0)+4;
+  }
+  // A Han ideograph alone is shared by Japanese and Chinese; it never
+  // increases either score without Kana or a genuinely reported tag.
   return remaining.map((script,index) => ({script,index,score:evidence[script] ?? 0}))
     .sort((a,b) => b.score - a.score || a.index - b.index)
     .map(item => item.script);

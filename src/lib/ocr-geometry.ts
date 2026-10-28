@@ -61,3 +61,22 @@ export function linesFromMlKit(
 ): OcrLine[] {
   return linesFromMlKitBounded(data,script,imageWidth,imageHeight).lines;
 }
+
+
+/** Native line language tags can still help schedule the remaining offline
+ * models even if coordinates are missing/invalid. Limit inspected metadata
+ * so a malformed huge document cannot create an unbounded extra loop.
+ */
+export function mlKitReportedLanguages(data: MlKitResult): string[] {
+  const reported = new Set<string>();
+  for (const block of (data.blocks ?? []).slice(0,64)) {
+    for (const line of (block.lines ?? []).slice(0,128)) {
+      const value=line.recognizedLanguage;
+      if (typeof value !== "string" || value.length > 32) continue;
+      const tag=value.trim().toLowerCase();
+      if (tag && tag !== "und" && tag !== "unknown") reported.add(tag);
+      if (reported.size >= 16) return [...reported];
+    }
+  }
+  return [...reported];
+}
