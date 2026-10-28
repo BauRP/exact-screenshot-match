@@ -1,3 +1,4 @@
+import type { OcrScript } from "./ocr-merge";
 /**
  * Converts native ML Kit output into lossless-enough human-readable text.
  * Some recognizers return a valid full text when geometry/blocks are empty.
@@ -64,4 +65,24 @@ export function hasConflictingNativeOcrText(result: TextScanResult): boolean {
   // character Japanese/Korean/Kazakh name is meaningful and must be reviewable.
   if (Array.from(full).length < 3 || Array.from(combined).length < 3) return false;
   return true;
+}
+
+
+/** Display-only excerpts of both native interpretations, kept offline for
+ * manual review. Never replace an entire multilingual page with a single
+ * recognizer's alternative automatically.
+ */
+export type OcrNativeTextAlternative = {
+  script: OcrScript;
+  complete: string;
+  lines: string;
+};
+export function extractNativeTextAlternative(
+  script: OcrScript, result: TextScanResult,
+): OcrNativeTextAlternative | null {
+  if (!hasConflictingNativeOcrText(result)) return null;
+  const lines = (result.blocks ?? []).flatMap(block => block.lines ?? [])
+    .map(line => line.text?.trim() ?? "").filter(Boolean).join("\n");
+  const preview = (value: string) => Array.from(value).slice(0,2000).join("");
+  return {script,complete:preview(result.text ?? ""),lines:preview(lines)};
 }

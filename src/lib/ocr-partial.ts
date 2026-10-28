@@ -1,3 +1,4 @@
+import type { OcrNativeTextAlternative } from "./ocr-text";
 import type { OcrScript } from "./ocr-merge";
 
 export type OcrReviewReason = "recovery" | "ambiguous-han" | "mixed-layout" | "limited-selection" | "native-text" | "large-layout";
@@ -208,10 +209,12 @@ export class OcrLimitedSelectionReviewError extends Error {
 /** The native recognizer returned conflicting glyphs in its two text views. */
 export class OcrNativeTextReviewError extends Error {
   readonly recognizedText: string;
-  constructor(text: string) {
+  readonly alternatives: readonly OcrNativeTextAlternative[];
+  constructor(text: string, alternatives: readonly OcrNativeTextAlternative[] = []) {
     super("OCR_NATIVE_TEXT_CONFLICT");
     this.name = "OcrNativeTextReviewError";
     this.recognizedText = text;
+    this.alternatives = alternatives;
   }
 }
 

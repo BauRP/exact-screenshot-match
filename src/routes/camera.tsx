@@ -16,7 +16,7 @@ import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, ma
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
 import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
-import { composeRecognizedText, hasConflictingNativeOcrText } from "@/lib/ocr-text";
+import { composeRecognizedText, extractNativeTextAlternative, type OcrNativeTextAlternative } from "@/lib/ocr-text";
 import { ocrScanPlan, selectedOcrScanPlan, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, type OcrMode, type OcrScanRequest } from "@/lib/ocr-plan";
 
 export const Route = createFileRoute("/camera")({
@@ -123,7 +123,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       const outstanding: Promise<unknown>[] = [];
       let prepared: {path:string;width:number;height:number} | null = null;
       let timedOut = false;
-      let nativeTextConflict = false;
+      const nativeAlternatives: OcrNativeTextAlternative[] = [];
       let timeBudget: OcrTimeBudget | null = null;
       const timed = <T,>(start: () => Promise<T>, duration: number): Promise<T> => {
         if (!timeBudget) throw new Error("OCR budget was not initialized");
@@ -156,7 +156,10 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
           const data = await timed(() => mlkit.TextRecognition.processImage({path:scanPath,script:item.script}), 15000);
           coverage.markCompleted(item.id);
           const value = composeRecognizedText(data);
-          if (value.trim() && hasConflictingNativeOcrText(data)) nativeTextConflict = true;
+          if (value.trim()) {
+            const alternative = extractNativeTextAlternative(item.id,data);
+            if (alternative) nativeAlternatives.push(alternative);
+          }
           if (value.trim()) results.push({text:value,script:item.id,lines:linesFromMlKit(data,item.id,width,height)});
         } catch(error) {
           console.warn("OCR model failed",item.id,error);
@@ -227,7 +230,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       if (scanPlan.length > 1 && text && hasUncertainMixedScriptLayout(results)) {
         throw new OcrMixedLayoutReviewError(text);
       }
-      if (text && nativeTextConflict) throw new OcrNativeTextReviewError(text);
+      if (text && nativeAlternatives.length) throw new OcrNativeTextReviewError(text,nativeAlternatives);
       if (text && Array.isArray(mode) && scanPlan.length < AUTO_SCAN_ORDER.length) {
         throw new OcrLimitedSelectionReviewError(text);
       }
@@ -281,6 +284,8 @@ function CameraPage() {
   const [reviewEdited, setReviewEdited] = useState(false);
   const [restoredDraft, setRestoredDraft] = useState(false);
   const [hanAlternatives, setHanAlternatives] = useState<OcrHanAlternatives | null>(null);
+  const [nativeAlternatives, setNativeAlternatives] = useState<OcrNativeTextAlternative[]>([]);
+  const nativeAlternativesRef = useRef<OcrNativeTextAlternative[]>([]);
   const [reviewReason, setReviewReason] = useState<OcrReviewReason>("recovery");
   const pendingRecoveryRef = useRef<OcrRecoveryState | null>(null);
   const draftGateRef = useRef(new OcrDraftWriteGate());
@@ -301,6 +306,8 @@ function CameraPage() {
       setPartialOcrText(previous.text);
       setPartialMissingScripts(previous.missingScripts);
       setReviewReason(previous.reason);
+      nativeAlternativesRef.current = previous.nativeAlternatives ?? [];
+      setNativeAlternatives(nativeAlternativesRef.current);
       setReviewDraft(previous.reviewedText);
       setReviewEdited(previous.edited);
       setRestoredDraft(true);
@@ -321,7 +328,8 @@ function CameraPage() {
       const current = latestReviewRef.current;
       savePendingOcrDraft({text:partialOcrText,
         reviewedText:current.edited ? current.text : partialOcrText,
-        edited:current.edited, missingScripts:[...partialMissingScripts], reason:reviewReason});
+        edited:current.edited, missingScripts:[...partialMissingScripts], reason:reviewReason,
+        nativeAlternatives:nativeAlternativesRef.current});
     },reviewEdited ? 350 : 0);
     return () => window.clearTimeout(id);
   },[partialOcrText,reviewDraft,reviewEdited,partialMissingScripts,reviewReason,savedNoteId]);
@@ -331,14 +339,19 @@ function CameraPage() {
     const current = latestReviewRef.current;
     savePendingOcrDraft({text:partialOcrText,
       reviewedText:current.edited ? current.text : partialOcrText,
-      edited:current.edited, missingScripts:[...partialMissingScripts], reason:reviewReason});
+      edited:current.edited, missingScripts:[...partialMissingScripts], reason:reviewReason,
+      nativeAlternatives:nativeAlternativesRef.current});
   };
-  const retainUnfinishedResult = (state: OcrRecoveryState, reason: OcrReviewReason = "recovery") => {
+  const retainUnfinishedResult = (state: OcrRecoveryState, reason: OcrReviewReason = "recovery",
+    alternatives: OcrNativeTextAlternative[] = []) => {
+    nativeAlternativesRef.current = alternatives;
+    setNativeAlternatives(alternatives);
     draftGateRef.current.arm();
     latestReviewRef.current = {text:state.text,edited:false};
     savePendingOcrDraft({
       text:state.text,reviewedText:state.text,edited:false,
       missingScripts:[...state.missingScripts],reason,
+      nativeAlternatives:alternatives,
     });
   };
   const markDraftFinished = () => {
@@ -356,6 +369,8 @@ function CameraPage() {
     setRestoredDraft(false);
     setRetryImagePath(null);
     setHanAlternatives(null);
+    nativeAlternativesRef.current = [];
+    setNativeAlternatives([]);
     setReviewOpen(false);
     setStatus("idle");
     setError(null);
@@ -380,6 +395,8 @@ function CameraPage() {
     setReviewDraft("");
     setReviewEdited(false);
     setHanAlternatives(null);
+    nativeAlternativesRef.current = [];
+    setNativeAlternatives([]);
     setReviewReason("recovery");
     setPartialMissingScripts([]);
     pendingRecoveryRef.current = null;
@@ -433,6 +450,8 @@ function CameraPage() {
       setReviewDraft("");
       setReviewEdited(false);
       setHanAlternatives(null);
+      nativeAlternativesRef.current = [];
+      setNativeAlternatives([]);
       setReviewReason("recovery");
       setPartialMissingScripts([]);
       setRetryImagePath(null);
@@ -512,7 +531,8 @@ function CameraPage() {
         setReviewReason(reason);
         setHanAlternatives(caught instanceof OcrAmbiguousHanError ? caught.alternatives : null);
         setReviewEdited(false);
-        retainUnfinishedResult(combined, reason);
+        retainUnfinishedResult(combined, reason,
+          caught instanceof OcrNativeTextReviewError ? [...caught.alternatives] : nativeAlternativesRef.current);
       }
       if (caught instanceof OcrIncompleteScanError) {
         const recovery = pendingRecoveryRef.current;
@@ -547,7 +567,7 @@ function CameraPage() {
     const updated = recoverFromReviewedText(previous,edits.text,true);
     pendingRecoveryRef.current = updated;
     setPartialOcrText(updated.text);
-    retainUnfinishedResult(updated,reviewReason);
+    retainUnfinishedResult(updated,reviewReason,nativeAlternativesRef.current);
     return true;
   };
 
@@ -819,6 +839,24 @@ function CameraPage() {
                 : " Результат нескольких проверок может содержать ошибки."}
             </DialogDescription>
           </DialogHeader>
+          {nativeAlternatives.length > 0 && (
+            <div className="min-h-0 overflow-y-auto rounded-lg border border-border p-2 text-left">
+              <p className="mb-2 text-xs font-semibold">Разные варианты текста от распознавателя</p>
+              <p className="mb-2 text-xs text-muted-foreground">Показаны фрагменты до 2000 символов. Сравните их с фотографией; исправлять нужно основной текст ниже.</p>
+              {nativeAlternatives.map((alt,index) => (
+                <div key={`${alt.script}-${index}`} className="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="min-w-0 rounded border border-border p-2">
+                    <p className="text-xs font-medium">{OCR_SCRIPT_LABELS[alt.script]} — общий текст</p>
+                    <p className="max-h-24 overflow-auto whitespace-pre-wrap break-words text-xs">{alt.complete}</p>
+                  </div>
+                  <div className="min-w-0 rounded border border-border p-2">
+                    <p className="text-xs font-medium">Отдельные строки</p>
+                    <p className="max-h-24 overflow-auto whitespace-pre-wrap break-words text-xs">{alt.lines}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {hanAlternatives && (
             <div className="grid min-h-0 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
               <div className="min-w-0 rounded-lg border border-border p-2">

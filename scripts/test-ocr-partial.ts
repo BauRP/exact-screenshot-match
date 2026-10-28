@@ -194,3 +194,14 @@ assert.equal(savePendingOcrDraft({...draft,reason:"large-layout"},25000,draftSto
 assert.equal(readPendingOcrDraft(25001,draftStore)?.reason,"large-layout");
 clearPendingOcrDraft(draftStore);
 console.log("Large-document review warnings survive offline restart: passed.");
+
+
+const reviewedVariants = [{script:"japanese" as const, complete:"日本語学校",lines:"日本語学枚"}];
+assert.equal(savePendingOcrDraft({...draft,reason:"native-text",nativeAlternatives:reviewedVariants},
+  30000,draftStore),true);
+assert.deepEqual(readPendingOcrDraft(30001,draftStore)?.nativeAlternatives,reviewedVariants);
+assert.equal(savePendingOcrDraft({...draft,nativeAlternatives:[{
+  script:"invalid" as never,complete:"test",lines:"test"
+}]},30000,draftStore),false);
+clearPendingOcrDraft(draftStore);
+console.log("Different native readings remain locally available across cold restarts: passed.");

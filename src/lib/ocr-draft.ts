@@ -1,3 +1,4 @@
+import type { OcrNativeTextAlternative } from "./ocr-text";
 import type { OcrScript } from "./ocr-merge";
 import { OCR_SCRIPT_LABELS, type OcrReviewReason } from "./ocr-partial";
 
@@ -17,6 +18,7 @@ export type OcrLocalDraft = {
   missingScripts: OcrScript[];
   reason: OcrReviewReason;
   savedAt: number;
+  nativeAlternatives?: OcrNativeTextAlternative[];
 };
 function storage(): Store | null {
   try { return typeof window === "undefined" ? null : window.localStorage; }
@@ -32,6 +34,12 @@ export function savePendingOcrDraft(
   data: Omit<OcrLocalDraft,"savedAt">,
   now = Date.now(), store: Store | null = storage(),
 ): boolean {
+  if (data.nativeAlternatives !== undefined && (
+      !Array.isArray(data.nativeAlternatives) || data.nativeAlternatives.length > 6 ||
+      data.nativeAlternatives.some(item => !item || !known(item.script) ||
+        typeof item.complete !== "string" || typeof item.lines !== "string" ||
+        Array.from(item.complete).length > 2000 || Array.from(item.lines).length > 2000)
+  )) return false;
   if (!store || !Number.isFinite(now) || typeof data.text !== "string" ||
       !data.text.trim() || data.text.length > MAX_CHARS ||
       typeof data.reviewedText !== "string" || data.reviewedText.length > MAX_CHARS ||
@@ -55,6 +63,17 @@ export function readPendingOcrDraft(
     const value: unknown=JSON.parse(raw);
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;
     const v=value as Record<string,unknown>;
+    if (v.nativeAlternatives !== undefined && (
+      !Array.isArray(v.nativeAlternatives) || v.nativeAlternatives.length > 6 ||
+      v.nativeAlternatives.some((item: unknown) => {
+        if (!item || typeof item !== "object") return true;
+        const alt = item as Record<string, unknown>;
+        return !known(alt.script) || typeof alt.complete !== "string" ||
+          typeof alt.lines !== "string" ||
+          Array.from(alt.complete).length > 2000 ||
+          Array.from(alt.lines).length > 2000;
+      })
+    )) return null;
     if (v.version !== VERSION || typeof v.text !== "string" ||
         !v.text.trim() || v.text.length > MAX_CHARS ||
         typeof v.reviewedText !== "string" || v.reviewedText.length > MAX_CHARS ||
@@ -65,7 +84,8 @@ export function readPendingOcrDraft(
         v.savedAt > now + 60_000 || now-v.savedAt > MAX_AGE) return null;
     return {text:v.text,reviewedText:v.reviewedText,edited:v.edited,
       missingScripts:[...new Set(v.missingScripts as OcrScript[])],
-      reason:v.reason as OcrReviewReason,savedAt:v.savedAt};
+      reason:v.reason as OcrReviewReason,savedAt:v.savedAt,
+      nativeAlternatives:v.nativeAlternatives as OcrNativeTextAlternative[] | undefined};
   } catch { return null; }
 }
 export function clearPendingOcrDraft(store: Store | null = storage()): void {

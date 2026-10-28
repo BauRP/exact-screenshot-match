@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { ocrTextToEditorHtml, buildOcrNoteDraft, truncateOcrTitle } from "../src/lib/ocr-note";
-import { composeRecognizedText, hasConflictingNativeOcrText } from "../src/lib/ocr-text";
+import { composeRecognizedText, hasConflictingNativeOcrText, extractNativeTextAlternative } from "../src/lib/ocr-text";
 import { ocrScanPlan, selectedOcrScanPlan, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
 import { linesFromMlKit } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
@@ -577,3 +577,20 @@ assert.ok(denseReview.includes("日本語"));
 assert.equal(denseReview.match(/日本語の長い文章/g)?.length,1);
 assert.equal(mergeOversizedOcrForReview([]),"");
 console.log("Large-photo OCR geometry safely falls back without dropping language readings: passed.");
+
+
+// The user can inspect both conflicting ML Kit readings without losing
+// Cyrillic/Japanese text from any other selected model.
+const pair=extractNativeTextAlternative("japanese",{
+ text:"日本語学校",blocks:[{lines:[{text:"日本語学枚"}]}],
+});
+assert.equal(pair?.script,"japanese");
+assert.equal(pair?.complete,"日本語学校");
+assert.equal(pair?.lines,"日本語学枚");
+assert.equal(extractNativeTextAlternative("korean",{
+ text:"한국어 문서",blocks:[{lines:[{text:"한국어 문서"}]}],
+}),null);
+assert.ok(Array.from(extractNativeTextAlternative("japanese",{
+ text:"日本語".repeat(1200),blocks:[{lines:[{text:"日本学".repeat(1200)}]}],
+})?.complete ?? "").length <= 2000);
+console.log("Native OCR alternatives remain visible for manual glyph review: passed.");
