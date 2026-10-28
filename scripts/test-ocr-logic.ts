@@ -759,3 +759,19 @@ const cjkAndDevanagari=restoreOmittedOcrScriptTextForReview(
   "こんにちは",[devanagariPassage]);
 assert.equal(cjkAndDevanagari,"こんにちは\n\nमराठी भाषा");
 console.log("OCR regression: actual arrays, mixed Han/Kana and Devanagari loss safeguards: passed.");
+
+
+// Japanese routinely contains both Kana and Han (Kanji). An OCR fallback
+// must not require a mostly-Kana sentence, nor invent Japanese on Han alone.
+const combinedKanjiKana={script:"japanese" as const,
+  text:"東京都へ行きます",lines:[]};
+assert.equal(restoreOmittedOcrScriptTextForReview(
+  "한국어 문서",[combinedKanjiKana]),"한국어 문서\n\n東京都へ行きます");
+assert.equal(restoreOmittedOcrScriptTextForReview(
+  "한국어 문서",[{script:"japanese",text:"東京都",lines:[]}]),"한국어 문서\n\n東京都");
+assert.equal(restoreOmittedOcrScriptTextForReview(
+  "한국어 문서",[{script:"japanese",text:"あ北",lines:[]}]),"한국어 문서");
+assert.equal(restoreOmittedOcrScriptTextForReview(
+  "한국어 문서",[{script:"japanese",text:"あああ".repeat(8),lines:[]}]),
+  "한국어 문서\n\n"+"あああ".repeat(8));
+console.log("Japanese mixed Kana/Kanji review preserves meaningful short passages: passed.");

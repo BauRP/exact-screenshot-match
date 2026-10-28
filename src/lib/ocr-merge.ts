@@ -469,8 +469,14 @@ export function restoreOmittedOcrScriptTextForReview(
     if (added.has(kind)) continue;
     const matchCount = (text.match(signatures[kind]) ?? []).length;
     const allLetters = (text.match(/\p{L}/gu) ?? []).length;
+    // Genuine Japanese frequently mixes Kana and Kanji in the same phrase.
+    // Kana is unambiguous Japanese evidence; a 65% Kana-only threshold
+    // silently erased short Japanese passages containing several Kanji.
+    // Preserve a lower floor for Kana, but require at least three Kana glyphs,
+    // a credible Japanese score, and explicit review of the added passage.
+    const minimumShare = kind === "kana" && candidate.script === "japanese" ? .30 : .65;
     if (matchCount < minLetters[kind] ||
-        matchCount / Math.max(1,allLetters) < .65 ||
+        matchCount / Math.max(1,allLetters) < minimumShare ||
         lineScore(text,candidate.script,undefined,candidate.confidence) < 50) continue;
     // A model's own text may be a partial copy of a language that is already
     // present. Adding it would duplicate paragraphs and receipts.
