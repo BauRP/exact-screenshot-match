@@ -27,8 +27,12 @@ export class OcrScanCoverage {
     this.failed.add(script);
     this.completed.delete(script);
   }
+  missingScripts(): OcrScript[] {
+    return [...this.planned].filter(s => !this.completed.has(s) || this.failed.has(s));
+  }
+  isComplete(): boolean { return this.missingScripts().length === 0; }
   ensureComplete(): void {
-    if ([...this.planned].some(s => !this.completed.has(s)) || this.failed.size > 0) {
+    if (!this.isComplete()) {
       throw new Error("OCR_MODELS_INCOMPLETE");
     }
   }

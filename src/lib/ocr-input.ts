@@ -15,3 +15,9 @@ export function isLocalOcrImagePath(path: unknown): path is string {
   }
   return false;
 }
+
+export function chooseLocalOcrImagePath(photo: { path?: string | null; webPath?: string | null }): string {
+  if (isLocalOcrImagePath(photo.path)) return photo.path;
+  if (isLocalOcrImagePath(photo.webPath)) return photo.webPath;
+  throw new Error("Selected image has no readable local path.");
+}

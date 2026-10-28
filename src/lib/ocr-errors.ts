@@ -32,6 +32,9 @@ export function readableOcrFailure(error: unknown): string {
   if (error instanceof Error && error.message === "OCR_SCAN_BUSY") {
     return "Предыдущее сканирование ещё завершается. Повторите попытку после его окончания.";
   }
+  if (error instanceof Error && error.message === "OCR_INCOMPLETE_WITH_TEXT") {
+    return "Часть текста распознана, но не все языки проверены. Можно сохранить найденное с пометкой «неполное» или повторить сканирование.";
+  }
   if (error instanceof Error && error.message === "OCR_MODELS_INCOMPLETE") {
     return "Не все языковые модели смогли завершить распознавание. Неполная заметка не сохранена. Выберите язык вручную и повторите сканирование.";
   }
