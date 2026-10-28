@@ -138,6 +138,12 @@ assert.match(readableOcrFailure(new Error("Unable to save notes: QuotaExceededEr
 assert.match(readableOcrFailure(new Error("Notes storage has an error")), /хранилища/);
 assert.deepEqual(ocrScanPlan("auto"),["latin","cyrillic","japanese","chinese","korean","devanagari"]);
 assert.deepEqual(ocrScanPlan("cyrillic"),["cyrillic"]);
+assert.deepEqual(ocrScanPlan(["japanese","korean"]),["japanese","korean"]);
+assert.deepEqual(ocrScanPlan(["cyrillic"]),["cyrillic"]);
+assert.throws(()=>ocrScanPlan([]),/Invalid OCR scan plan/);
+assert.throws(()=>ocrScanPlan(["japanese","japanese"]),/Invalid OCR scan plan/);
+assert.throws(()=>ocrScanPlan(["bogus" as never]),/Invalid OCR scan plan/);
+
 assert.deepEqual(ocrScanPlan("japanese"),["japanese"]);
 assert.equal(composeRecognizedText({text:"Привет мир",blocks:[]}),"Привет мир");
 assert.equal(composeRecognizedText({text:"Привет мир",blocks:[{lines:[]}]}),"Привет мир");

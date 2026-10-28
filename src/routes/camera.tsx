@@ -12,11 +12,11 @@ import { linesFromMlKit } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
-import { OcrIncompleteScanError, markIncompleteOcrText, combineRecoveredOcrText, OCR_SCRIPT_LABELS } from "@/lib/ocr-partial";
+import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState } from "@/lib/ocr-partial";
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText } from "@/lib/ocr-text";
-import { ocrScanPlan, CYRILLIC_OCR_LANGUAGES, type OcrMode } from "@/lib/ocr-plan";
+import { ocrScanPlan, CYRILLIC_OCR_LANGUAGES, type OcrMode, type OcrScanRequest } from "@/lib/ocr-plan";
 
 export const Route = createFileRoute("/camera")({
   head: () => ({ meta: [
@@ -37,7 +37,7 @@ type NativeCameraBundle = typeof import("@capacitor/camera");
 type NativeTextRecognitionBundle = typeof import("@capacitor-mlkit/text-recognition");
 
 type OcrEngine = {
-  processImage: (path: string, mode?: OcrMode, onProgress?: (stage: string) => void) => Promise<string>;
+  processImage: (path: string, mode?: OcrScanRequest, onProgress?: (stage: string) => void) => Promise<string>;
 };
 
 type CameraErrorBoundaryState = {
@@ -113,7 +113,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
     {id:"devanagari",script:mlkit.Script.Devanagari,label:"Деванагари"},
   ];
   return {
-    processImage: async (path: string, mode: OcrMode = "auto", onProgress: (stage: string) => void = () => undefined) => {
+    processImage: async (path: string, mode: OcrScanRequest = "auto", onProgress: (stage: string) => void = () => undefined) => {
       const releaseSession = native ? nativeOcrGate.enter() : () => undefined;
       const results: OcrCandidate[] = [];
       const scanPlan = ocrScanPlan(mode);
@@ -143,7 +143,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
             throw error;
           }
         }
-        timeBudget = new OcrTimeBudget(mode === "auto" ? 60000 : 25000);
+        timeBudget = new OcrTimeBudget(scanPlan.length > 1 ? 60000 : 25000);
         const scanPath = prepared?.path ?? path;
         const width = prepared?.width ?? 1;
         const height = prepared?.height ?? 1;
@@ -248,7 +248,7 @@ function CameraPage() {
   const [error, setError] = useState<string | null>(null);
   const [savedNoteId, setSavedNoteId] = useState<string | null>(null);
   const [partialOcrText, setPartialOcrText] = useState<string | null>(null);
-  const pendingRecoveryRef = useRef<{ path: string; text: string; missing: readonly OcrScript[] } | null>(null);
+  const pendingRecoveryRef = useRef<OcrRecoveryState | null>(null);
   const [partialMissingScripts, setPartialMissingScripts] = useState<readonly OcrScript[]>([]);
   const [retryImagePath, setRetryImagePath] = useState<string | null>(null);
   const [ocrMode, setOcrMode] = useState<OcrMode>("auto");
@@ -297,7 +297,7 @@ function CameraPage() {
     toast.error(message);
   };
 
-  const scanNativeImage = async (source: CaptureSource, previousPhotoPath?: string) => {
+  const scanNativeImage = async (source: CaptureSource, previousPhotoPath?: string, retryScripts?: readonly OcrScript[]) => {
     if (inFlightRef.current) return;
     if (nativeOcrGate.busy) {
       const message = readableOcrFailure(new Error("OCR_SCAN_BUSY"));
@@ -306,6 +306,8 @@ function CameraPage() {
       setModalOpen(true);
       return;
     }
+    const scanRequest = retryScripts ?? ocrMode;
+    const attemptedScripts = ocrScanPlan(scanRequest);
     inFlightRef.current = true;
     const operationId = operationIdRef.current + 1;
     operationIdRef.current = operationId;
@@ -336,7 +338,7 @@ function CameraPage() {
       safeSetStatus("scanning", operationId);
       const engine = await initializeOcrEngine();
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
-      const text = await engine.processImage(imagePath, ocrMode, (stage) => {
+      const text = await engine.processImage(imagePath, scanRequest, (stage) => {
         if (mountedRef.current && operationId === operationIdRef.current) setOcrStage(stage);
       });
 
@@ -349,12 +351,17 @@ function CameraPage() {
 
       const recovery = pendingRecoveryRef.current;
       if (previousPhotoPath && recovery?.path === imagePath) {
-        const combined = combineRecoveredOcrText(recovery.text, text);
-        const remaining = recovery.missing.filter(script => script !== ocrMode);
-        pendingRecoveryRef.current = { path: imagePath, text: combined, missing: remaining };
-        setPartialOcrText(combined);
-        setPartialMissingScripts(remaining);
-        throw new OcrIncompleteScanError(combined, remaining);
+        const updated = applyRecoveredOcrPass(recovery, attemptedScripts, text);
+        pendingRecoveryRef.current = updated;
+        setPartialOcrText(updated.text);
+        setPartialMissingScripts(updated.missingScripts);
+        // The order across independent OCR passes is not reliable enough for
+        // an automatic save. Let the user explicitly confirm the result.
+        handleFailure(updated.missingScripts.length
+          ? "Текст дополнен. Не все языки проверены — можно повторить недостающие."
+          : "Все повторные проверки завершились. Сохраните текст и проверьте порядок строк.",
+          operationId);
+        return;
       }
       setOcrStage("Сохранение заметки");
       await finishWithText(text);
@@ -368,15 +375,12 @@ function CameraPage() {
       }
       if (caught instanceof OcrIncompleteScanError) {
         const recovery = pendingRecoveryRef.current;
-        const combined = previousPhotoPath && recovery?.path === previousPhotoPath
-          ? combineRecoveredOcrText(recovery.text, caught.partialText)
-          : caught.partialText;
-        const missing = previousPhotoPath && recovery?.path === previousPhotoPath
-          ? [...new Set([...recovery.missing.filter(script => script !== ocrMode), ...caught.missingScripts])]
-          : caught.missingScripts;
-        pendingRecoveryRef.current = { path: currentImagePath ?? "", text: combined, missing };
-        setPartialOcrText(combined);
-        setPartialMissingScripts(missing);
+        const updated: OcrRecoveryState = previousPhotoPath && recovery?.path === previousPhotoPath
+          ? applyRecoveredOcrPass(recovery, attemptedScripts, caught.partialText, caught.missingScripts)
+          : { path: currentImagePath ?? "", text: caught.partialText, missingScripts: caught.missingScripts };
+        pendingRecoveryRef.current = updated;
+        setPartialOcrText(updated.text);
+        setPartialMissingScripts(updated.missingScripts);
       }
       handleFailure(readableOcrFailure(caught), operationId,
         caught instanceof OcrEditorNavigationError ? caught.savedNoteId : undefined);
@@ -393,6 +397,13 @@ function CameraPage() {
     }
     setModalOpen(false);
     void scanNativeImage("gallery",retryImagePath);
+  };
+
+  const retryUnfinishedOnSamePhoto = () => {
+    if (!retryImagePath || inFlightRef.current || status !== "error" ||
+        !partialOcrText || !partialMissingScripts.length) return;
+    setModalOpen(false);
+    void scanNativeImage("gallery", retryImagePath, partialMissingScripts);
   };
 
   const openWebPicker = (source: CaptureSource) => {
@@ -450,7 +461,9 @@ function CameraPage() {
     inFlightRef.current = true;
     setStatus("preparing");
     try {
-      await finishWithText(markIncompleteOcrText(partialOcrText,partialMissingScripts));
+      await finishWithText(partialMissingScripts.length
+        ? markIncompleteOcrText(partialOcrText, partialMissingScripts)
+        : markRecoveredOcrText(partialOcrText));
       setPartialOcrText(null);
       setPartialMissingScripts([]);
     } catch (caught) {
@@ -561,7 +574,7 @@ function CameraPage() {
           className="mt-6 h-11 rounded-xl bg-gradient-to-r from-primary to-primary-glow px-6 text-sm text-primary-foreground shadow-xl hover:opacity-95"
         >
           <ImagePlus className="mr-2 h-5 w-5" />
-          {savedNoteId ? "Открыть сохранённую заметку" : partialOcrText ? "Сохранить найденный текст (неполный)" : t("camera_pick")}
+          {savedNoteId ? "Открыть сохранённую заметку" : partialOcrText ? (partialMissingScripts.length ? "Сохранить найденный текст (неполный)" : "Сохранить объединённый текст (проверить)") : t("camera_pick")}
         </Button>
       </main>
 
@@ -597,7 +610,14 @@ function CameraPage() {
             {partialOcrText && (
               <Button type="button" disabled={busy} onClick={() => void savePartialScan()}
                 className="h-9 rounded-xl text-xs font-semibold">
-                Сохранить найденный текст (неполный)
+                {partialMissingScripts.length ? "Сохранить найденный текст (неполный)" : "Сохранить объединённый текст (проверить)"}
+              </Button>
+            )}
+            {retryImagePath && partialOcrText && partialMissingScripts.length > 0 && (
+              <Button type="button" variant="outline" disabled={busy}
+                onClick={retryUnfinishedOnSamePhoto}
+                className="h-9 rounded-xl text-xs font-semibold">
+                Повторить недостающие языки ({partialMissingScripts.length})
               </Button>
             )}
             {retryImagePath && !savedNoteId && (

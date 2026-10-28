@@ -1,13 +1,24 @@
 import type { OcrScript } from "./ocr-merge";
 export type OcrMode = OcrScript | "auto";
-// Pinned Russian/Kazakh models behave better on mixed Cyrillic when Kazakh is first.
-// This changes recognition priority, not which models are packaged in the APK.
+export type OcrScanRequest = OcrMode | readonly OcrScript[];
+
+// Every bundled recognizer remains available. A recovery pass can target only
+// models that failed without discarding completed results from the first pass.
+const AUTO_SCAN_ORDER: readonly OcrScript[] = ["latin", "cyrillic", "japanese", "chinese", "korean", "devanagari"];
+// Keep the validated, pinned Russian/Kazakh ordering.
 export const CYRILLIC_OCR_LANGUAGES = "kaz+rus" as const;
-/**
- * Automatic detection must not defer Cyrillic until after every Asian model.
- * Each model still gets its own chance so mixed-language pages are supported.
- */
-export function ocrScanPlan(mode: OcrMode): Array<OcrScript> {
-  if (mode !== "auto") return [mode];
-  return ["latin", "cyrillic", "japanese", "chinese", "korean", "devanagari"];
+
+/** Never silently scan an unknown model or accept an empty recovery plan. */
+export function ocrScanPlan(request: OcrScanRequest): OcrScript[] {
+  if (typeof request !== "string") {
+    const scripts = [...request];
+    if (!scripts.length || new Set(scripts).size !== scripts.length ||
+        scripts.some(script => !AUTO_SCAN_ORDER.includes(script))) {
+      throw new Error("Invalid OCR scan plan");
+    }
+    return scripts;
+  }
+  if (request === "auto") return [...AUTO_SCAN_ORDER];
+  if (!AUTO_SCAN_ORDER.includes(request)) throw new Error("Invalid OCR scan plan");
+  return [request];
 }
