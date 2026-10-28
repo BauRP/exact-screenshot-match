@@ -118,6 +118,28 @@ public class BundledOcrInstrumentedTest {
     }
 
     @Test
+    public void eachNativeLanguageLoadsOnlyBundledRequiredModels() {
+        assertArrayEquals(new String[]{"rus"},OfflineCyrillicOcrPlugin.requiredModels("rus"));
+        assertArrayEquals(new String[]{"kaz"},OfflineCyrillicOcrPlugin.requiredModels("kaz"));
+        assertArrayEquals(new String[]{"rus","kaz"},OfflineCyrillicOcrPlugin.requiredModels("kaz+rus"));
+        assertArrayEquals(new String[]{"rus","kaz"},OfflineCyrillicOcrPlugin.requiredModels("rus+kaz"));
+        try {
+            OfflineCyrillicOcrPlugin.requiredModels("deu");
+            fail("External models cannot be requested");
+        } catch (IllegalArgumentException expected) { }
+    }
+
+    @Test
+    public void corruptedTextLineBoxesAreNotReturnedToWebView() {
+        assertTrue(OfflineCyrillicOcrPlugin.isValidTextLineBox(new int[]{0,0,100,50},100,50));
+        assertFalse(OfflineCyrillicOcrPlugin.isValidTextLineBox(new int[]{-1,0,10,20},100,50));
+        assertFalse(OfflineCyrillicOcrPlugin.isValidTextLineBox(new int[]{1,0,101,20},100,50));
+        assertFalse(OfflineCyrillicOcrPlugin.isValidTextLineBox(new int[]{50,0,10,20},100,50));
+        assertFalse(OfflineCyrillicOcrPlugin.isValidTextLineBox(new int[]{0,0,1,0},100,50));
+        assertFalse(OfflineCyrillicOcrPlugin.isValidTextLineBox(null,100,50));
+    }
+
+    @Test
     public void russianTextIsRecognizedOnAndroid() {
         verifyRecognition("Привет мир\nЭто тест распознавания", .25);
     }

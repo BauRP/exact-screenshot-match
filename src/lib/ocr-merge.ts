@@ -403,7 +403,10 @@ export function hasUncertainMixedScriptLayout(candidates: readonly OcrCandidate[
  * visibly separated for human review rather than dropping a language.
  */
 export const OCR_SPATIAL_LINE_LIMIT = 350;
-export function exceedsOcrSpatialBudget(candidates: readonly OcrCandidate[]): boolean {
+export function exceedsOcrSpatialBudget(
+  candidates: readonly OcrCandidate[], nativeGeometryTruncated = false,
+): boolean {
+  if (nativeGeometryTruncated) return true;
   let lines = 0;
   for (const candidate of candidates) {
     lines += candidate.lines.length;

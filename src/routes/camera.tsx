@@ -104,7 +104,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
   const mlkit: NativeTextRecognitionBundle = await import("@capacitor-mlkit/text-recognition");
   const { Capacitor, registerPlugin } = await import("@capacitor/core");
   const native = Capacitor.getPlatform() === "android"
-    ? registerPlugin<{ recognize(input: {path:string; language:string}): Promise<{text:string; confidence:number; lines?: Omit<OcrLine, "script">[]}>; prepareImage(input:{path:string}):Promise<{path:string;width:number;height:number}>; releaseImage(input:{path:string}):Promise<void> }>("OfflineCyrillicOcr")
+    ? registerPlugin<{ recognize(input: {path:string; language:string}): Promise<{text:string; confidence:number; truncatedGeometry?:boolean; lines?: Omit<OcrLine, "script">[]}>; prepareImage(input:{path:string}):Promise<{path:string;width:number;height:number}>; releaseImage(input:{path:string}):Promise<void> }>("OfflineCyrillicOcr")
     : null;
   const scripts: Array<{id:OcrScript; script: (typeof mlkit.Script)[keyof typeof mlkit.Script]; label: string}> = [
     {id:"latin",script:mlkit.Script.Latin,label:"Латиница"},
@@ -124,6 +124,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       let prepared: {path:string;width:number;height:number} | null = null;
       let timedOut = false;
       const nativeAlternatives: OcrNativeTextAlternative[] = [];
+      let nativeGeometryTruncated = false;
       let timeBudget: OcrTimeBudget | null = null;
       const timed = <T,>(start: () => Promise<T>, duration: number): Promise<T> => {
         if (!timeBudget) throw new Error("OCR budget was not initialized");
@@ -181,6 +182,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
           try {
             const data = await timed(() => native.recognize({path:scanPath,language:cyrillicLanguageForScan(mode)}), 18000);
             coverage.markCompleted("cyrillic");
+            if (data.truncatedGeometry) nativeGeometryTruncated = true;
             const cyrillicText = cyrillicTextWithLineFallback(data);
             if (cyrillicText.trim()) {
               const lines: OcrLine[] = (data.lines ?? []).map(line => ({...line,script:"cyrillic"}));
@@ -207,7 +209,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       // A timeout leaves an incomplete multilingual page. Do not silently
       // save partial results as if every configured recognizer had completed.
       if (timedOut || !coverage.isComplete()) {
-        const partial = exceedsOcrSpatialBudget(results)
+        const partial = exceedsOcrSpatialBudget(results, nativeGeometryTruncated)
           ? mergeOversizedOcrForReview(results) : mergeOcrCandidates(results);
         if (partial.trim()) throw new OcrIncompleteScanError(partial, coverage.missingScripts());
         if (timedOut) throw new Error("OCR timed out");
@@ -220,7 +222,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       // only when at least one valid geometry source is available. The fallback
       // deliberately chooses a single result instead of duplicating page text.
       onProgress("Объединение распознанных строк");
-      const tooManyLines = exceedsOcrSpatialBudget(results);
+      const tooManyLines = exceedsOcrSpatialBudget(results, nativeGeometryTruncated);
       const text = tooManyLines
         ? mergeOversizedOcrForReview(results) : mergeOcrCandidates(results);
       if (tooManyLines && text) throw new OcrLargeLayoutReviewError(text);

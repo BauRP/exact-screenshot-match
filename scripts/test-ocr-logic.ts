@@ -629,3 +629,11 @@ assert.deepEqual(previewHanAlternatives({japanese:"日本語",chinese:"中文"})
 });
 assert.equal(previewHanAlternatives({japanese:"日本語",chinese:"中文"},0),null);
 console.log("Han result previews preserve exact original glyphs: passed.");
+
+
+// When the native Tesseract iterator truncates its geometry, do not mistake
+// 350 visible lines for a complete physical document layout.
+assert.equal(exceedsOcrSpatialBudget([],true),true);
+assert.equal(exceedsOcrSpatialBudget([{script:"cyrillic",text:"Қазақ тілі",lines:[]}],false),false);
+assert.equal(exceedsOcrSpatialBudget([{script:"cyrillic",text:"Қазақ тілі",lines:[]}],true),true);
+console.log("Native geometry truncation forces full-text manual review: passed.");

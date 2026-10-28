@@ -29,6 +29,7 @@ import java.util.concurrent.Executors;
 public class OfflineCyrillicOcrPlugin extends Plugin {
     private static final long RUS_SIZE = 3861738L;
     private static final long KAZ_SIZE = 4734644L;
+    private static final int MAX_REPORTED_TEXT_LINES = 350;
     // SHA-1 Git-blob object IDs pinned at BUILD time, then independently
     // verified by Android before each native OCR session.
     private static final String RUS_BLOB = "b146cb2263acbc6383f8e92ea0ce759537687bb8";
@@ -127,7 +128,7 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
             TessBaseAPI api = null;
             Bitmap bitmap = null;
             try {
-                File modelsRoot = installModels();
+                File modelsRoot = installModels(language);
                 bitmap = loadBitmap(source);
                 api = new TessBaseAPI();
                 if (!api.init(modelsRoot.getAbsolutePath(), language)) {
@@ -139,13 +140,19 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
                 int confidence = api.meanConfidence();
                 JSArray lines = new JSArray();
                 ResultIterator iterator = api.getResultIterator();
+                boolean geometryTruncated = false;
                 if (iterator != null) {
                     try {
                         iterator.begin();
                         do {
                             String text = iterator.getUTF8Text(TessBaseAPI.PageIteratorLevel.RIL_TEXTLINE);
                             int[] box = iterator.getBoundingBox(TessBaseAPI.PageIteratorLevel.RIL_TEXTLINE);
-                            if (text == null || text.trim().isEmpty() || box == null || box.length < 4) continue;
+                            if (text == null || text.trim().isEmpty() ||
+                                    !isValidTextLineBox(box, bitmap.getWidth(), bitmap.getHeight())) continue;
+                            if (lines.length() >= MAX_REPORTED_TEXT_LINES) {
+                                geometryTruncated = true;
+                                break;
+                            }
                             JSObject line = new JSObject();
                             line.put("text", text.trim());
                             // Match ML Kit's left/top/right/bottom layout. Both
@@ -165,6 +172,7 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
                 response.put("text", resultText == null ? "" : resultText);
                 response.put("confidence", confidence);
                 response.put("lines", lines);
+                response.put("truncatedGeometry", geometryTruncated);
                 call.resolve(response);
             } catch (OutOfMemoryError e) {
                 call.reject("Insufficient memory for offline Russian/Kazakh OCR");
@@ -177,12 +185,31 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
         });
     }
 
-    private File installModels() throws Exception {
+    /** Only extract the requested APK-bundled files on first use. */
+    static String[] requiredModels(String language) {
+        switch (language) {
+            case "rus": return new String[]{"rus"};
+            case "kaz": return new String[]{"kaz"};
+            case "rus+kaz":
+            case "kaz+rus": return new String[]{"rus", "kaz"};
+            default: throw new IllegalArgumentException("Unsupported offline OCR language");
+        }
+    }
+
+    static boolean isValidTextLineBox(int[] box, int width, int height) {
+        return box != null && box.length >= 4 && width > 0 && height > 0 &&
+            box[0] >= 0 && box[1] >= 0 && box[2] <= width && box[3] <= height &&
+            box[2] > box[0] && box[3] > box[1];
+    }
+
+    private File installModels(String language) throws Exception {
         File root = new File(getContext().getFilesDir(), "wave-ocr-bundled-v1");
         File directory = new File(root, "tessdata");
-        if (!directory.isDirectory() && !directory.mkdirs()) throw new IllegalStateException("Cannot initialize OCR storage");
-        copyBundledModel(directory, "rus", RUS_SIZE);
-        copyBundledModel(directory, "kaz", KAZ_SIZE);
+        if (!directory.isDirectory() && !directory.mkdirs())
+            throw new IllegalStateException("Cannot initialize OCR storage");
+        for (String model : requiredModels(language)) {
+            copyBundledModel(directory, model, "rus".equals(model) ? RUS_SIZE : KAZ_SIZE);
+        }
         return root;
     }
 
