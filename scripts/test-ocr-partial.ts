@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrAmbiguousHanError, OcrMixedLayoutReviewError, resumeOcrReviewDraft } from "../src/lib/ocr-partial";
+import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrAmbiguousHanError, OcrMixedLayoutReviewError, resumeOcrReviewDraft, recoverFromReviewedText } from "../src/lib/ocr-partial";
 import { saveOcrNoteAndOpenEditor } from "../src/lib/ocr-save-flow";
 import { readPendingOcrDraft, savePendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "../src/lib/ocr-draft";
 const storage=new Map<string,string>();
@@ -172,3 +172,16 @@ const limitedId=await saveOcrNoteAndOpenEditor(
 assert.ok(getNote(limitedId)?.body.includes("Остальные языковые модели"));
 assert.equal(JSON.parse(storage.get("sn.notes.v1")??"[]").length,4);
 console.log("Custom language limits and conflicting native glyphs are reviewed and saved safely: passed.");
+
+
+// Retrying on the SAME photo must preserve the user's manually fixed text.
+const correctedRecovery = recoverFromReviewedText(
+  {path:"content://test/photo",text:"Неправильный символ",missingScripts:["korean"]},
+  "Правильный символ",true);
+assert.equal(correctedRecovery.text,"Правильный символ");
+assert.deepEqual(correctedRecovery.missingScripts,["korean"]);
+assert.equal(applyRecoveredOcrPass(correctedRecovery,["korean"],"한국어").text,
+  "Правильный символ\n\n한국어");
+assert.throws(()=>recoverFromReviewedText(correctedRecovery," ",true),/OCR_EMPTY_TEXT/);
+assert.equal(recoverFromReviewedText(correctedRecovery,"another",false),correctedRecovery);
+console.log("User-corrected OCR remains intact across retries on one photograph: passed.");

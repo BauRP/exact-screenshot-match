@@ -211,3 +211,18 @@ export class OcrNativeTextReviewError extends Error {
     this.recognizedText = text;
   }
 }
+
+
+/** User edits take precedence over earlier raw OCR when recovering the same
+ * photograph. Never mutate the input, its image URI, or missing-script state.
+ * A blank edit is not valid as a recovery base.
+ */
+export function recoverFromReviewedText(
+  previous: OcrRecoveryState,
+  reviewedText: string,
+  hasEdits: boolean,
+): OcrRecoveryState {
+  if (!hasEdits) return previous;
+  if (!reviewedText.trim()) throw new Error("OCR_EMPTY_TEXT");
+  return {...previous,text:reviewedText};
+}

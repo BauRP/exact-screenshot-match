@@ -547,6 +547,8 @@ assert.equal(hasConflictingNativeOcrText({text:"Қазақ тіліндегі м
 ]}),true);
 assert.equal(hasConflictingNativeOcrText({text:"text",blocks:[
   {lines:[{text:"tast"}]}
-]}),false);
+]}),true);
+assert.equal(hasConflictingNativeOcrText({text:"A",blocks:[{lines:[{text:"B"}]}]}),false);
+assert.equal(hasConflictingNativeOcrText({text:"日本語",blocks:[{lines:[{text:"日本学"}]}]}),true);
 assert.equal(hasConflictingNativeOcrText({text:"日本語学校",blocks:[]}),false);
 console.log("Native OCR text/line conflicts require review rather than silent glyph changes: passed.");

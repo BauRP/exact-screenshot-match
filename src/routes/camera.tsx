@@ -12,7 +12,7 @@ import { linesFromMlKit } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
-import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, type OcrReviewReason, OcrMixedLayoutReviewError, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, resumeOcrReviewDraft, hanAlternativesFromCandidates, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
+import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, type OcrReviewReason, OcrMixedLayoutReviewError, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, resumeOcrReviewDraft, recoverFromReviewedText, hanAlternativesFromCandidates, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
 import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
@@ -481,6 +481,9 @@ function CameraPage() {
       await finishWithText(text);
       if (shouldClearPendingDraft("note-saved")) markDraftFinished();
     } catch (caught) {
+      // The note may be saved even when router navigation fails/unmounts.
+      // Never leave a retryable draft that could create a duplicate note.
+      if (caught instanceof OcrEditorNavigationError) markDraftFinished();
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
       if (isCameraCancellation(caught)) {
         // Backing out of camera/photo picker is normal user intent.
@@ -505,7 +508,6 @@ function CameraPage() {
         setReviewEdited(false);
         retainUnfinishedResult(combined, reason);
       }
-      if (caught instanceof OcrEditorNavigationError) markDraftFinished();
       if (caught instanceof OcrIncompleteScanError) {
         const recovery = pendingRecoveryRef.current;
         const updated: OcrRecoveryState = previousPhotoPath && recovery?.path === previousPhotoPath
@@ -527,12 +529,28 @@ function CameraPage() {
     }
   };
 
+  const applyUserCorrectionsBeforeRetry = () => {
+    const previous = pendingRecoveryRef.current;
+    const edits = latestReviewRef.current;
+    if (!previous || !edits.edited) return true;
+    if (!edits.text.trim()) {
+      toast.error("Исправленный текст пуст. Введите текст или удалите черновик.");
+      return false;
+    }
+    const updated = recoverFromReviewedText(previous,edits.text,true);
+    pendingRecoveryRef.current = updated;
+    setPartialOcrText(updated.text);
+    retainUnfinishedResult(updated,reviewReason);
+    return true;
+  };
+
   const retryManualOnSamePhoto = () => {
     if (!retryImagePath || inFlightRef.current || status !== "error") return;
     if (ocrMode === "auto") {
       toast.error("Для повторной проверки выберите язык в списке.");
       return;
     }
+    if (!applyUserCorrectionsBeforeRetry()) return;
     setModalOpen(false);
     void scanNativeImage("gallery",retryImagePath);
   };
@@ -540,6 +558,7 @@ function CameraPage() {
   const retryUnfinishedOnSamePhoto = () => {
     if (!retryImagePath || inFlightRef.current || status !== "error" ||
         !partialOcrText || !partialMissingScripts.length) return;
+    if (!applyUserCorrectionsBeforeRetry()) return;
     setModalOpen(false);
     void scanNativeImage("gallery", retryImagePath, partialMissingScripts);
   };
@@ -628,12 +647,12 @@ function CameraPage() {
       setPartialOcrText(null);
       setPartialMissingScripts([]);
     } catch (caught) {
+      if (caught instanceof OcrEditorNavigationError) markDraftFinished();
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
       const message = readableOcrFailure(caught);
       setError(message);
       setSavedNoteId(caught instanceof OcrEditorNavigationError ? caught.savedNoteId : null);
       if (caught instanceof OcrEditorNavigationError) {
-        markDraftFinished();
         setReviewOpen(false);
         setPartialOcrText(null);
         setPartialMissingScripts([]);
@@ -694,7 +713,7 @@ function CameraPage() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full min-h-0 max-w-xl flex-1 flex-col items-center justify-center overflow-hidden overscroll-none px-4 pb-[130px] pt-4 text-center touch-none">
+      <main className="mx-auto flex w-full min-h-0 max-w-xl flex-1 flex-col items-center justify-start overflow-y-auto overscroll-contain px-4 pb-[130px] pt-4 text-center sm:justify-center">
 
         <input
           ref={inputRef}

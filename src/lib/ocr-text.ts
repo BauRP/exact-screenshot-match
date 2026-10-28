@@ -60,7 +60,8 @@ export function hasConflictingNativeOcrText(result: TextScanResult): boolean {
   const combined = blocks.join("").normalize("NFC").replace(/\s+/gu,"");
   if (!combined || full === combined || full.includes(combined) ||
       combined.includes(full)) return false;
-  // Very short hallucinations are not enough evidence of a document conflict.
-  if (Array.from(full).length < 6 || Array.from(combined).length < 6) return false;
+  // One- or two-character mismatches are ambiguous, but a three- to five-
+  // character Japanese/Korean/Kazakh name is meaningful and must be reviewable.
+  if (Array.from(full).length < 3 || Array.from(combined).length < 3) return false;
   return true;
 }
