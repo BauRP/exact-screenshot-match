@@ -12,7 +12,7 @@ import { linesFromMlKit } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
-import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState } from "@/lib/ocr-partial";
+import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState } from "@/lib/ocr-partial";
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText } from "@/lib/ocr-text";
@@ -252,6 +252,8 @@ function CameraPage() {
   const [error, setError] = useState<string | null>(null);
   const [savedNoteId, setSavedNoteId] = useState<string | null>(null);
   const [partialOcrText, setPartialOcrText] = useState<string | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviewDraft, setReviewDraft] = useState("");
   const [reviewReason, setReviewReason] = useState<"recovery" | "ambiguous-han">("recovery");
   const pendingRecoveryRef = useRef<OcrRecoveryState | null>(null);
   const [partialMissingScripts, setPartialMissingScripts] = useState<readonly OcrScript[]>([]);
@@ -279,6 +281,8 @@ function CameraPage() {
     setError(null);
     setSavedNoteId(null);
     setPartialOcrText(null);
+    setReviewOpen(false);
+    setReviewDraft("");
     setReviewReason("recovery");
     setPartialMissingScripts([]);
     pendingRecoveryRef.current = null;
@@ -323,6 +327,8 @@ function CameraPage() {
     if (!previousPhotoPath) {
       pendingRecoveryRef.current = null;
       setPartialOcrText(null);
+      setReviewOpen(false);
+      setReviewDraft("");
       setReviewReason("recovery");
       setPartialMissingScripts([]);
       setRetryImagePath(null);
@@ -474,21 +480,31 @@ function CameraPage() {
     }, 0);
   };
 
-  const savePartialScan = async () => {
+  const showReview = () => {
     if (!partialOcrText || inFlightRef.current) return;
+    setReviewDraft(partialOcrText);
+    setModalOpen(false);
+    setReviewOpen(true);
+  };
+
+  const saveReviewedScan = async () => {
+    if (!partialOcrText || inFlightRef.current || !reviewDraft.trim()) return;
     inFlightRef.current = true;
+    const operationId = operationIdRef.current;
     setStatus("preparing");
     try {
-      await finishWithText(partialMissingScripts.length
-        ? markIncompleteOcrText(partialOcrText, partialMissingScripts)
-        : markRecoveredOcrText(partialOcrText, reviewReason));
+      await finishWithText(buildReviewedOcrText(reviewDraft, partialMissingScripts, reviewReason));
+      if (!mountedRef.current || operationId !== operationIdRef.current) return;
+      setReviewOpen(false);
       setPartialOcrText(null);
       setPartialMissingScripts([]);
     } catch (caught) {
+      if (!mountedRef.current || operationId !== operationIdRef.current) return;
       const message = readableOcrFailure(caught);
       setError(message);
       setSavedNoteId(caught instanceof OcrEditorNavigationError ? caught.savedNoteId : null);
       if (caught instanceof OcrEditorNavigationError) {
+        setReviewOpen(false);
         setPartialOcrText(null);
         setPartialMissingScripts([]);
       }
@@ -591,7 +607,7 @@ function CameraPage() {
 
         <Button
           type="button"
-          onClick={() => savedNoteId ? void openPreviouslySavedNote() : partialOcrText ? void savePartialScan() : setModalOpen(true)}
+          onClick={() => savedNoteId ? void openPreviouslySavedNote() : partialOcrText ? showReview() : setModalOpen(true)}
           size="lg"
           disabled={busy}
           className="mt-6 h-11 rounded-xl bg-gradient-to-r from-primary to-primary-glow px-6 text-sm text-primary-foreground shadow-xl hover:opacity-95"
@@ -600,6 +616,47 @@ function CameraPage() {
           {savedNoteId ? "Открыть сохранённую заметку" : partialOcrText ? savePartialLabel : t("camera_pick")}
         </Button>
       </main>
+
+      <Dialog open={reviewOpen} onOpenChange={(open) => {
+        if (!inFlightRef.current) setReviewOpen(open);
+      }}>
+        <DialogContent className="flex max-h-[85dvh] w-[min(35rem,calc(100vw-2rem))] max-w-[35rem] flex-col overflow-hidden rounded-2xl p-4">
+          <DialogHeader>
+            <DialogTitle>Проверьте распознанный текст</DialogTitle>
+            <DialogDescription>
+              Исправьте символы и порядок строк перед сохранением. Текст обрабатывается на устройстве.
+              {partialMissingScripts.length > 0
+                ? " Некоторые языки не были проверены — заметка сохранится с предупреждением."
+                : " Результат нескольких проверок может содержать ошибки."}
+            </DialogDescription>
+          </DialogHeader>
+          <label htmlFor="ocr-review-text" className="text-sm font-medium">Распознанный текст</label>
+          <textarea
+            id="ocr-review-text"
+            aria-label="Исправление распознанного текста"
+            value={reviewDraft}
+            onChange={event => setReviewDraft(event.target.value)}
+            spellCheck={false}
+            disabled={busy}
+            className="min-h-48 w-full flex-1 resize-y overflow-auto rounded-xl border border-border bg-background p-3 text-sm leading-relaxed text-foreground"
+          />
+          {partialMissingScripts.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Не завершены: {partialMissingScripts.map(script => OCR_SCRIPT_LABELS[script]).join(", ")}
+            </p>
+          )}
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button type="button" variant="outline" disabled={busy}
+              onClick={() => { setReviewOpen(false); setModalOpen(true); }}>
+              Вернуться к проверкам
+            </Button>
+            <Button type="button" disabled={busy || !reviewDraft.trim()}
+              onClick={() => void saveReviewedScan()}>
+              Сохранить исправленный текст
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={modalOpen} onOpenChange={(open) => !busy && setModalOpen(open)}>
         <DialogContent className="w-[min(20rem,calc(100vw-2.5rem))] max-w-[20rem] rounded-2xl border-border p-0">
@@ -631,7 +688,7 @@ function CameraPage() {
             ) : (
             <>
             {partialOcrText && (
-              <Button type="button" disabled={busy} onClick={() => void savePartialScan()}
+              <Button type="button" disabled={busy} onClick={showReview}
                 className="h-9 rounded-xl text-xs font-semibold">
                 {savePartialLabel}
               </Button>

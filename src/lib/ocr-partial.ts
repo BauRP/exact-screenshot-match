@@ -125,3 +125,15 @@ export class OcrAmbiguousHanError extends Error {
     this.recognizedText = recognizedText;
   }
 }
+
+// Keep OCR warnings out of the user's editable text field, while ensuring
+// that a review never silently promotes an incomplete scan to complete.
+export function buildReviewedOcrText(
+  editedText: string,
+  missingScripts: readonly OcrScript[],
+  reason: "recovery" | "ambiguous-han" = "recovery",
+): string {
+  if (!editedText.trim()) throw new Error("OCR_EMPTY_TEXT");
+  if (missingScripts.length) return markIncompleteOcrText(editedText, missingScripts);
+  return markRecoveredOcrText(editedText, reason);
+}

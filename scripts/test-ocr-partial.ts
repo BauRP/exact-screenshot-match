@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, combineRecoveredOcrText, applyRecoveredOcrPass } from "../src/lib/ocr-partial";
+import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass } from "../src/lib/ocr-partial";
 import { saveOcrNoteAndOpenEditor } from "../src/lib/ocr-save-flow";
 const storage=new Map<string,string>();
 Object.defineProperty(globalThis,"window",{configurable:true,value:{localStorage:{
@@ -69,3 +69,16 @@ assert.equal(combineRecoveredOcrText("学校", "學校"), "学校\n\n學校");
 assert.equal(combineRecoveredOcrText("  indented\nПривет", "Привет\n  другой"), "  indented\nПривет\n\n  другой");
 assert.ok(markRecoveredOcrText("日本語", "ambiguous-han").includes("Китайский и японский"));
 console.log("Empty OCR passes, repeated lines, Unicode and review warnings: passed.");
+
+// Users can correct Chinese/Japanese/other OCR characters before saving.
+// The warning is added AFTER review; incomplete language coverage persists.
+assert.ok(buildReviewedOcrText("日本語 исправлено", [], "ambiguous-han").includes("日本語 исправлено"));
+assert.ok(buildReviewedOcrText("日本語 исправлено", [], "ambiguous-han").includes("Китайский и японский"));
+assert.ok(buildReviewedOcrText("Қазақ тілі", ["korean"]).includes("Не завершены проверки: Корейский"));
+assert.throws(() => buildReviewedOcrText("\n  ", []), /OCR_EMPTY_TEXT/);
+const reviewedId = await saveOcrNoteAndOpenEditor(
+  buildReviewedOcrText("日本語 исправлено", [], "ambiguous-han"), "OCR", createNote,
+  async noteId => assert.ok(getNote(noteId)?.body.includes("исправлено")));
+assert.ok(getNote(reviewedId)?.body.includes("Проверьте иероглифы"));
+assert.equal(JSON.parse(storage.get("sn.notes.v1") ?? "[]").length, 3);
+console.log("Editable OCR review and warning-preserving save: passed.");
