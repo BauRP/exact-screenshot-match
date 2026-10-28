@@ -131,6 +131,36 @@ function sameRegion(a: OcrLine, b: OcrLine): boolean {
     vertical / Math.min(aHeight,bHeight) >= .65;
 }
 
+
+/** Recognize only clearly separated, multi-row, two-column documents.
+ * Overlapping bounding boxes or a page-wide header disable column inference.
+ * For less certain layouts retain the existing row-order fallback.
+ */
+function confirmedColumnSplit(lines: readonly OcrLine[]): number | null {
+  if (lines.length < 4) return null;
+  const sorted = [...lines].sort((a,b) => a.left - b.left);
+  let bestGap = 0.055;
+  let bestSplit: number | null = null;
+  for (let i=2; i<=sorted.length-2; i++) {
+    const left=sorted.slice(0,i), right=sorted.slice(i);
+    const separation=Math.min(...right.map(x => x.left)) -
+      Math.max(...left.map(x => x.right));
+    if (separation <= bestGap) continue;
+    const leftTop=Math.min(...left.map(x => x.top));
+    const leftBottom=Math.max(...left.map(x => x.bottom));
+    const rightTop=Math.min(...right.map(x => x.top));
+    const rightBottom=Math.max(...right.map(x => x.bottom));
+    const shared=Math.min(leftBottom,rightBottom) - Math.max(leftTop,rightTop);
+    // Each column must contain distinct rows, with overlapping page height.
+    if (shared < .08 ||
+        leftBottom-leftTop < .11 || rightBottom-rightTop < .11) continue;
+    bestGap=separation;
+    bestSplit=(Math.max(...left.map(x=>x.right)) +
+      Math.min(...right.map(x=>x.left)))/2;
+  }
+  return bestSplit;
+}
+
 /**
  * Merge non-overlapping lines from different models in photo reading order,
  * choosing one winner for each overlapping line. Never concatenate every
@@ -252,11 +282,17 @@ export function mergeOcrCandidates(candidates: OcrCandidate[]): string {
     .sort((a,b) => b.text.trim().length - a.text.trim().length)[0];
   if (unlocatedFull) return unlocatedFull.text.trim();
 
-  selected.sort((a, b) => {
-    const centerA = (a.top + a.bottom) / 2;
-    const centerB = (b.top + b.bottom) / 2;
-    const maxHeight = Math.max(a.bottom - a.top, b.bottom - b.top);
-    return Math.abs(centerA - centerB) < maxHeight * .48 ? a.left - b.left : centerA - centerB;
+  const columnBoundary=confirmedColumnSplit(selected);
+  selected.sort((a,b) => {
+    if (columnBoundary !== null) {
+      const colA=a.left < columnBoundary ? 0 : 1;
+      const colB=b.left < columnBoundary ? 0 : 1;
+      if (colA !== colB) return colA-colB;
+    }
+    const centerA=(a.top+a.bottom)/2;
+    const centerB=(b.top+b.bottom)/2;
+    const maxHeight=Math.max(a.bottom-a.top,b.bottom-b.top);
+    return Math.abs(centerA-centerB) < maxHeight*.48 ? a.left-b.left : centerA-centerB;
   });
   const result: string[] = [];
   for (let i = 0; i < selected.length; i++) {
@@ -265,7 +301,9 @@ export function mergeOcrCandidates(candidates: OcrCandidate[]): string {
       const previous = selected[i - 1];
       const verticalGap = current.top - previous.bottom;
       const typical = Math.max(.005, previous.bottom - previous.top);
-      if (verticalGap > typical * 1.5) result.push("");
+      const newColumn=columnBoundary !== null &&
+        previous.left < columnBoundary && current.left >= columnBoundary;
+      if (newColumn || verticalGap > typical * 1.5) result.push("");
     }
     result.push(current.text.trimEnd());
   }
