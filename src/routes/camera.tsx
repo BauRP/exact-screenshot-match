@@ -124,6 +124,10 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       let prepared: {path:string;width:number;height:number} | null = null;
       let timedOut = false;
       const nativeAlternatives: OcrNativeTextAlternative[] = [];
+      // Keep the original full ML Kit text separately: composeRecognizedText
+      // can select structured lines instead of the original native full text.
+      // Using only composed candidates here silently loses the disagreement.
+      const nativeFullReadings: Array<{script: OcrScript; text: string}> = [];
       const languageHints: string[] = [];
       let nativeGeometryTruncated = false;
       let timeBudget: OcrTimeBudget | null = null;
@@ -161,7 +165,10 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
           const value = composeRecognizedText(data);
           if (value.trim()) {
             const alternative = extractNativeTextAlternative(item.id,data);
-            if (alternative) nativeAlternatives.push(alternative);
+            if (alternative) {
+              nativeAlternatives.push(alternative);
+              if (data.text?.trim()) nativeFullReadings.push({script:item.id,text:data.text});
+            }
           }
           if (value.trim()) {
             const geometry = linesFromMlKitBounded(data,item.id,width,height);
@@ -243,7 +250,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       // mixed-layout warning would hide these concrete comparison excerpts.
       if (text && nativeAlternatives.length) {
         const complete = recoverNativeFullTextForReview(
-          text,results,nativeAlternatives.map(alt => alt.script));
+          text,[...results,...nativeFullReadings],nativeAlternatives.map(alt => alt.script));
         throw new OcrNativeTextReviewError(complete,nativeAlternatives);
       }
       if (scanPlan.length > 1 && text && hasUncertainMixedScriptLayout(results)) {

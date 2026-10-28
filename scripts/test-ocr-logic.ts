@@ -837,3 +837,26 @@ assert.equal(recoverNativeFullTextForReview(
 assert.equal(recoverNativeFullTextForReview(
   "",nativeFullPage,["japanese"]),"");
 console.log("Native full-text gaps become editable review lines without losing earlier scripts: passed.");
+
+
+// A native recognizer can return a FULL different reading but the composer
+// selects only block/line text when its content is inconsistent. Real raw
+// native data must be kept independently; the existing processed candidate
+// alone cannot recover this lost paragraph.
+const inconsistentNative={
+  text:"last and first\n日本語の文章",
+  blocks:[{lines:[{text:"first"},{text:"last"}]}],
+};
+assert.equal(composeRecognizedText(inconsistentNative),"first\nlast");
+const nativeDisagreement=extractNativeTextAlternative("japanese",inconsistentNative);
+assert.ok(nativeDisagreement);
+const edited= recoverNativeFullTextForReview(
+  "Қазақша мәтін\n\nfirst\nlast",
+  [{script:"japanese",text:composeRecognizedText(inconsistentNative)},
+   {script:"japanese",text:inconsistentNative.text}],
+  ["japanese"]);
+assert.ok(edited.includes("日本語の文章"));
+assert.ok(edited.includes("Қазақша мәтін"));
+assert.ok(edited.includes("first\nlast"));
+assert.equal(edited.match(/日本語の文章/g)?.length,1);
+console.log("Original native full readings survive disagreement with block-only OCR: passed.");
