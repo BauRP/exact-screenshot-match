@@ -323,11 +323,11 @@ const partialCyrillic: OcrCandidate = {
 };
 assert.equal(mergeOcrCandidates([partialCyrillic,completeMixedLine]),"Сәлем Hello");
 // Do not mistake matching text in separate columns or lines for duplicates.
-const secondColumn: OcrCandidate = {
+const separateEnglishColumn: OcrCandidate = {
   script:"latin",text:"Hello",
   lines:[{text:"Hello",script:"latin",left:.85,right:.98,top:.20,bottom:.27}]
 };
-assert.equal(mergeOcrCandidates([completeMixedLine,secondColumn]),"Сәлем Hello\nHello");
+assert.equal(mergeOcrCandidates([completeMixedLine,separateEnglishColumn]),"Сәлем Hello\nHello");
 const nextRow: OcrCandidate = {
   script:"latin",text:"Hello",
   lines:[{text:"Hello",script:"latin",left:.57,right:.81,top:.32,bottom:.39}]
