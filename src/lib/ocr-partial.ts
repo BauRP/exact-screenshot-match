@@ -1,7 +1,7 @@
 import type { OcrNativeTextAlternative } from "./ocr-text";
 import type { OcrScript } from "./ocr-merge";
 
-export type OcrReviewReason = "recovery" | "ambiguous-han" | "mixed-layout" | "limited-selection" | "native-text" | "large-layout" | "save-retry";
+export type OcrReviewReason = "recovery" | "ambiguous-han" | "mixed-layout" | "limited-selection" | "native-text" | "large-layout" | "save-retry" | "script-omission";
 
 export const OCR_SCRIPT_LABELS: Readonly<Record<OcrScript, string>> = {
   latin: "Латиница",
@@ -130,6 +130,9 @@ export function markRecoveredOcrText(
           : reason === "large-layout"
             ? "⚠️ На фотографии слишком много распознанных строк для надёжного объединения. " +
               "Сохранены варианты текста из найденных языков. Проверьте повторы и порядок строк.\n\n"
+            : reason === "script-omission"
+              ? "⚠️ В тексте найден короткий фрагмент другого языка без надёжного расположения. " +
+                "Он добавлен для проверки: сравните с фотографией и удалите повторы.\n\n"
       : "⚠️ Текст восстановлен несколькими проверками одной фотографии. " +
         "Проверьте порядок строк и исправьте возможные ошибки.\n\n";
   return warning + text;
@@ -260,4 +263,17 @@ export function previewHanAlternatives(
   if (!source || !Number.isInteger(limit) || limit < 1 || limit > 2000) return null;
   const preview = (value: string) => Array.from(value).slice(0,limit).join("");
   return {japanese:preview(source.japanese),chinese:preview(source.chinese)};
+}
+
+
+/** A plausible independent writing system was omitted by geometric fusion.
+ * Keep the original short reading and ask for explicit user correction.
+ */
+export class OcrOmittedScriptReviewError extends Error {
+  readonly recognizedText: string;
+  constructor(text: string) {
+    super("OCR_SCRIPT_OMISSION_REVIEW");
+    this.name="OcrOmittedScriptReviewError";
+    this.recognizedText=text;
+  }
 }

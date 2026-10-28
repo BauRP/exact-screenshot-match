@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrAmbiguousHanError, OcrMixedLayoutReviewError, OcrLargeLayoutReviewError, resumeOcrReviewDraft, recoverFromReviewedText, previewHanAlternatives } from "../src/lib/ocr-partial";
+import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrAmbiguousHanError, OcrMixedLayoutReviewError, OcrLargeLayoutReviewError, OcrOmittedScriptReviewError, resumeOcrReviewDraft, recoverFromReviewedText, previewHanAlternatives } from "../src/lib/ocr-partial";
 import { saveOcrNoteAndOpenEditor } from "../src/lib/ocr-save-flow";
 import { readPendingOcrDraft, savePendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "../src/lib/ocr-draft";
 const storage=new Map<string,string>();
@@ -277,3 +277,14 @@ assert.equal(readPendingOcrDraft(40001,{...draftStore,
 }),null);
 clearPendingOcrDraft(draftStore);
 console.log("Ambiguous Chinese/Japanese readings are bounded and survive offline restart: passed.");
+
+
+const omitted = new OcrOmittedScriptReviewError("Қазақша\n\nこんにちは");
+assert.equal(omitted.recognizedText,"Қазақша\n\nこんにちは");
+assert.ok(buildReviewedOcrText("Қазақша\n\nこんにちは",[],"script-omission")
+  .includes("короткий фрагмент другого языка"));
+assert.equal(savePendingOcrDraft({...draft,reason:"script-omission"},
+  50000,draftStore),true);
+assert.equal(readPendingOcrDraft(50001,draftStore)?.reason,"script-omission");
+clearPendingOcrDraft(draftStore);
+console.log("Short mixed-language OCR omissions remain reviewable after an offline restart: passed.");

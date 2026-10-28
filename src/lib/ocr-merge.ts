@@ -428,3 +428,57 @@ export function mergeOversizedOcrForReview(candidates: readonly OcrCandidate[]):
   }
   return parts.join("\n\n");
 }
+
+
+/**
+ * A short, clearly different alphabet can vanish when an OCR engine returns
+ * text without reliable coordinates. Prior fallbacks intentionally ignore
+ * short unlocated results to avoid duplicating whole pages, but this must
+ * not silently erase genuine mixed-script lines (e.g. a Korean title on a
+ * Kazakh receipt). Include the original reading for HUMAN REVIEW instead
+ * of certifying the merged page or trusting a language guess.
+ *
+ * Han is shared by Chinese and Japanese. Kana is Japanese-specific; Han-only
+ * candidates are labelled by script evidence, not by an invented language.
+ * Only one extra reading per missing writing system is preserved.
+ */
+export function restoreOmittedOcrScriptTextForReview(
+  merged: string, candidates: readonly OcrCandidate[],
+): string {
+  if (!merged.trim()) return merged;
+  type Signature = "latin" | "cyrillic" | "kana" | "han" | "hangul" | "devanagari";
+  const signatures: Record<Signature,RegExp> = {
+    latin:/\p{Script=Latin}/gu, cyrillic:/\p{Script=Cyrillic}/gu,
+    kana:/[\p{Script=Hiragana}\p{Script=Katakana}]/gu,
+    han:/\p{Script=Han}/gu, hangul:/\p{Script=Hangul}/gu,
+    devanagari:/\p{Script=Devanagari}/gu,
+  };
+  const minLetters: Record<Signature,number> = {
+    latin:8,cyrillic:5,kana:3,han:4,hangul:3,devanagari:3,
+  };
+  const signature = (script: OcrScript, value: string): Signature =>
+    script === "korean" ? "hangul" :
+    script === "japanese" ? ((value.match(signatures.kana) ?? []).length >= 3 ? "kana" : "han") :
+    script === "chinese" ? "han" : script;
+  let result = merged;
+  const added = new Set<Signature>();
+  for (const candidate of candidates) {
+    const text = candidate.text.trim();
+    if (!text || text.length > 100000) continue;
+    const kind = signature(candidate.script,text);
+    if (added.has(kind)) continue;
+    const matchCount = (text.match(signatures[kind]) ?? []).length;
+    const allLetters = (text.match(/\p{L}/gu) ?? []).length;
+    if (matchCount < minLetters[kind] ||
+        matchCount / Math.max(1,allLetters) < .65 ||
+        lineScore(text,candidate.script,undefined,candidate.confidence) < 50) continue;
+    // A model's own text may be a partial copy of a language that is already
+    // present. Adding it would duplicate paragraphs and receipts.
+    if ((result.match(signatures[kind]) ?? []).length >= minLetters[kind]) continue;
+    const normalized = (s:string) => s.normalize("NFC").replace(/\s+/gu,"").toLocaleLowerCase();
+    if (normalized(result).includes(normalized(text))) continue;
+    result += "\n\n" + text;
+    added.add(kind);
+  }
+  return result;
+}

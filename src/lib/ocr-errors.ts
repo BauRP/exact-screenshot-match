@@ -32,6 +32,9 @@ export function readableOcrFailure(error: unknown): string {
   if (error instanceof Error && error.message === "OCR_SCAN_BUSY") {
     return "Предыдущее сканирование ещё завершается. Повторите попытку после его окончания.";
   }
+  if (error instanceof Error && error.message === "OCR_SCRIPT_OMISSION_REVIEW") {
+    return "Обнаружена короткая надпись на другом языке, которая могла исчезнуть при объединении строк. Найденный фрагмент сохранён для проверки перед созданием заметки.";
+  }
   if (error instanceof Error && error.message === "OCR_LARGE_LAYOUT_REVIEW") {
     return "Обнаружен большой документ. Чтобы избежать зависания, результаты языковых моделей сохранены раздельно для проверки порядка строк.";
   }

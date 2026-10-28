@@ -10,7 +10,7 @@ import { chooseLocalOcrImagePath, reusableOcrImagePath } from "../src/lib/ocr-in
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "../src/lib/ocr-budget";
 import { isLocalOcrImagePath } from "../src/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "../src/lib/ocr-errors";
-import { lineScore, mergeOcrCandidates, exceedsOcrSpatialBudget, mergeOversizedOcrForReview, OCR_SPATIAL_LINE_LIMIT, hasAmbiguousHanCandidates, hasUncertainMixedScriptLayout, type OcrCandidate } from "../src/lib/ocr-merge";
+import { lineScore, mergeOcrCandidates, exceedsOcrSpatialBudget, mergeOversizedOcrForReview, restoreOmittedOcrScriptTextForReview, OCR_SPATIAL_LINE_LIMIT, hasAmbiguousHanCandidates, hasUncertainMixedScriptLayout, type OcrCandidate } from "../src/lib/ocr-merge";
 
 const line = (text: string, script: OcrCandidate["script"], top: number) =>
   ({ text, script, left: .1, top, right: .85, bottom: top + .04 });
@@ -708,3 +708,35 @@ for (const hinted of ["ja-JP","zh-CN","ko-KR","hi-IN","ru-RU","en-US"]) {
   assert.deepEqual(new Set(result),new Set(AUTO_SCAN_ORDER));
 }
 console.log("Native language hints prioritize offline models without dropping any scripts: passed.");
+
+
+// Previously, the full-text fallback could omit a SHORT independent alphabet
+// because its 24/30-character threshold is designed against hallucinations.
+const shortKazakh = {script:"cyrillic" as const,text:"Қазақ тіліндегі мәтін",
+  lines:[{script:"cyrillic" as const,text:"Қазақ тіліндегі мәтін",
+    left:.04,right:.92,top:.1,bottom:.16}]};
+const shortJapanese = {script:"japanese" as const,text:"こんにちは",lines:[]};
+const shortKorean = {script:"korean" as const,text:"한국어",lines:[]};
+const mergedShort = mergeOcrCandidates([shortKazakh,shortJapanese,shortKorean]);
+const reviewedShort = restoreOmittedOcrScriptTextForReview(
+  mergedShort,[shortKazakh,shortJapanese,shortKorean]);
+assert.ok(reviewedShort.includes("Қазақ тіліндегі мәтін"));
+assert.ok(reviewedShort.includes("こんにちは"));
+assert.ok(reviewedShort.includes("한국어"));
+assert.equal(reviewedShort.match(/こんにちは/gu)?.length,1);
+assert.equal(restoreOmittedOcrScriptTextForReview(
+  reviewedShort,[shortKazakh,shortJapanese,shortKorean]),reviewedShort);
+// Same-script noise, repeated existing paragraphs, numbers and short
+// Latin hallucinations must not generate extra review paragraphs.
+assert.equal(restoreOmittedOcrScriptTextForReview(
+  "Қазақ тіліндегі мәтін",[shortKazakh,{script:"latin",text:"abc",lines:[]}]),
+  "Қазақ тіліндегі мәтін");
+assert.equal(restoreOmittedOcrScriptTextForReview(
+  "学校",{length:0} as never),"学校");
+assert.equal(restoreOmittedOcrScriptTextForReview(
+  "日本語学校",[{script:"chinese",text:"中文测试文字",lines:[]}]),"日本語学校");
+assert.equal(restoreOmittedOcrScriptTextForReview(
+  "Привет",[{script:"devanagari",text:"नमस्ते हिन्दी",lines:[]}]),
+  "Привет\n\nनमस्ते हिन्दी");
+assert.equal(restoreOmittedOcrScriptTextForReview("",[shortJapanese]),"");
+console.log("Short independent language fragments survive multilingual fusion for review: passed.");
