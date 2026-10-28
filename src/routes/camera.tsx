@@ -238,10 +238,13 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       }
       const fullText = restoreOmittedOcrScriptTextForReview(text,results);
       if (fullText !== text) throw new OcrOmittedScriptReviewError(fullText);
+      // Give priority to presenting the recognizer's own full-text reading
+      // when its geometry omitted paragraphs. Otherwise an independent
+      // mixed-layout warning would hide these concrete comparison excerpts.
+      if (text && nativeAlternatives.length) throw new OcrNativeTextReviewError(text,nativeAlternatives);
       if (scanPlan.length > 1 && text && hasUncertainMixedScriptLayout(results)) {
         throw new OcrMixedLayoutReviewError(text);
       }
-      if (text && nativeAlternatives.length) throw new OcrNativeTextReviewError(text,nativeAlternatives);
       if (text && Array.isArray(mode) && scanPlan.length < AUTO_SCAN_ORDER.length) {
         throw new OcrLimitedSelectionReviewError(text);
       }

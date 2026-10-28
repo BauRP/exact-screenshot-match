@@ -539,6 +539,17 @@ assert.equal(hasConflictingNativeOcrText({text:"日本語学校",blocks:[
 assert.equal(hasConflictingNativeOcrText({text:"日本語学校 大阪",blocks:[
   {lines:[{text:"日本語学校"}]}
 ]}),false);
+assert.equal(hasConflictingNativeOcrText({
+  text:"Қазақ тіліндегі мәтін\n日本語の文章",
+  blocks:[{lines:[{text:"Қазақ тіліндегі мәтін"}]}],
+}),true);
+assert.equal(hasConflictingNativeOcrText({
+  text:"The complete scanned document",
+  blocks:[{lines:[{text:"The complete"}]}],
+}),true);
+assert.equal(hasConflictingNativeOcrText({
+  text:"Платёж 2026 №7",blocks:[{lines:[{text:"Платёж 2026"}]}],
+}),false);
 assert.equal(hasConflictingNativeOcrText({text:"日本語学校",blocks:[
   {lines:[{text:"日本語学枚"}]}
 ]}),true);
@@ -781,3 +792,20 @@ assert.equal(restoreOmittedOcrScriptTextForReview(
   "한국어 문서",[{script:"japanese",text:"あああ".repeat(8),lines:[]}]),
   "한국어 문서\n\n"+"あああ".repeat(8));
 console.log("Japanese mixed Kana/Kanji review preserves meaningful short passages: passed.");
+
+
+// A native recognizer's complete reading may contain another paragraph even
+// when the geometric block/line iterator only provides a partial page.
+// Keep both originals accessible for correction before saving.
+const incompleteNativeBlocks = {
+ text:"Қазақша мәтін\n日本語の文章",
+ blocks:[{lines:[{text:"Қазақша мәтін"}]}],
+};
+const incompleteNativeComparison=extractNativeTextAlternative("japanese",incompleteNativeBlocks);
+assert.equal(incompleteNativeComparison?.complete,"Қазақша мәтін\n日本語の文章");
+assert.equal(incompleteNativeComparison?.lines,"Қазақша мәтін");
+assert.equal(composeRecognizedText(incompleteNativeBlocks),"Қазақша мәтін\n日本語の文章");
+assert.equal(extractNativeTextAlternative("latin",{
+  text:"Hello world!",blocks:[{lines:[{text:"Hello world"}]}],
+}),null);
+console.log("Complete OCR readings with unlocated paragraphs require manual review: passed.");

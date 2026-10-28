@@ -50,8 +50,9 @@ export function composeRecognizedText(result: TextScanResult): string {
  * ML Kit can report a different full-text string from the text represented
  * by its block/line iterator. A silent choice would risk changing glyphs or
  * losing paragraphs. Differences in whitespace/normalization alone are OK.
- * If one text is simply a longer complete version, preserve the existing
- * fallback behaviour; only conflicting textual content requests review.
+ * A longer full-text result is used by the native composer, but the later
+ * geometric merger can still discard the unlocated remainder. Request review
+ * for substantial missing content as well as conflicting glyph readings.
  */
 export function hasConflictingNativeOcrText(result: TextScanResult): boolean {
   const full = (result.text ?? "").normalize("NFC").replace(/\s+/gu,"");
@@ -59,10 +60,17 @@ export function hasConflictingNativeOcrText(result: TextScanResult): boolean {
     .map(line => (line.text ?? "").trim()).filter(Boolean);
   if (!full || !blocks.length) return false;
   const combined = blocks.join("").normalize("NFC").replace(/\s+/gu,"");
-  if (!combined || full === combined || full.includes(combined) ||
-      combined.includes(full)) return false;
-  // One- or two-character mismatches are ambiguous, but a three- to five-
-  // character Japanese/Korean/Kazakh name is meaningful and must be reviewable.
+  if (!combined || full === combined || combined.includes(full)) return false;
+  // The complete native text may contain whole paragraphs missing from its
+  // line iterator. Geometric fusion then discards those paragraphs even though
+  // the recognizer did read them. The 3-codepoint floor excludes a punctuation
+  // mark or isolated price digit; preserve substantial additions for review.
+  if (full.includes(combined)) {
+    return Array.from(full).length - Array.from(combined).length >= 3 &&
+      Array.from(combined).length >= 3;
+  }
+  // Genuine glyph disagreements need manual review too. Tiny 1-2 character
+  // fragments cannot be confidently cross-checked against page geometry.
   if (Array.from(full).length < 3 || Array.from(combined).length < 3) return false;
   return true;
 }
