@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { OcrIncompleteScanError, markIncompleteOcrText } from "../src/lib/ocr-partial";
+import { OcrIncompleteScanError, markIncompleteOcrText, combineRecoveredOcrText } from "../src/lib/ocr-partial";
 import { saveOcrNoteAndOpenEditor } from "../src/lib/ocr-save-flow";
 const storage=new Map<string,string>();
 Object.defineProperty(globalThis,"window",{configurable:true,value:{localStorage:{
@@ -21,3 +21,12 @@ assert.equal(opened,1);
 assert.equal(JSON.parse(storage.get("sn.notes.v1")??"[]").length,1);
 assert.ok(getNote(id)?.title.startsWith("⚠️ Неполное распознавание"));
 console.log("Incomplete OCR explicitly saved with permanent warning and no duplicates: passed.");
+
+// Reprocessing the same photograph must not erase Cyrillic text already found.
+const original = "Қазақ тілі\n中文";
+assert.equal(combineRecoveredOcrText(original, "日本語\n中文"), "Қазақ тілі\n中文\n\n日本語");
+assert.equal(combineRecoveredOcrText(original, "中文"), original);
+assert.equal(combineRecoveredOcrText(original, ""), original);
+assert.equal(combineRecoveredOcrText("", "日本語"), "日本語");
+assert.equal(combineRecoveredOcrText(original, "  中文  \n日本語"), "Қазақ тілі\n中文\n\n日本語");
+console.log("Same-photo manual recovery retains existing scripts without identical-line duplication: passed.");
