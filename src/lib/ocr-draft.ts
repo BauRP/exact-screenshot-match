@@ -9,6 +9,9 @@ const KEY = "wave.ocr.pending-draft.v1";
 const VERSION = 1;
 const MAX_CHARS = 100_000;
 const MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+// Both 100k-character text fields plus up to six pairs of 2k-char
+// native alternatives. JSON escaping can expand strings significantly.
+const MAX_SERIALIZED_DRAFT_CHARS = 6 * MAX_CHARS + 32_000;
 const REASONS: readonly OcrReviewReason[] = ["recovery","ambiguous-han","mixed-layout","limited-selection","native-text","large-layout"];
 type Store = Pick<Storage,"getItem"|"setItem"|"removeItem">;
 export type OcrLocalDraft = {
@@ -59,7 +62,7 @@ export function readPendingOcrDraft(
   if (!store || !Number.isFinite(now)) return null;
   try {
     const raw=store.getItem(KEY);
-    if (!raw || raw.length > MAX_CHARS * 2 + 4000) return null;
+    if (!raw || raw.length > MAX_SERIALIZED_DRAFT_CHARS) return null;
     const value: unknown=JSON.parse(raw);
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;
     const v=value as Record<string,unknown>;
@@ -105,7 +108,17 @@ export function shouldClearPendingDraft(action:
  */
 export class OcrDraftWriteGate {
   private active = false;
-  arm(): void { this.active = true; }
-  disarm(): void { this.active = false; }
+  private generation = 0;
+  arm(): number {
+    // Every new OCR result is a new logical draft. Even if an old timer
+    // runs after disarm()+arm(), its original generation is obsolete.
+    this.active = true;
+    return ++this.generation;
+  }
+  disarm(): void { this.active = false; ++this.generation; }
   get canWrite(): boolean { return this.active; }
+  get token(): number { return this.generation; }
+  canWriteToken(token: number): boolean {
+    return this.active && this.generation === token;
+  }
 }

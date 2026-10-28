@@ -205,3 +205,38 @@ assert.equal(savePendingOcrDraft({...draft,nativeAlternatives:[{
 }]},30000,draftStore),false);
 clearPendingOcrDraft(draftStore);
 console.log("Different native readings remain locally available across cold restarts: passed.");
+
+
+// The old 2*100k+4k serialized-size limit rejected VALID long drafts
+// once six bounded native alternative pairs were attached. Ensure the
+// full permitted payload can be restored after a cold app restart.
+const longDraft = {
+  text:"Қ".repeat(90000),reviewedText:"Ж".repeat(90000),
+  edited:true,missingScripts:["japanese" as const],reason:"native-text" as const,
+  nativeAlternatives:([
+    "latin","cyrillic","japanese","chinese","korean","devanagari"
+  ] as const).map(script=>({
+    script,complete:"日本".repeat(1000),lines:"中文".repeat(1000),
+  })),
+};
+assert.equal(savePendingOcrDraft(longDraft,31000,draftStore),true);
+const serializedLarge = [...draftData.values()][0];
+assert.ok(serializedLarge.length > 204000);
+assert.equal(readPendingOcrDraft(31001,draftStore)?.text.length,90000);
+assert.equal(readPendingOcrDraft(31001,draftStore)?.nativeAlternatives?.length,6);
+clearPendingOcrDraft(draftStore);
+
+// The write gate must reject delayed callbacks from *older* scans even if a
+// new scan has already armed the gate.
+const epochGate = new OcrDraftWriteGate();
+const firstEpoch=epochGate.arm();
+assert.equal(epochGate.canWriteToken(firstEpoch),true);
+epochGate.disarm();
+const secondEpoch=epochGate.arm();
+assert.equal(epochGate.canWriteToken(firstEpoch),false);
+assert.equal(epochGate.canWriteToken(secondEpoch),true);
+epochGate.arm();
+assert.equal(epochGate.canWriteToken(secondEpoch),false);
+epochGate.disarm();
+assert.equal(epochGate.canWrite,false);
+console.log("Large multilingual drafts survive restart and stale autosaves cannot overwrite newer scans: passed.");

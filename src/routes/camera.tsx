@@ -323,8 +323,9 @@ function CameraPage() {
 
   useEffect(() => {
     if (!partialOcrText || savedNoteId || !draftGateRef.current.canWrite) return;
+    const generation = draftGateRef.current.token;
     const id = window.setTimeout(() => {
-      if (!draftGateRef.current.canWrite) return;
+      if (!draftGateRef.current.canWriteToken(generation)) return;
       const current = latestReviewRef.current;
       savePendingOcrDraft({text:partialOcrText,
         reviewedText:current.edited ? current.text : partialOcrText,
