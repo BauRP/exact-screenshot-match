@@ -343,4 +343,32 @@ const receiptLong: OcrCandidate = {
   lines:[{text:"70",script:"latin",left:.40,right:.55,top:.50,bottom:.54}]
 };
 assert.equal(mergeOcrCandidates([receiptShort,receiptLong]),"70\n7");
+// Two located scripts plus a third spatially unlocated script must not
+// lose an entire recognized paragraph (nor append duplicated page text).
+const twoLocated: OcrCandidate[] = [
+  {script:"cyrillic",text:"Қазақ тілі",lines:[line("Қазақ тілі","cyrillic",.12)]},
+  {script:"korean",text:"한국어 문장",lines:[line("한국어 문장","korean",.35)]},
+];
+const longEnglish: OcrCandidate = {script:"latin",
+  text:"Complete English instructions printed at the bottom",lines:[]};
+assert.equal(mergeOcrCandidates([...twoLocated,longEnglish]),
+  "Қазақ тілі\n\n한국어 문장\n\nComplete English instructions printed at the bottom");
+assert.equal(mergeOcrCandidates([longEnglish,...twoLocated]),
+  "Қазақ тілі\n\n한국어 문장\n\nComplete English instructions printed at the bottom");
+assert.equal(mergeOcrCandidates([...twoLocated,longEnglish,longEnglish]),
+  "Қазақ тілі\n\n한국어 문장\n\nComplete English instructions printed at the bottom");
+const irrelevantLatin: OcrCandidate={script:"latin",text:"Hello",lines:[]};
+assert.equal(mergeOcrCandidates([...twoLocated,irrelevantLatin]),
+  "Қазақ тілі\n\n한국어 문장");
+const locatedLatin: OcrCandidate={script:"latin",text:"Saved English section",
+  lines:[line("Saved English section","latin",.64)]};
+assert.equal(mergeOcrCandidates([...twoLocated,locatedLatin,longEnglish]),
+  "Қазақ тілі\n\n한국어 문장\n\nSaved English section");
+// Distinct Chinese/Japanese Han-only blocks should NOT be added as duplicate.
+const japaneseLocated: OcrCandidate = {script:"japanese",text:"日本語の文章",
+  lines:[line("日本語の文章","japanese",.61)]};
+const chineseUnknown: OcrCandidate = {script:"chinese",
+  text:"中文汉字的完整一段话中文汉字的完整一段话中文汉字",lines:[]};
+assert.equal(mergeOcrCandidates([...twoLocated,japaneseLocated,chineseUnknown]),
+  "Қазақ тілі\n\n한국어 문장\n\n日本語の文章");
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");

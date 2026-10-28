@@ -241,7 +241,30 @@ export function mergeOcrCandidates(candidates: OcrCandidate[]): string {
     }
     result.push(current.text.trimEnd());
   }
-  return result.join("\n").trim();
+  // A third script might have NO coordinates at all (e.g. an Asian ML Kit
+  // model on a mixed-language document). Do not discard its entire paragraph.
+  // Only retain a substantial independent alphabet not already represented
+  // among the spatially verified lines, without pretending to know its layout.
+  const locatedScripts = new Set(selected.map(line => line.script));
+  const extraScripts = new Set<OcrScript>();
+  const extra: string[] = [];
+  const locatedWords = normalize(result.join(" "));
+  for (const { candidate, score } of unlocated) {
+    if (score < 58 || candidate.text.trim().length < 30 ||
+        locatedScripts.has(candidate.script) || extraScripts.has(candidate.script)) continue;
+    // Han-only Chinese/Japanese is ambiguous: preserve spatial content, do
+    // not invent a second translated-looking paragraph from the same glyphs.
+    if ((candidate.script === "chinese" && locatedScripts.has("japanese")) ||
+        (candidate.script === "japanese" && locatedScripts.has("chinese"))) continue;
+    const ownLetters = (candidate.text.match(MATCH[candidate.script]) ?? []).length;
+    const totalLetters = (candidate.text.match(/\p{L}/gu) ?? []).length;
+    if (ownLetters < 8 || ownLetters / Math.max(1,totalLetters) < .7) continue;
+    if (locatedWords.includes(normalize(candidate.text))) continue;
+    extra.push(candidate.text.trim());
+    extraScripts.add(candidate.script);
+  }
+  const spatial = result.join("\n").trim();
+  return extra.length ? [spatial, ...extra].join("\n\n") : spatial;
 }
 
 export function hasStrongText(candidates: OcrCandidate[]): boolean {

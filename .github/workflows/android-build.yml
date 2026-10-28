@@ -63,6 +63,9 @@ jobs:
       - name: Verify OCR selection and mixed-language safeguards
         run: bun scripts/test-ocr-logic.ts
 
+      - name: Verify multilingual OCR line-merging matrix
+        run: bun scripts/test-ocr-merge-matrix.ts
+
       - name: Verify OCR note storage and error handling
         run: bun scripts/test-ocr-persistence.ts
 
