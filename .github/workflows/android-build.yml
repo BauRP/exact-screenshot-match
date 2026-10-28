@@ -40,6 +40,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            android-overlay/app/build.gradle
+            android-overlay/variables.gradle
 
       - name: Setup Android SDK 36
         uses: android-actions/setup-android@v3
@@ -86,6 +90,12 @@ jobs:
 
       - name: Verify complete OCR-to-note handoff
         run: bun scripts/test-ocr-pipeline.ts
+
+      - name: Cache verified build-time OCR language files
+        uses: actions/cache@v4
+        with:
+          path: android-overlay/app/src/main/assets/tessdata
+          key: supernotes-tessdata-87416418657359cb625c412a48b6e1d6d41c29bd-git-verified
 
       - name: Prepare bundled offline OCR models
         run: bash scripts/prepare-ocr-models.sh
@@ -135,6 +145,10 @@ jobs:
           unzip -l output/SuperNotes-debug.apk | grep -F 'assets/tessdata/kaz.traineddata'
           unzip -l output/SuperNotes-debug.apk | grep -F 'assets/public/index.html'
           ls -lh output/SuperNotes-debug.apk
+          sha256sum output/SuperNotes-debug.apk | tee output/SuperNotes-debug.apk.sha256
+          echo "## Проверка APK" >> "$GITHUB_STEP_SUMMARY"
+          echo "Source commit: \`$GITHUB_SHA\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "SHA-256: \`$(cut -d' ' -f1 output/SuperNotes-debug.apk.sha256)\`" >> "$GITHUB_STEP_SUMMARY"
 
       # No actions/upload-artifact: keeps GitHub Actions artifact storage unused.
       # The app is published as ONE replaceable GitHub Release asset instead.

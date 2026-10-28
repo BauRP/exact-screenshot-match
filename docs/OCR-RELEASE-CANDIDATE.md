@@ -30,3 +30,10 @@ This document distinguishes a buildable test APK from an approved public release
 - **Public/Play release:** not approved until on-device checks above have recorded results.
 
 Automated test success alone cannot prove accuracy on real photos or reliability across physical devices. Do not increase completion percentages just because more tests were added.
+
+## Faster, stricter CI
+
+- The pinned model SHA hashes are verified before use; build jobs now reuse cached files and never download languages at application runtime. A corrupted cache entry is rejected and replaced atomically.
+- Android/Gradle caches are reused across successful GitHub Actions runs, which can reduce repeated compilation time; actual speed depends on cache hits.
+- Changes to OCR TypeScript, camera route, or note persistence now trigger the two-version Android emulator matrix, avoiding silently untested OCR changes.
+- Every published debug APK logs its source commit and SHA-256 checksum in the workflow summary.

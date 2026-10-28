@@ -13,6 +13,14 @@ on:
       - '.github/workflows/android-ocr-emulator.yml'
       - 'android-overlay/app/src/main/java/app/lovable/supernotes/OfflineCyrillicOcrPlugin.java'
       - 'scripts/prepare-ocr-models.sh'
+      # OCR web changes must also be checked in a real Android emulator.
+      - 'src/lib/ocr-*.ts'
+      - 'src/routes/camera.tsx'
+      - 'src/lib/notes-store.ts'
+      - 'scripts/test-ocr-*.ts'
+      - 'package.json'
+      - 'bun.lock'
+      - 'android-overlay/app/src/main/AndroidManifest.xml'
 
 permissions:
   contents: read
@@ -47,6 +55,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            android-overlay/app/build.gradle
+            android-overlay/variables.gradle
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -62,6 +74,12 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           ls -l /dev/kvm
+
+      - name: Cache verified build-time OCR language files
+        uses: actions/cache@v4
+        with:
+          path: android-overlay/app/src/main/assets/tessdata
+          key: supernotes-tessdata-87416418657359cb625c412a48b6e1d6d41c29bd-git-verified
 
       - name: Generate Android app with bundled OCR models
         run: |
