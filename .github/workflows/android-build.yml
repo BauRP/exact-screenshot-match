@@ -91,6 +91,9 @@ jobs:
       - name: Verify complete OCR-to-note handoff
         run: bun scripts/test-ocr-pipeline.ts
 
+      - name: Verify safe partial OCR note recovery
+        run: bun scripts/test-ocr-partial.ts
+
       - name: Cache verified build-time OCR language files
         uses: actions/cache@v4
         with:

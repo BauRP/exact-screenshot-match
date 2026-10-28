@@ -41,3 +41,6 @@ Automated test success alone cannot prove accuracy on real photos or reliability
 ## Bundled model integrity
 
 The APK contains pinned `rus` and `kaz` assets. On Android the first copy to app-private storage and all existing copies are checked against the exact build-pinned Git-blob content hash, not only the byte size. Corrupt copies are restored from the APK itself without an internet download. Android instrumentation includes same-size corruption tests on both supported emulator versions. This verifies Cyrillic model integrity, not recognition accuracy on real photos.
+
+**User-consented incomplete results:** a partial multilingual OCR result is not saved automatically; the camera screen offers an explicit action to save available text with a persistent warning in its note. CI exercises the real storage and navigation handoff for the incomplete case.
+**Native compressed JPEG:** all five bundled ML Kit text recognizers now have Android instrumented compressed-JPEG test cases (Latin, Korean, Chinese, Japanese and Devanagari). Offline emulators test model execution, not quality on physical camera photos.

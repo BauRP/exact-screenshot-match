@@ -79,6 +79,24 @@ public class BundledMlKitInstrumentedTest {
             TextRecognition.getClient(new KoreanTextRecognizerOptions.Builder().build()));
     }
 
+    @Test
+    public void compressedJpegChineseModelWorksOffline() throws Exception {
+        verifyCompressedPhoto("中文测试文字", Character.UnicodeScript.HAN,
+            TextRecognition.getClient(new ChineseTextRecognizerOptions.Builder().build()));
+    }
+
+    @Test
+    public void compressedJpegJapaneseModelWorksOffline() throws Exception {
+        verifyCompressedPhoto("こんにちは日本語", Character.UnicodeScript.HIRAGANA,
+            TextRecognition.getClient(new JapaneseTextRecognizerOptions.Builder().build()));
+    }
+
+    @Test
+    public void compressedJpegDevanagariModelWorksOffline() throws Exception {
+        verifyCompressedPhoto("नमस्ते हिन्दी", Character.UnicodeScript.DEVANAGARI,
+            TextRecognition.getClient(new DevanagariTextRecognizerOptions.Builder().build()));
+    }
+
     private static void verifyCompressedPhoto(
             String sample, Character.UnicodeScript expectedScript, TextRecognizer recognizer)
             throws Exception {
