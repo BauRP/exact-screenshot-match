@@ -78,3 +78,14 @@ export function shouldClearPendingDraft(action:
   "picker-open" | "picker-cancel" | "scan-failed" | "note-saved" | "discard"): boolean {
   return action === "note-saved" || action === "discard";
 }
+
+
+/** Delayed WebView draft writes cannot resurrect an already saved or
+ * explicitly discarded draft. A new result must explicitly arm the gate.
+ */
+export class OcrDraftWriteGate {
+  private active = false;
+  arm(): void { this.active = true; }
+  disarm(): void { this.active = false; }
+  get canWrite(): boolean { return this.active; }
+}

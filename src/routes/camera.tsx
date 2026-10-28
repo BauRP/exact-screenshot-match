@@ -14,7 +14,7 @@ import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
 import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, type OcrReviewReason, OcrMixedLayoutReviewError, resumeOcrReviewDraft, hanAlternativesFromCandidates, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
-import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft } from "@/lib/ocr-draft";
+import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText } from "@/lib/ocr-text";
 import { ocrScanPlan, selectedOcrScanPlan, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, type OcrMode, type OcrScanRequest } from "@/lib/ocr-plan";
@@ -273,6 +273,8 @@ function CameraPage() {
   const [hanAlternatives, setHanAlternatives] = useState<OcrHanAlternatives | null>(null);
   const [reviewReason, setReviewReason] = useState<OcrReviewReason>("recovery");
   const pendingRecoveryRef = useRef<OcrRecoveryState | null>(null);
+  const draftGateRef = useRef(new OcrDraftWriteGate());
+  const latestReviewRef = useRef({text:"",edited:false});
   const [partialMissingScripts, setPartialMissingScripts] = useState<readonly OcrScript[]>([]);
   const [retryImagePath, setRetryImagePath] = useState<string | null>(null);
   const [ocrMode, setOcrMode] = useState<OcrMode>("auto");
@@ -284,6 +286,8 @@ function CameraPage() {
     mountedRef.current = true;
     const previous = readPendingOcrDraft();
     if (previous) {
+      draftGateRef.current.arm();
+      latestReviewRef.current = {text:previous.reviewedText,edited:previous.edited};
       setPartialOcrText(previous.text);
       setPartialMissingScripts(previous.missingScripts);
       setReviewReason(previous.reason);
@@ -301,23 +305,39 @@ function CameraPage() {
   }, []);
 
   useEffect(() => {
-    if (!partialOcrText || savedNoteId) return;
+    if (!partialOcrText || savedNoteId || !draftGateRef.current.canWrite) return;
     const id = window.setTimeout(() => {
+      if (!draftGateRef.current.canWrite) return;
+      const current = latestReviewRef.current;
       savePendingOcrDraft({text:partialOcrText,
-        reviewedText:reviewEdited ? reviewDraft : partialOcrText,
-        edited:reviewEdited, missingScripts:[...partialMissingScripts], reason:reviewReason});
+        reviewedText:current.edited ? current.text : partialOcrText,
+        edited:current.edited, missingScripts:[...partialMissingScripts], reason:reviewReason});
     },reviewEdited ? 350 : 0);
     return () => window.clearTimeout(id);
   },[partialOcrText,reviewDraft,reviewEdited,partialMissingScripts,reviewReason,savedNoteId]);
 
   const persistDraft = () => {
-    if (partialOcrText) savePendingOcrDraft({text:partialOcrText,
-      reviewedText:reviewEdited ? reviewDraft : partialOcrText,
-      edited:reviewEdited, missingScripts:[...partialMissingScripts], reason:reviewReason});
+    if (!partialOcrText || !draftGateRef.current.canWrite) return;
+    const current = latestReviewRef.current;
+    savePendingOcrDraft({text:partialOcrText,
+      reviewedText:current.edited ? current.text : partialOcrText,
+      edited:current.edited, missingScripts:[...partialMissingScripts], reason:reviewReason});
+  };
+  const retainUnfinishedResult = (state: OcrRecoveryState, reason: OcrReviewReason = "recovery") => {
+    draftGateRef.current.arm();
+    latestReviewRef.current = {text:state.text,edited:false};
+    savePendingOcrDraft({
+      text:state.text,reviewedText:state.text,edited:false,
+      missingScripts:[...state.missingScripts],reason,
+    });
+  };
+  const markDraftFinished = () => {
+    draftGateRef.current.disarm();
+    clearPendingOcrDraft();
   };
   const discardDraft = () => {
     if (inFlightRef.current) return;
-    if (shouldClearPendingDraft("discard")) clearPendingOcrDraft();
+    if (shouldClearPendingDraft("discard")) markDraftFinished();
     pendingRecoveryRef.current = null;
     setPartialOcrText(null);
     setPartialMissingScripts([]);
@@ -393,6 +413,7 @@ function CameraPage() {
     setError(null);
     setSavedNoteId(null);
     if (!previousPhotoPath) {
+      draftGateRef.current.disarm();
       // Starting a photo picker is not permission to erase a review draft.
       if (shouldClearPendingDraft("picker-open")) clearPendingOcrDraft();
       setRestoredDraft(false);
@@ -437,6 +458,7 @@ function CameraPage() {
         pendingRecoveryRef.current = updated;
         setPartialOcrText(updated.text);
         setPartialMissingScripts(updated.missingScripts);
+        retainUnfinishedResult(updated);
         // The order across independent OCR passes is not reliable enough for
         // an automatic save. Let the user explicitly confirm the result.
         handleFailure(updated.missingScripts.length
@@ -451,7 +473,7 @@ function CameraPage() {
       }
       setOcrStage("Сохранение заметки");
       await finishWithText(text);
-      if (shouldClearPendingDraft("note-saved")) clearPendingOcrDraft();
+      if (shouldClearPendingDraft("note-saved")) markDraftFinished();
     } catch (caught) {
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
       if (isCameraCancellation(caught)) {
@@ -471,8 +493,9 @@ function CameraPage() {
         setReviewReason(caught instanceof OcrAmbiguousHanError ? "ambiguous-han" : "mixed-layout");
         setHanAlternatives(caught instanceof OcrAmbiguousHanError ? caught.alternatives : null);
         setReviewEdited(false);
+        retainUnfinishedResult(combined, caught instanceof OcrAmbiguousHanError ? "ambiguous-han" : "mixed-layout");
       }
-      if (caught instanceof OcrEditorNavigationError) clearPendingOcrDraft();
+      if (caught instanceof OcrEditorNavigationError) markDraftFinished();
       if (caught instanceof OcrIncompleteScanError) {
         const recovery = pendingRecoveryRef.current;
         const updated: OcrRecoveryState = previousPhotoPath && recovery?.path === previousPhotoPath
@@ -483,6 +506,7 @@ function CameraPage() {
         setPartialMissingScripts(updated.missingScripts);
         setHanAlternatives(null);
         setReviewEdited(false);
+        retainUnfinishedResult(updated);
       }
       handleFailure(readableOcrFailure(caught), operationId,
         caught instanceof OcrEditorNavigationError ? caught.savedNoteId : undefined,
@@ -571,7 +595,10 @@ function CameraPage() {
 
   const showReview = () => {
     if (!partialOcrText || inFlightRef.current) return;
-    setReviewDraft(previous => resumeOcrReviewDraft(partialOcrText,previous,reviewEdited));
+    const current = latestReviewRef.current;
+    const restored = resumeOcrReviewDraft(partialOcrText,current.text,current.edited);
+    latestReviewRef.current = {text:restored,edited:current.edited};
+    setReviewDraft(restored);
     setModalOpen(false);
     setReviewOpen(true);
   };
@@ -583,7 +610,7 @@ function CameraPage() {
     setStatus("preparing");
     try {
       await finishWithText(buildReviewedOcrText(reviewDraft, partialMissingScripts, reviewReason));
-      if (shouldClearPendingDraft("note-saved")) clearPendingOcrDraft();
+      if (shouldClearPendingDraft("note-saved")) markDraftFinished();
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
       setReviewOpen(false);
       setReviewEdited(false);
@@ -595,7 +622,7 @@ function CameraPage() {
       setError(message);
       setSavedNoteId(caught instanceof OcrEditorNavigationError ? caught.savedNoteId : null);
       if (caught instanceof OcrEditorNavigationError) {
-        clearPendingOcrDraft();
+        markDraftFinished();
         setReviewOpen(false);
         setPartialOcrText(null);
         setPartialMissingScripts([]);
@@ -776,7 +803,11 @@ function CameraPage() {
             id="ocr-review-text"
             aria-label="Исправление распознанного текста"
             value={reviewDraft}
-            onChange={event => { setReviewDraft(event.target.value); setReviewEdited(true); }}
+            onChange={event => {
+              latestReviewRef.current = {text:event.target.value,edited:true};
+              setReviewDraft(event.target.value);
+              setReviewEdited(true);
+            }}
             onBlur={persistDraft}
             spellCheck={false}
             disabled={busy}

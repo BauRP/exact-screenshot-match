@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrAmbiguousHanError, OcrMixedLayoutReviewError, resumeOcrReviewDraft } from "../src/lib/ocr-partial";
 import { saveOcrNoteAndOpenEditor } from "../src/lib/ocr-save-flow";
-import { readPendingOcrDraft, savePendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft } from "../src/lib/ocr-draft";
+import { readPendingOcrDraft, savePendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "../src/lib/ocr-draft";
 const storage=new Map<string,string>();
 Object.defineProperty(globalThis,"window",{configurable:true,value:{localStorage:{
  getItem(key:string){return storage.get(key)??null;},
@@ -134,3 +134,22 @@ assert.equal(shouldClearPendingDraft("scan-failed"),false);
 assert.equal(shouldClearPendingDraft("note-saved"),true);
 assert.equal(shouldClearPendingDraft("discard"),true);
 console.log("Canceled picker and failed OCR cannot erase an unsaved review draft: passed.");
+
+
+// Out-of-order debounced writes cannot bring back a deleted/saved note draft.
+const gate = new OcrDraftWriteGate();
+assert.equal(gate.canWrite,false);
+gate.arm();
+assert.equal(gate.canWrite,true);
+let oldWrite=()=>{if(gate.canWrite) savePendingOcrDraft(draft,15000,draftStore);};
+oldWrite();
+assert.ok(readPendingOcrDraft(15000,draftStore));
+gate.disarm();
+clearPendingOcrDraft(draftStore);
+oldWrite(); // late callback from a closed review
+assert.equal(readPendingOcrDraft(15000,draftStore),null);
+gate.arm();
+assert.equal(gate.canWrite,true);
+gate.disarm();
+assert.equal(gate.canWrite,false);
+console.log("OCR debounced draft gate prevents post-save resurrection: passed.");
