@@ -39,19 +39,37 @@ export function markIncompleteOcrText(
  * the combined result marked incomplete until the user reviews it.
  */
 export function combineRecoveredOcrText(partial: string, recovered: string): string {
-  const first = partial.replace(/\r\n?|\u2028|\u2029/gu, "\n").trim();
-  const second = recovered.replace(/\r\n?|\u2028|\u2029/gu, "\n").trim();
-  if (!first) return second;
-  if (!second) return first;
-  const comparable = (line: string) => line.normalize("NFKC")
+  const normalizeLines = (value: string) => value
+    .replace(/\r\n?|\u2028|\u2029/gu, "\n").replace(/^\n+|\n+$/gu, "");
+  const first = normalizeLines(partial);
+  const second = normalizeLines(recovered);
+  if (!first.trim()) return second;
+  if (!second.trim()) return first;
+
+  // Compare lines without altering the actual document. NFC keeps Chinese /
+  // Japanese compatibility glyphs distinct; whitespace and case differences
+  // are tolerated only for duplicate detection.
+  const comparable = (line: string) => line.normalize("NFC")
     .replace(/\s+/gu, " ").trim().toLocaleLowerCase();
-  const known = new Set(first.split("\n").map(comparable).filter(Boolean));
+  const counts = (text: string) => {
+    const result = new Map<string, number>();
+    for (const line of text.split("\n")) {
+      const key = comparable(line);
+      if (key) result.set(key, (result.get(key) ?? 0) + 1);
+    }
+    return result;
+  };
+  const previouslySeen = counts(first);
+  const recoveredSeen = new Map<string, number>();
   const added: string[] = [];
   for (const line of second.split("\n")) {
     const key = comparable(line);
-    if (!key || known.has(key)) continue;
-    known.add(key);
-    added.push(line.trimEnd());
+    if (!key) continue;
+    const occurrence = (recoveredSeen.get(key) ?? 0) + 1;
+    recoveredSeen.set(key, occurrence);
+    // Never eliminate legitimate repeated labels, prices or paragraphs.
+    // Only suppress as many copies as the earlier OCR pass already contains.
+    if (occurrence > (previouslySeen.get(key) ?? 0)) added.push(line);
   }
   return added.length ? first + "\n\n" + added.join("\n") : first;
 }
@@ -72,6 +90,8 @@ export function applyRecoveredOcrPass(
   failed: readonly OcrScript[] = [],
 ): OcrRecoveryState {
   if (!previous.path || !attempted.length ||
+      new Set(attempted).size !== attempted.length ||
+      new Set(failed).size !== failed.length ||
       attempted.some(script => !OCR_SCRIPT_LABELS[script]) ||
       failed.some(script => !attempted.includes(script))) {
     throw new Error("Invalid OCR recovery pass");
@@ -85,8 +105,23 @@ export function applyRecoveredOcrPass(
 }
 
 /** Even when every retry succeeded, multi-pass text has unknown global order. */
-export function markRecoveredOcrText(text: string): string {
+export function markRecoveredOcrText(
+  text: string, reason: "recovery" | "ambiguous-han" = "recovery",
+): string {
   if (!text.trim()) throw new Error("OCR_EMPTY_TEXT");
-  return "⚠️ Текст восстановлен несколькими проверками одной фотографии. " +
-    "Проверьте порядок строк и исправьте возможные ошибки.\n\n" + text;
+  const warning = reason === "ambiguous-han"
+    ? "⚠️ Китайский и японский текст могли быть распознаны неоднозначно. " +
+      "Проверьте иероглифы и порядок строк.\n\n"
+    : "⚠️ Текст восстановлен несколькими проверками одной фотографии. " +
+      "Проверьте порядок строк и исправьте возможные ошибки.\n\n";
+  return warning + text;
+}
+
+export class OcrAmbiguousHanError extends Error {
+  readonly recognizedText: string;
+  constructor(recognizedText: string) {
+    super("OCR_HAN_LANGUAGE_AMBIGUITY");
+    this.name = "OcrAmbiguousHanError";
+    this.recognizedText = recognizedText;
+  }
 }

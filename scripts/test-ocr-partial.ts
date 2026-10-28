@@ -54,3 +54,18 @@ const newId=await saveOcrNoteAndOpenEditor(markRecoveredOcrText(secondPass.text)
 assert.ok(getNote(newId)?.body.includes("⚠️ Текст восстановлен"));
 assert.equal(JSON.parse(storage.get("sn.notes.v1")??"[]").length,2);
 console.log("Batch recovery, failed-script tracking, review warning and single save: passed.");
+
+// A complete OCR pass with no recognized characters still clears its check.
+// Previously it could leave a completed language marked as failed indefinitely.
+const noText = applyRecoveredOcrPass(pending, ["japanese"], "");
+assert.deepEqual(noText.missingScripts, ["korean", "devanagari"]);
+assert.equal(noText.text, pending.text);
+assert.throws(() => applyRecoveredOcrPass(pending, ["japanese","japanese"], ""), /Invalid OCR recovery pass/);
+assert.throws(() => applyRecoveredOcrPass(pending, ["japanese"], "", ["japanese","japanese"]), /Invalid OCR recovery pass/);
+// Repeated legitimate receipt rows must survive: only copies already present
+// in the earlier pass are omitted, never all occurrences of the same line.
+assert.equal(combineRecoveredOcrText("Item\n100", "100\n100\n100"), "Item\n100\n\n100\n100");
+assert.equal(combineRecoveredOcrText("学校", "學校"), "学校\n\n學校");
+assert.equal(combineRecoveredOcrText("  indented\nПривет", "Привет\n  другой"), "  indented\nПривет\n\n  другой");
+assert.ok(markRecoveredOcrText("日本語", "ambiguous-han").includes("Китайский и японский"));
+console.log("Empty OCR passes, repeated lines, Unicode and review warnings: passed.");

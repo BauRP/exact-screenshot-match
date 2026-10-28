@@ -53,3 +53,5 @@ not exercise the interactive picker or real camera hardware.
 **Deterministic OCR merge matrix:** CI now checks 60+ script order and overlapping-line scenarios. These are logic assertions, not recognition accuracy measurements.
 
 **All models without geometry:** when every recognizer returns text without boxes, retain strong independent alphabet-specific paragraphs rather than selecting only one language. Reject short low-confidence noise, repeated content and ambiguous Han-only Chinese/Japanese pairs. Exact visual reading order remains unknown and must be validated with real photographs.
+
+**2026-10-28 continuation safeguards:** The full Android/APK and offline emulator matrix must pass after the changes below. A completed recognizer that returns blank text is distinct from a crash. Recovery preserves repeated lines by occurrence count. Competing Han-only Chinese/Japanese OCR readings are not silently auto-saved; the user must review and explicitly save the ambiguous result. These logic safeguards do not measure real-world OCR accuracy.

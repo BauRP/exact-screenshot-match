@@ -32,6 +32,9 @@ export function readableOcrFailure(error: unknown): string {
   if (error instanceof Error && error.message === "OCR_SCAN_BUSY") {
     return "Предыдущее сканирование ещё завершается. Повторите попытку после его окончания.";
   }
+  if (error instanceof Error && error.message === "OCR_HAN_LANGUAGE_AMBIGUITY") {
+    return "Китайский и японский распознаватели получили разные иероглифы. Текст сохранится только после вашего подтверждения; проверьте его или выберите язык вручную.";
+  }
   if (error instanceof Error && error.message === "OCR_INCOMPLETE_WITH_TEXT") {
     return "Часть текста распознана, но не все языки проверены. Можно сохранить найденное с пометкой «неполное» или повторить сканирование.";
   }

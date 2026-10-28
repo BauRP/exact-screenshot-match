@@ -10,7 +10,7 @@ import { chooseLocalOcrImagePath, reusableOcrImagePath } from "../src/lib/ocr-in
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "../src/lib/ocr-budget";
 import { isLocalOcrImagePath } from "../src/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "../src/lib/ocr-errors";
-import { lineScore, mergeOcrCandidates, type OcrCandidate } from "../src/lib/ocr-merge";
+import { lineScore, mergeOcrCandidates, hasAmbiguousHanCandidates, type OcrCandidate } from "../src/lib/ocr-merge";
 
 const line = (text: string, script: OcrCandidate["script"], top: number) =>
   ({ text, script, left: .1, top, right: .85, bottom: top + .04 });
@@ -429,4 +429,27 @@ assert.equal(OCR_SCRIPT_LABELS.cyrillic,"Русский и казахский");
 assert.equal(new OcrIncompleteScanError("Қазақ",["japanese","japanese"]).missingScripts.length,1);
 assert.ok(markIncompleteOcrText("Қазақ",["chinese","korean"]).includes("Не завершены проверки: Китайский, Корейский."));
 assert.equal(markIncompleteOcrText("Қазақ",[]).includes("Не завершены проверки:"),false);
+
+// Conflicting Chinese/Japanese Han-only readings must be shown for review.
+// Identical glyphs need no warning; independent locations do not conflict.
+const hanLine = (text: string, script: "japanese" | "chinese", top: number) => ({
+  script, text, lines:[{text,script,left:.12,top,right:.87,bottom:top+.07}],
+});
+assert.equal(hasAmbiguousHanCandidates([
+  hanLine("日本語学校", "japanese", .32),hanLine("日本語学枚", "chinese", .32),
+]), true);
+assert.equal(hasAmbiguousHanCandidates([
+  hanLine("日本語学校", "japanese", .32),hanLine("日本語学校", "chinese", .32),
+]), false);
+assert.equal(hasAmbiguousHanCandidates([
+  hanLine("日本語学校", "japanese", .12),hanLine("中文文章", "chinese", .72),
+]), false);
+assert.equal(hasAmbiguousHanCandidates([
+  hanLine("こんにちは世界", "japanese", .32),hanLine("中文文章", "chinese", .32),
+]), false);
+assert.equal(hasAmbiguousHanCandidates([
+  {script:"japanese",text:"日本語学校",lines:[]},
+  {script:"chinese",text:"日本語学枚",lines:[]},
+]), true);
+console.log("OCR Han-only ambiguity detection: passed.");
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");

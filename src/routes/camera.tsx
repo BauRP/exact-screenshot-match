@@ -7,12 +7,12 @@ import { createNote, getNote } from "@/lib/notes-store";
 import { saveOcrNoteAndOpenEditor, reopenSavedOcrNote, OcrEditorNavigationError } from "@/lib/ocr-save-flow";
 import { useT } from "@/lib/i18n";
 import { toast } from "sonner";
-import { mergeOcrCandidates, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
+import { mergeOcrCandidates, hasAmbiguousHanCandidates, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
 import { linesFromMlKit } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
-import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState } from "@/lib/ocr-partial";
+import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState } from "@/lib/ocr-partial";
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText } from "@/lib/ocr-text";
@@ -197,13 +197,17 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         if (timedOut) throw new Error("OCR timed out");
         coverage.ensureComplete();
       }
-      if (!results.length) throw new Error("Не удалось распознать текст. Попробуйте другое фото.");
+      // An empty but completed native scan is a valid result. On a recovery
+      // pass it still clears the checked model from the pending list.
+      if (!results.length) return "";
       // Until all model frames can be normalized using image dimensions, merge
       // only when at least one valid geometry source is available. The fallback
       // deliberately chooses a single result instead of duplicating page text.
       onProgress("Объединение распознанных строк");
       const text = mergeOcrCandidates(results);
-      if (!text) throw new Error("Не удалось распознать текст. Попробуйте другое фото.");
+      if (mode === "auto" && text && hasAmbiguousHanCandidates(results)) {
+        throw new OcrAmbiguousHanError(text);
+      }
       return text;
       } finally {
         // Releasing an image while ML Kit still reads it causes intermittent
@@ -248,6 +252,7 @@ function CameraPage() {
   const [error, setError] = useState<string | null>(null);
   const [savedNoteId, setSavedNoteId] = useState<string | null>(null);
   const [partialOcrText, setPartialOcrText] = useState<string | null>(null);
+  const [reviewReason, setReviewReason] = useState<"recovery" | "ambiguous-han">("recovery");
   const pendingRecoveryRef = useRef<OcrRecoveryState | null>(null);
   const [partialMissingScripts, setPartialMissingScripts] = useState<readonly OcrScript[]>([]);
   const [retryImagePath, setRetryImagePath] = useState<string | null>(null);
@@ -274,6 +279,7 @@ function CameraPage() {
     setError(null);
     setSavedNoteId(null);
     setPartialOcrText(null);
+    setReviewReason("recovery");
     setPartialMissingScripts([]);
     pendingRecoveryRef.current = null;
     setRetryImagePath(null);
@@ -288,13 +294,14 @@ function CameraPage() {
     );
   };
 
-  const handleFailure = (message: string, currentOperationId: number, existingId?: string) => {
+  const handleFailure = (message: string, currentOperationId: number, existingId?: string, informational = false) => {
     if (!mountedRef.current || currentOperationId !== operationIdRef.current) return;
     setError(message);
     setSavedNoteId(existingId ?? null);
     setStatus("error");
     setModalOpen(true);
-    toast.error(message);
+    if (informational) toast.info(message);
+    else toast.error(message);
   };
 
   const scanNativeImage = async (source: CaptureSource, previousPhotoPath?: string, retryScripts?: readonly OcrScript[]) => {
@@ -316,6 +323,7 @@ function CameraPage() {
     if (!previousPhotoPath) {
       pendingRecoveryRef.current = null;
       setPartialOcrText(null);
+      setReviewReason("recovery");
       setPartialMissingScripts([]);
       setRetryImagePath(null);
     }
@@ -344,11 +352,6 @@ function CameraPage() {
 
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
 
-      if (!text.trim()) {
-        handleFailure("No text was recognized in this image.", operationId);
-        return;
-      }
-
       const recovery = pendingRecoveryRef.current;
       if (previousPhotoPath && recovery?.path === imagePath) {
         const updated = applyRecoveredOcrPass(recovery, attemptedScripts, text);
@@ -358,9 +361,13 @@ function CameraPage() {
         // The order across independent OCR passes is not reliable enough for
         // an automatic save. Let the user explicitly confirm the result.
         handleFailure(updated.missingScripts.length
-          ? "Текст дополнен. Не все языки проверены — можно повторить недостающие."
-          : "Все повторные проверки завершились. Сохраните текст и проверьте порядок строк.",
-          operationId);
+          ? "Повторная проверка завершилась. Некоторые языки ещё нужно проверить."
+          : "Повторная проверка завершена. Подтвердите сохранение и проверьте текст.",
+          operationId, undefined, true);
+        return;
+      }
+      if (!text.trim()) {
+        handleFailure("На фотографии не удалось обнаружить читаемый текст. Выберите другой снимок.", operationId);
         return;
       }
       setOcrStage("Сохранение заметки");
@@ -373,6 +380,16 @@ function CameraPage() {
         setModalOpen(true);
         return;
       }
+      if (caught instanceof OcrAmbiguousHanError) {
+        const previous = pendingRecoveryRef.current;
+        const combined = previous?.path === currentImagePath
+          ? applyRecoveredOcrPass(previous, attemptedScripts, caught.recognizedText)
+          : { path: currentImagePath ?? "", text: caught.recognizedText, missingScripts: [] };
+        pendingRecoveryRef.current = combined;
+        setPartialOcrText(combined.text);
+        setPartialMissingScripts(combined.missingScripts);
+        setReviewReason("ambiguous-han");
+      }
       if (caught instanceof OcrIncompleteScanError) {
         const recovery = pendingRecoveryRef.current;
         const updated: OcrRecoveryState = previousPhotoPath && recovery?.path === previousPhotoPath
@@ -383,7 +400,8 @@ function CameraPage() {
         setPartialMissingScripts(updated.missingScripts);
       }
       handleFailure(readableOcrFailure(caught), operationId,
-        caught instanceof OcrEditorNavigationError ? caught.savedNoteId : undefined);
+        caught instanceof OcrEditorNavigationError ? caught.savedNoteId : undefined,
+        caught instanceof OcrAmbiguousHanError);
     } finally {
       inFlightRef.current = false;
     }
@@ -463,7 +481,7 @@ function CameraPage() {
     try {
       await finishWithText(partialMissingScripts.length
         ? markIncompleteOcrText(partialOcrText, partialMissingScripts)
-        : markRecoveredOcrText(partialOcrText));
+        : markRecoveredOcrText(partialOcrText, reviewReason));
       setPartialOcrText(null);
       setPartialMissingScripts([]);
     } catch (caught) {
@@ -497,6 +515,11 @@ function CameraPage() {
   };
 
   const busy = status === "preparing" || status === "picking" || status === "scanning";
+  const savePartialLabel = partialMissingScripts.length
+    ? "Сохранить найденный текст (неполный)"
+    : reviewReason === "ambiguous-han"
+      ? "Сохранить после проверки иероглифов"
+      : "Сохранить объединённый текст (проверить)";
 
   return (
     <div
@@ -574,7 +597,7 @@ function CameraPage() {
           className="mt-6 h-11 rounded-xl bg-gradient-to-r from-primary to-primary-glow px-6 text-sm text-primary-foreground shadow-xl hover:opacity-95"
         >
           <ImagePlus className="mr-2 h-5 w-5" />
-          {savedNoteId ? "Открыть сохранённую заметку" : partialOcrText ? (partialMissingScripts.length ? "Сохранить найденный текст (неполный)" : "Сохранить объединённый текст (проверить)") : t("camera_pick")}
+          {savedNoteId ? "Открыть сохранённую заметку" : partialOcrText ? savePartialLabel : t("camera_pick")}
         </Button>
       </main>
 
@@ -610,7 +633,7 @@ function CameraPage() {
             {partialOcrText && (
               <Button type="button" disabled={busy} onClick={() => void savePartialScan()}
                 className="h-9 rounded-xl text-xs font-semibold">
-                {partialMissingScripts.length ? "Сохранить найденный текст (неполный)" : "Сохранить объединённый текст (проверить)"}
+                {savePartialLabel}
               </Button>
             )}
             {retryImagePath && partialOcrText && partialMissingScripts.length > 0 && (

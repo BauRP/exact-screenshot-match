@@ -295,6 +295,43 @@ export function mergeOcrCandidates(candidates: OcrCandidate[]): string {
   return extra.length ? [spatial, ...extra].join("\n\n") : spatial;
 }
 
+
+/**
+ * Han-only Chinese and Japanese results may refer to the SAME physical line
+ * but disagree about its glyphs. There is no reliable way to infer language
+ * from Han glyphs alone. Never silently persist that disputed reading.
+ * If geometry proves texts belong to different places, no warning is needed.
+ */
+export function hasAmbiguousHanCandidates(candidates: readonly OcrCandidate[]): boolean {
+  const comparable = (text: string) => text.normalize("NFC").replace(/\s+/gu, "").trim();
+  const hanOnly = (text: string) => {
+    const letters = text.match(/\p{L}/gu) ?? [];
+    const han = text.match(/\p{Script=Han}/gu) ?? [];
+    return han.length >= 2 && han.length / Math.max(1, letters.length) >= .85 &&
+      !/[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text);
+  };
+  const japanese = candidates.filter(c => c.script === "japanese" &&
+    c.text.trim() && hanOnly(c.text));
+  const chinese = candidates.filter(c => c.script === "chinese" &&
+    c.text.trim() && hanOnly(c.text));
+  for (const ja of japanese) for (const zh of chinese) {
+    if (comparable(ja.text) === comparable(zh.text)) continue;
+    const jLines = ja.lines.filter(valid);
+    const cLines = zh.lines.filter(valid);
+    // Text without rectangles cannot prove that readings came from
+    // independent physical regions. Ask the user to confirm.
+    if (!jLines.length || !cLines.length) return true;
+    for (const j of jLines) for (const c of cLines) {
+      const overlap = intersection(j, c);
+      const minArea = Math.min((j.right-j.left)*(j.bottom-j.top),
+        (c.right-c.left)*(c.bottom-c.top));
+      if (minArea > 0 && overlap / minArea >= .45 &&
+          comparable(j.text) !== comparable(c.text)) return true;
+    }
+  }
+  return false;
+}
+
 export function hasStrongText(candidates: OcrCandidate[]): boolean {
   return candidates.some(c =>
     c.text.trim().length >= 30 &&
