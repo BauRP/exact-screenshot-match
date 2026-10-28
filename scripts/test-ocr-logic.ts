@@ -371,4 +371,32 @@ const chineseUnknown: OcrCandidate = {script:"chinese",
   text:"中文汉字的完整一段话中文汉字的完整一段话中文汉字",lines:[]};
 assert.equal(mergeOcrCandidates([...twoLocated,japaneseLocated,chineseUnknown]),
   "Қазақ тілі\n\n한국어 문장\n\n日本語の文章");
+// When ALL recognizers omit boxes, do not discard entire independent
+// Cyrillic, Korean, Latin and Devanagari paragraphs.
+const noBoxesCyr: OcrCandidate={script:"cyrillic",
+  text:"Қазақ тіліндегі маңызды ұзын мәтін",lines:[]};
+const noBoxesLatin: OcrCandidate={script:"latin",
+  text:"Important independent English information in this document",lines:[]};
+const noBoxesKorean: OcrCandidate={script:"korean",
+  text:"한국어 문서에는 중요한 설명이 포함되어 있습니다",lines:[]};
+const noBoxesHindi: OcrCandidate={script:"devanagari",
+  text:"हिन्दी भाषा में एक विस्तृत स्वतंत्र जानकारी",lines:[]};
+const geometryFreeResult=mergeOcrCandidates([
+  noBoxesCyr,noBoxesLatin,noBoxesKorean,noBoxesHindi,
+]);
+for(const part of [noBoxesCyr,noBoxesLatin,noBoxesKorean,noBoxesHindi]){
+  assert.equal(geometryFreeResult.split(part.text).length,2);
+}
+assert.equal(geometryFreeResult.split("\n\n").length,4);
+assert.equal(mergeOcrCandidates([noBoxesCyr,noBoxesCyr]),noBoxesCyr.text);
+const noBoxesShortNoise: OcrCandidate={script:"latin",text:"abc",lines:[]};
+assert.equal(mergeOcrCandidates([noBoxesCyr,noBoxesShortNoise]),noBoxesCyr.text);
+const noBoxesWrongScript: OcrCandidate={script:"chinese",text:"This is actually Latin text",lines:[]};
+assert.equal(mergeOcrCandidates([noBoxesCyr,noBoxesWrongScript]),noBoxesCyr.text);
+// An all-Han Japanese/Chinese pair cannot prove two separate languages.
+const noBoxesHanJp: OcrCandidate={script:"japanese",
+  text:"日本語文書東京大阪京都漢字本文詳解",lines:[]};
+const noBoxesHanZh: OcrCandidate={script:"chinese",
+  text:"中文文档北京上海南京汉字文字详细说明",lines:[]};
+assert.equal(mergeOcrCandidates([noBoxesHanJp,noBoxesHanZh]).split("\n\n").length,1);
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");

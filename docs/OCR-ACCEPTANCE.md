@@ -51,3 +51,5 @@ not exercise the interactive picker or real camera hardware.
 
 **Missing-geometry third script:** when two or more languages have reliable coordinates but a third model recognizes a substantial, strongly script-matching paragraph without boxes, retain it once after the spatially confirmed text. Skip ambiguous Han-only Chinese/Japanese overlap and short or noisy fragments. Its true position on the photo is unknown; real mixed-language photo validation is still required.
 **Deterministic OCR merge matrix:** CI now checks 60+ script order and overlapping-line scenarios. These are logic assertions, not recognition accuracy measurements.
+
+**All models without geometry:** when every recognizer returns text without boxes, retain strong independent alphabet-specific paragraphs rather than selecting only one language. Reject short low-confidence noise, repeated content and ambiguous Han-only Chinese/Japanese pairs. Exact visual reading order remains unknown and must be validated with real photographs.

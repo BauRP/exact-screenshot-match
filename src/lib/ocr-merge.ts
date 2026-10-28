@@ -150,7 +150,35 @@ export function mergeOcrCandidates(candidates: OcrCandidate[]): string {
     .filter(c => c.score >= 20)
     .sort((a,b) => b.score-a.score);
   const unlocated = plausible.filter(c => c.candidate.lines.length === 0);
-  if (!lines.length) return plausible[0]?.candidate.text.trim() ?? "";
+  if (!lines.length) {
+    const best = plausible[0]?.candidate;
+    if (!best) return "";
+    const kept: string[] = [best.text.trim()];
+    const scripts = new Set<OcrScript>([best.script]);
+    const normalized = (s: string) => s.normalize("NFKC").toLocaleLowerCase()
+      .replace(/\s+/gu, " ").trim();
+    const contains = (a: string, b: string) => normalized(a).includes(normalized(b));
+    for (const { candidate, score } of plausible.slice(1)) {
+      if (scripts.has(candidate.script) || score < 58 ||
+          candidate.text.trim().length < 24) continue;
+      // Han-only recognition cannot reliably distinguish Chinese/Japanese.
+      if ((candidate.script === "chinese" && scripts.has("japanese")) ||
+          (candidate.script === "japanese" && scripts.has("chinese"))) continue;
+      const ownLetters = (candidate.text.match(MATCH[candidate.script]) ?? []).length;
+      const allLetters = (candidate.text.match(/\p{L}/gu) ?? []).length;
+      if (ownLetters < 8 || ownLetters / Math.max(1, allLetters) < .75) continue;
+      // If the existing full page already contains the proposed script,
+      // adding its independently recognized text would duplicate content.
+      if (kept.some(existing => {
+        const existingLetters = (existing.match(MATCH[candidate.script]) ?? []).length;
+        return existingLetters >= 8 || contains(existing, candidate.text) ||
+          contains(candidate.text, existing);
+      })) continue;
+      kept.push(candidate.text.trim());
+      scripts.add(candidate.script);
+    }
+    return kept.join("\n\n");
+  }
   // A single located line must not be discarded just because a second
   // model omitted bounding boxes. Only combine when scripts are independent.
   if (lines.length === 1 && unlocated.length) {
