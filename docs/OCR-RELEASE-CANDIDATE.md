@@ -37,3 +37,7 @@ Automated test success alone cannot prove accuracy on real photos or reliability
 - Android/Gradle caches are reused across successful GitHub Actions runs, which can reduce repeated compilation time; actual speed depends on cache hits.
 - Changes to OCR TypeScript, camera route, or note persistence now trigger the two-version Android emulator matrix, avoiding silently untested OCR changes.
 - Every published debug APK logs its source commit and SHA-256 checksum in the workflow summary.
+
+## Bundled model integrity
+
+The APK contains pinned `rus` and `kaz` assets. On Android the first copy to app-private storage and all existing copies are checked against the exact build-pinned Git-blob content hash, not only the byte size. Corrupt copies are restored from the APK itself without an internet download. Android instrumentation includes same-size corruption tests on both supported emulator versions. This verifies Cyrillic model integrity, not recognition accuracy on real photos.

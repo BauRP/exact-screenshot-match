@@ -50,6 +50,44 @@ public class BundledOcrInstrumentedTest {
     }
 
     @Test
+    public void bundledModelsHaveExactPinnedContents() throws Exception {
+        File folder = new File(modelsRoot, "tessdata");
+        assertTrue(OfflineCyrillicOcrPlugin.isVerifiedBundledModel(
+            new File(folder, "rus.traineddata"), "rus"));
+        assertTrue(OfflineCyrillicOcrPlugin.isVerifiedBundledModel(
+            new File(folder, "kaz.traineddata"), "kaz"));
+    }
+
+    @Test
+    public void sameSizedDamageIsRejectedWithoutAnyDownload() throws Exception {
+        // The original file lives in APK assets and remains untouched. The
+        // copied fixture is deliberately altered WITHOUT changing its size.
+        File original = new File(new File(modelsRoot, "tessdata"), "rus.traineddata");
+        File damaged = File.createTempFile("wave-corrupt-", ".traineddata",
+            InstrumentationRegistry.getInstrumentation().getTargetContext().getCacheDir());
+        try {
+            try (InputStream in = new java.io.FileInputStream(original);
+                 FileOutputStream out = new FileOutputStream(damaged)) {
+                byte[] buffer = new byte[65536];
+                int read;
+                while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
+            }
+            assertTrue(OfflineCyrillicOcrPlugin.isVerifiedBundledModel(damaged, "rus"));
+            try (java.io.RandomAccessFile file = new java.io.RandomAccessFile(damaged, "rw")) {
+                file.seek(300);
+                int originalByte = file.read();
+                file.seek(300);
+                file.write(originalByte ^ 0x01);
+            }
+            assertEquals(original.length(), damaged.length());
+            assertFalse("File length alone must NOT be trusted",
+                OfflineCyrillicOcrPlugin.isVerifiedBundledModel(damaged, "rus"));
+        } finally {
+            assertTrue(damaged.delete());
+        }
+    }
+
+    @Test
     public void emptyPhotoDoesNotInventText() {
         Bitmap bitmap = Bitmap.createBitmap(900, 240, Bitmap.Config.ARGB_8888);
         bitmap.eraseColor(Color.WHITE);

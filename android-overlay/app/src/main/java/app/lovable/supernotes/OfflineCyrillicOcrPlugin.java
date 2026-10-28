@@ -15,8 +15,11 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.googlecode.tesseract.android.ResultIterator;
 import com.googlecode.tesseract.android.TessBaseAPI;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -25,6 +28,10 @@ import java.util.concurrent.Executors;
 public class OfflineCyrillicOcrPlugin extends Plugin {
     private static final long RUS_SIZE = 3861738L;
     private static final long KAZ_SIZE = 4734644L;
+    // SHA-1 Git-blob object IDs pinned at BUILD time, then independently
+    // verified by Android before each native OCR session.
+    private static final String RUS_BLOB = "b146cb2263acbc6383f8e92ea0ce759537687bb8";
+    private static final String KAZ_BLOB = "f889e2b8ffd093d4f2dff8ffca2fa0b73296c028";
     // Keep one native recognizer at a time on a worker thread, never on Android UI.
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
 
@@ -178,20 +185,66 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
         return root;
     }
 
-    private void copyBundledModel(File directory, String name, long expectedSize) throws Exception {
-        File target = new File(directory, name + ".traineddata");
-        if (target.isFile() && target.length() == expectedSize) return;
-        File temp = new File(directory, name + ".tmp");
-        try (InputStream in = getContext().getAssets().open("tessdata/" + name + ".traineddata");
-             FileOutputStream out = new FileOutputStream(temp)) {
+    /**
+     * Validate actual bytes, not just file length: same-size corruption must
+     * never make an offline model appear usable. The Git object format is
+     * SHA1("blob " + decimalSize + NUL + fileContents).
+     * The build host verifies the same pinned hash before packaging.
+     */
+    static boolean isVerifiedBundledModel(File file, String language) throws Exception {
+        long expectedSize;
+        String expectedHash;
+        if ("rus".equals(language)) {
+            expectedSize = RUS_SIZE;
+            expectedHash = RUS_BLOB;
+        } else if ("kaz".equals(language)) {
+            expectedSize = KAZ_SIZE;
+            expectedHash = KAZ_BLOB;
+        } else {
+            throw new IllegalArgumentException("Unexpected bundled OCR language");
+        }
+        if (!file.isFile() || file.length() != expectedSize) return false;
+        MessageDigest hash = MessageDigest.getInstance("SHA-1");
+        hash.update(("blob " + expectedSize + "\0").getBytes(StandardCharsets.UTF_8));
+        try (FileInputStream in = new FileInputStream(file)) {
             byte[] buffer = new byte[65536];
             int count;
-            while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
-            out.getFD().sync();
+            while ((count = in.read(buffer)) != -1) hash.update(buffer, 0, count);
         }
-        if (temp.length() != expectedSize) throw new IllegalStateException("Bundled OCR language file is incomplete: " + name);
-        if (target.exists() && !target.delete()) throw new IllegalStateException("Cannot replace OCR model");
-        if (!temp.renameTo(target)) throw new IllegalStateException("Cannot install bundled OCR model");
+        byte[] digest = hash.digest();
+        StringBuilder hex = new StringBuilder(digest.length * 2);
+        for (byte value : digest) {
+            hex.append(Character.forDigit((value >>> 4) & 0x0f, 16));
+            hex.append(Character.forDigit(value & 0x0f, 16));
+        }
+        return expectedHash.equals(hex.toString());
+    }
+
+    private void copyBundledModel(File directory, String name, long expectedSize) throws Exception {
+        File target = new File(directory, name + ".traineddata");
+        if (isVerifiedBundledModel(target, name)) return;
+        // A bad previously copied file can be repaired LOCALLY from the APK,
+        // without network or a system model manager.
+        File temp = File.createTempFile(name + "-verified-", ".tmp", directory);
+        try {
+            try (InputStream in = getContext().getAssets().open("tessdata/" + name + ".traineddata");
+                 FileOutputStream out = new FileOutputStream(temp)) {
+                byte[] buffer = new byte[65536];
+                int count;
+                while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+                out.getFD().sync();
+            }
+            if (temp.length() != expectedSize || !isVerifiedBundledModel(temp, name)) {
+                throw new IllegalStateException("Bundled OCR language file is corrupt: " + name);
+            }
+            // Both files are on the same app-private filesystem. Linux rename
+            // replaces the target in one operation; do not remove it first.
+            if (!temp.renameTo(target)) {
+                throw new IllegalStateException("Cannot atomically restore offline OCR model: " + name);
+            }
+        } finally {
+            if (temp.exists()) temp.delete();
+        }
     }
 
     private static InputStream openLocalImage(Context context, String source) throws Exception {
