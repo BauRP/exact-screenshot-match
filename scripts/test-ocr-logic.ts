@@ -5,7 +5,7 @@ import { ocrScanPlan, selectedOcrScanPlan, readOcrScanPreferences, saveOcrScanPr
 import { linesFromMlKit } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
 import { OcrScanCoverage } from "../src/lib/ocr-coverage";
-import { OcrIncompleteScanError, markIncompleteOcrText, OCR_SCRIPT_LABELS, hanAlternativesFromCandidates, cyrillicTextWithLineFallback } from "../src/lib/ocr-partial";
+import { OcrIncompleteScanError, markIncompleteOcrText, OCR_SCRIPT_LABELS, hanAlternativesFromCandidates, previewHanAlternatives, cyrillicTextWithLineFallback } from "../src/lib/ocr-partial";
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "../src/lib/ocr-input";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "../src/lib/ocr-budget";
 import { isLocalOcrImagePath } from "../src/lib/ocr-input";
@@ -623,3 +623,9 @@ assert.deepEqual(readOcrScanPreferences({
   setItem:()=>undefined,
 }),{mode:"auto",scripts:["latin","cyrillic"]});
 console.log("Offline language selection persists without changing first-install auto defaults: passed.");
+
+assert.deepEqual(previewHanAlternatives({japanese:"日本語",chinese:"中文"}),{
+ japanese:"日本語",chinese:"中文",
+});
+assert.equal(previewHanAlternatives({japanese:"日本語",chinese:"中文"},0),null);
+console.log("Han result previews preserve exact original glyphs: passed.");

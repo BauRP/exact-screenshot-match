@@ -12,7 +12,7 @@ import { linesFromMlKit } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
-import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, type OcrReviewReason, OcrMixedLayoutReviewError, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrLargeLayoutReviewError, resumeOcrReviewDraft, recoverFromReviewedText, hanAlternativesFromCandidates, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
+import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, type OcrReviewReason, OcrMixedLayoutReviewError, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrLargeLayoutReviewError, resumeOcrReviewDraft, recoverFromReviewedText, hanAlternativesFromCandidates, previewHanAlternatives, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
 import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
@@ -284,6 +284,7 @@ function CameraPage() {
   const [reviewEdited, setReviewEdited] = useState(false);
   const [restoredDraft, setRestoredDraft] = useState(false);
   const [hanAlternatives, setHanAlternatives] = useState<OcrHanAlternatives | null>(null);
+  const hanAlternativesRef = useRef<OcrHanAlternatives | null>(null);
   const [nativeAlternatives, setNativeAlternatives] = useState<OcrNativeTextAlternative[]>([]);
   const nativeAlternativesRef = useRef<OcrNativeTextAlternative[]>([]);
   const [reviewReason, setReviewReason] = useState<OcrReviewReason>("recovery");
@@ -312,6 +313,8 @@ function CameraPage() {
       setPartialOcrText(previous.text);
       setPartialMissingScripts(previous.missingScripts);
       setReviewReason(previous.reason);
+      hanAlternativesRef.current = previous.hanAlternatives ?? null;
+      setHanAlternatives(hanAlternativesRef.current);
       nativeAlternativesRef.current = previous.nativeAlternatives ?? [];
       setNativeAlternatives(nativeAlternativesRef.current);
       setReviewDraft(previous.reviewedText);
@@ -340,7 +343,8 @@ function CameraPage() {
       const stored = savePendingOcrDraft({text:partialOcrText,
         reviewedText:current.edited ? current.text : partialOcrText,
         edited:current.edited, missingScripts:[...partialMissingScripts], reason:reviewReason,
-        nativeAlternatives:nativeAlternativesRef.current});
+        nativeAlternatives:nativeAlternativesRef.current,
+        hanAlternatives:hanAlternativesRef.current});
       if (mountedRef.current) setDraftPersistenceWarning(!stored);
     },reviewEdited ? 350 : 0);
     return () => window.clearTimeout(id);
@@ -352,11 +356,15 @@ function CameraPage() {
     const stored=savePendingOcrDraft({text:partialOcrText,
       reviewedText:current.edited ? current.text : partialOcrText,
       edited:current.edited, missingScripts:[...partialMissingScripts], reason:reviewReason,
-      nativeAlternatives:nativeAlternativesRef.current});
+      nativeAlternatives:nativeAlternativesRef.current,
+      hanAlternatives:hanAlternativesRef.current});
     if (mountedRef.current) setDraftPersistenceWarning(!stored);
   };
   const retainUnfinishedResult = (state: OcrRecoveryState, reason: OcrReviewReason = "recovery",
-    alternatives: OcrNativeTextAlternative[] = []) => {
+    alternatives: OcrNativeTextAlternative[] = [],
+    han: OcrHanAlternatives | null = hanAlternativesRef.current) => {
+    hanAlternativesRef.current = previewHanAlternatives(han);
+    setHanAlternatives(hanAlternativesRef.current);
     nativeAlternativesRef.current = alternatives;
     setNativeAlternatives(alternatives);
     draftGateRef.current.arm();
@@ -365,6 +373,7 @@ function CameraPage() {
       text:state.text,reviewedText:state.text,edited:false,
       missingScripts:[...state.missingScripts],reason,
       nativeAlternatives:alternatives,
+      hanAlternatives:hanAlternativesRef.current,
     });
     if (mountedRef.current) setDraftPersistenceWarning(!stored);
   };
@@ -385,6 +394,7 @@ function CameraPage() {
     setDraftPersistenceWarning(false);
     setRetryImagePath(null);
     setHanAlternatives(null);
+    hanAlternativesRef.current = null;
     nativeAlternativesRef.current = [];
     setNativeAlternatives([]);
     setReviewOpen(false);
@@ -427,6 +437,7 @@ function CameraPage() {
     setReviewDraft("");
     setReviewEdited(false);
     setHanAlternatives(null);
+    hanAlternativesRef.current = null;
     nativeAlternativesRef.current = [];
     setNativeAlternatives([]);
     setReviewReason("recovery");
@@ -482,6 +493,7 @@ function CameraPage() {
       setReviewDraft("");
       setReviewEdited(false);
       setHanAlternatives(null);
+      hanAlternativesRef.current = null;
       nativeAlternativesRef.current = [];
       setNativeAlternatives([]);
       setReviewReason("recovery");
@@ -576,10 +588,12 @@ function CameraPage() {
           caught instanceof OcrLimitedSelectionReviewError ? "limited-selection" :
           caught instanceof OcrLargeLayoutReviewError ? "large-layout" : "native-text";
         setReviewReason(reason);
-        setHanAlternatives(caught instanceof OcrAmbiguousHanError ? caught.alternatives : null);
+        hanAlternativesRef.current = previewHanAlternatives(caught instanceof OcrAmbiguousHanError ? caught.alternatives : null);
+        setHanAlternatives(hanAlternativesRef.current);
         setReviewEdited(false);
         retainUnfinishedResult(combined, reason,
-          caught instanceof OcrNativeTextReviewError ? [...caught.alternatives] : nativeAlternativesRef.current);
+          caught instanceof OcrNativeTextReviewError ? [...caught.alternatives] : nativeAlternativesRef.current,
+          caught instanceof OcrAmbiguousHanError ? caught.alternatives : hanAlternativesRef.current);
       }
       if (caught instanceof OcrIncompleteScanError) {
         const recovery = pendingRecoveryRef.current;
@@ -590,6 +604,7 @@ function CameraPage() {
         setPartialOcrText(updated.text);
         setPartialMissingScripts(updated.missingScripts);
         setHanAlternatives(null);
+        hanAlternativesRef.current = null;
         setReviewEdited(false);
         retainUnfinishedResult(updated);
       }

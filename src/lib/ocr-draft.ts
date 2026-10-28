@@ -1,5 +1,6 @@
 import type { OcrNativeTextAlternative } from "./ocr-text";
 import type { OcrScript } from "./ocr-merge";
+import type { OcrHanAlternatives } from "./ocr-partial";
 import { OCR_SCRIPT_LABELS, type OcrReviewReason } from "./ocr-partial";
 
 /** Local, bounded and optional safety copy of UNSAVED OCR text. No image
@@ -22,6 +23,7 @@ export type OcrLocalDraft = {
   reason: OcrReviewReason;
   savedAt: number;
   nativeAlternatives?: OcrNativeTextAlternative[];
+  hanAlternatives?: OcrHanAlternatives | null;
 };
 function storage(): Store | null {
   try { return typeof window === "undefined" ? null : window.localStorage; }
@@ -37,6 +39,13 @@ export function savePendingOcrDraft(
   data: Omit<OcrLocalDraft,"savedAt">,
   now = Date.now(), store: Store | null = storage(),
 ): boolean {
+  if (data.hanAlternatives !== undefined && data.hanAlternatives !== null && (
+      typeof data.hanAlternatives !== "object" ||
+      typeof data.hanAlternatives.japanese !== "string" ||
+      typeof data.hanAlternatives.chinese !== "string" ||
+      Array.from(data.hanAlternatives.japanese).length > 2000 ||
+      Array.from(data.hanAlternatives.chinese).length > 2000
+  )) return false;
   if (data.nativeAlternatives !== undefined && (
       !Array.isArray(data.nativeAlternatives) || data.nativeAlternatives.length > 6 ||
       data.nativeAlternatives.some(item => !item || !known(item.script) ||
@@ -66,6 +75,13 @@ export function readPendingOcrDraft(
     const value: unknown=JSON.parse(raw);
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;
     const v=value as Record<string,unknown>;
+    if (v.hanAlternatives !== undefined && v.hanAlternatives !== null && (
+      typeof v.hanAlternatives !== "object" || Array.isArray(v.hanAlternatives) ||
+      typeof (v.hanAlternatives as Record<string,unknown>).japanese !== "string" ||
+      typeof (v.hanAlternatives as Record<string,unknown>).chinese !== "string" ||
+      Array.from((v.hanAlternatives as {japanese:string}).japanese).length > 2000 ||
+      Array.from((v.hanAlternatives as {chinese:string}).chinese).length > 2000
+    )) return null;
     if (v.nativeAlternatives !== undefined && (
       !Array.isArray(v.nativeAlternatives) || v.nativeAlternatives.length > 6 ||
       v.nativeAlternatives.some((item: unknown) => {
@@ -88,7 +104,8 @@ export function readPendingOcrDraft(
     return {text:v.text,reviewedText:v.reviewedText,edited:v.edited,
       missingScripts:[...new Set(v.missingScripts as OcrScript[])],
       reason:v.reason as OcrReviewReason,savedAt:v.savedAt,
-      nativeAlternatives:v.nativeAlternatives as OcrNativeTextAlternative[] | undefined};
+      nativeAlternatives:v.nativeAlternatives as OcrNativeTextAlternative[] | undefined,
+      hanAlternatives:v.hanAlternatives as OcrHanAlternatives | null | undefined};
   } catch { return null; }
 }
 export function clearPendingOcrDraft(store: Store | null = storage()): void {

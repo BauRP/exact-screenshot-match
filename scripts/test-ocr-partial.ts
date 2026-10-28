@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrAmbiguousHanError, OcrMixedLayoutReviewError, OcrLargeLayoutReviewError, resumeOcrReviewDraft, recoverFromReviewedText } from "../src/lib/ocr-partial";
+import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrAmbiguousHanError, OcrMixedLayoutReviewError, OcrLargeLayoutReviewError, resumeOcrReviewDraft, recoverFromReviewedText, previewHanAlternatives } from "../src/lib/ocr-partial";
 import { saveOcrNoteAndOpenEditor } from "../src/lib/ocr-save-flow";
 import { readPendingOcrDraft, savePendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "../src/lib/ocr-draft";
 const storage=new Map<string,string>();
@@ -253,3 +253,27 @@ assert.equal(readPendingOcrDraft(33001,draftStore)?.text,storageRetryText);
 assert.equal(readPendingOcrDraft(33001,draftStore)?.reason,"save-retry");
 clearPendingOcrDraft(draftStore);
 console.log("Finished OCR remains recoverable after local note-save failure: passed.");
+
+
+// Han ambiguity must stay inspectable after an Android WebView restart, even
+// when the user has not yet finished editing the full merged OCR result.
+const hanPreview=previewHanAlternatives({
+ japanese:"日本語学校".repeat(700),chinese:"日本学枚".repeat(700),
+});
+assert.equal(Array.from(hanPreview?.japanese ?? "").length,2000);
+assert.equal(Array.from(hanPreview?.chinese ?? "").length,2000);
+assert.equal(previewHanAlternatives(null),null);
+assert.equal(savePendingOcrDraft({...draft,reason:"ambiguous-han",
+  hanAlternatives:hanPreview},40000,draftStore),true);
+assert.deepEqual(readPendingOcrDraft(40001,draftStore)?.hanAlternatives,hanPreview);
+assert.equal(savePendingOcrDraft({...draft,hanAlternatives:{
+  japanese:"長".repeat(2001),chinese:"日本語",
+}},40000,draftStore),false);
+assert.equal(readPendingOcrDraft(40001,{...draftStore,
+  getItem:(key:string)=> {
+    const raw=draftStore.getItem(key);
+    return raw ? raw.replace('"japanese":"日本語学校','"japanese":false,"junk":"日本語学校') : null;
+  }
+}),null);
+clearPendingOcrDraft(draftStore);
+console.log("Ambiguous Chinese/Japanese readings are bounded and survive offline restart: passed.");

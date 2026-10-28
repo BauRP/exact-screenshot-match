@@ -248,3 +248,16 @@ export class OcrLargeLayoutReviewError extends Error {
     this.recognizedText = text;
   }
 }
+
+
+/** A bounded human-readable comparison, never a replacement for the merged
+ * page. Keeps the entire recognized page in its own editable text field.
+ */
+export function previewHanAlternatives(
+  source: OcrHanAlternatives | null,
+  limit = 2000,
+): OcrHanAlternatives | null {
+  if (!source || !Number.isInteger(limit) || limit < 1 || limit > 2000) return null;
+  const preview = (value: string) => Array.from(value).slice(0,limit).join("");
+  return {japanese:preview(source.japanese),chinese:preview(source.chinese)};
+}
