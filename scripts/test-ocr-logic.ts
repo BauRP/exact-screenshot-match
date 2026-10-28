@@ -767,8 +767,14 @@ const combinedKanjiKana={script:"japanese" as const,
   text:"東京都へ行きます",lines:[]};
 assert.equal(restoreOmittedOcrScriptTextForReview(
   "한국어 문서",[combinedKanjiKana]),"한국어 문서\n\n東京都へ行きます");
+// Three isolated Kanji characters cannot establish Japanese versus Chinese.
 assert.equal(restoreOmittedOcrScriptTextForReview(
-  "한국어 문서",[{script:"japanese",text:"東京都",lines:[]}]),"한국어 문서\n\n東京都");
+  "한국어 문서",[{script:"japanese",text:"東京都",lines:[]}]),"한국어 문서");
+// Four Han glyphs from a credible OCR engine may be preserved for REVIEW,
+// never assigned a definitive Japanese/Chinese language identity.
+assert.equal(restoreOmittedOcrScriptTextForReview(
+  "한국어 문서",[{script:"japanese",text:"東京都庁",lines:[]}]),
+  "한국어 문서\n\n東京都庁");
 assert.equal(restoreOmittedOcrScriptTextForReview(
   "한국어 문서",[{script:"japanese",text:"あ北",lines:[]}]),"한국어 문서");
 assert.equal(restoreOmittedOcrScriptTextForReview(
