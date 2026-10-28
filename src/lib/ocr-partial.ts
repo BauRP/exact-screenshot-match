@@ -1,5 +1,7 @@
 import type { OcrScript } from "./ocr-merge";
 
+export type OcrReviewReason = "recovery" | "ambiguous-han" | "mixed-layout";
+
 export const OCR_SCRIPT_LABELS: Readonly<Record<OcrScript, string>> = {
   latin: "Латиница",
   cyrillic: "Русский и казахский",
@@ -106,14 +108,17 @@ export function applyRecoveredOcrPass(
 
 /** Even when every retry succeeded, multi-pass text has unknown global order. */
 export function markRecoveredOcrText(
-  text: string, reason: "recovery" | "ambiguous-han" = "recovery",
+  text: string, reason: OcrReviewReason = "recovery",
 ): string {
   if (!text.trim()) throw new Error("OCR_EMPTY_TEXT");
   const warning = reason === "ambiguous-han"
     ? "⚠️ Китайский и японский текст могли быть распознаны неоднозначно. " +
       "Проверьте иероглифы и порядок строк.\n\n"
-    : "⚠️ Текст восстановлен несколькими проверками одной фотографии. " +
-      "Проверьте порядок строк и исправьте возможные ошибки.\n\n";
+    : reason === "mixed-layout"
+      ? "⚠️ Языки распознаны, но расположение строк на фотографии подтверждено не полностью. " +
+        "Проверьте порядок абзацев и столбцов.\n\n"
+      : "⚠️ Текст восстановлен несколькими проверками одной фотографии. " +
+        "Проверьте порядок строк и исправьте возможные ошибки.\n\n";
   return warning + text;
 }
 
@@ -133,7 +138,7 @@ export class OcrAmbiguousHanError extends Error {
 export function buildReviewedOcrText(
   editedText: string,
   missingScripts: readonly OcrScript[],
-  reason: "recovery" | "ambiguous-han" = "recovery",
+  reason: OcrReviewReason = "recovery",
 ): string {
   if (!editedText.trim()) throw new Error("OCR_EMPTY_TEXT");
   if (missingScripts.length) return markIncompleteOcrText(editedText, missingScripts);
@@ -159,4 +164,21 @@ export function cyrillicTextWithLineFallback(
 ): string {
   if (data.text?.trim()) return data.text;
   return (data.lines ?? []).map(line => line.text).filter(line => line.trim()).join("\n");
+}
+
+
+export class OcrMixedLayoutReviewError extends Error {
+  readonly recognizedText: string;
+  constructor(recognizedText: string) {
+    super("OCR_MIXED_LAYOUT_REVIEW");
+    this.name = "OcrMixedLayoutReviewError";
+    this.recognizedText = recognizedText;
+  }
+}
+
+/** Reopening a review must never discard the user's unsaved corrections. */
+export function resumeOcrReviewDraft(
+  scannedText: string, editedText: string, hasEdits: boolean,
+): string {
+  return hasEdits ? editedText : scannedText;
 }

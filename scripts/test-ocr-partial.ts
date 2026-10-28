@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrAmbiguousHanError } from "../src/lib/ocr-partial";
+import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrAmbiguousHanError, OcrMixedLayoutReviewError, resumeOcrReviewDraft } from "../src/lib/ocr-partial";
 import { saveOcrNoteAndOpenEditor } from "../src/lib/ocr-save-flow";
 const storage=new Map<string,string>();
 Object.defineProperty(globalThis,"window",{configurable:true,value:{localStorage:{
@@ -87,3 +87,13 @@ const ambiguousPair = new OcrAmbiguousHanError("学校", {japanese:"学校",chin
 assert.equal(ambiguousPair.alternatives?.chinese,"学枚");
 assert.equal(ambiguousPair.recognizedText,"学校");
 console.log("Ambiguous Han readings retained independently for editable review: passed.");
+
+
+assert.equal(resumeOcrReviewDraft("原文", "Исправленный текст", true),"Исправленный текст");
+assert.equal(resumeOcrReviewDraft("Новый OCR","Устаревший черновик",false),"Новый OCR");
+assert.equal(resumeOcrReviewDraft("Новый OCR","",true),"");
+const layoutReview = new OcrMixedLayoutReviewError("Қазақ тілі\n한국어");
+assert.equal(layoutReview.recognizedText,"Қазақ тілі\n한국어");
+assert.ok(buildReviewedOcrText("Қазақ тілі\n한국어",[],"mixed-layout")
+  .includes("расположение строк"));
+console.log("Review edits survive reopening; uncertain layout is persistently labelled: passed.");

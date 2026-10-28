@@ -338,3 +338,22 @@ export function hasStrongText(candidates: OcrCandidate[]): boolean {
     lineScore(c.text, c.script, undefined, c.confidence) >= 58 &&
     !/[\ufffd\u25a1]/u.test(c.text));
 }
+
+
+/**
+ * Independent scripts without reliable line coordinates cannot establish a
+ * physical reading order. Keep the content, but require review before save.
+ * A single script, noise and Han-only Chinese/Japanese pairs are excluded.
+ */
+export function hasUncertainMixedScriptLayout(candidates: readonly OcrCandidate[]): boolean {
+  const credible = candidates.filter(candidate => {
+    const letters = candidate.text.match(/\p{L}/gu) ?? [];
+    if (letters.length < 8 || candidate.text.trim().length < 12) return false;
+    const ownLetters = candidate.text.match(MATCH[candidate.script]) ?? [];
+    return ownLetters.length >= 5 && ownLetters.length / letters.length >= .65 &&
+      lineScore(candidate.text,candidate.script,undefined,candidate.confidence) >= 58;
+  });
+  const scripts = new Set(credible.map(item =>
+    item.script === "japanese" || item.script === "chinese" ? "han" : item.script));
+  return scripts.size >= 2 && credible.some(item => !item.lines.some(valid));
+}

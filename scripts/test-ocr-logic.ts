@@ -10,7 +10,7 @@ import { chooseLocalOcrImagePath, reusableOcrImagePath } from "../src/lib/ocr-in
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "../src/lib/ocr-budget";
 import { isLocalOcrImagePath } from "../src/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "../src/lib/ocr-errors";
-import { lineScore, mergeOcrCandidates, hasAmbiguousHanCandidates, type OcrCandidate } from "../src/lib/ocr-merge";
+import { lineScore, mergeOcrCandidates, hasAmbiguousHanCandidates, hasUncertainMixedScriptLayout, type OcrCandidate } from "../src/lib/ocr-merge";
 
 const line = (text: string, script: OcrCandidate["script"], top: number) =>
   ({ text, script, left: .1, top, right: .85, bottom: top + .04 });
@@ -492,3 +492,25 @@ assert.equal(cyrillicLanguageForScan("kazakh"), "kaz");
 assert.equal(cyrillicLanguageForScan("auto"), CYRILLIC_OCR_LANGUAGES);
 assert.equal(cyrillicLanguageForScan(["cyrillic"]), CYRILLIC_OCR_LANGUAGES);
 console.log("Separate bundled Russian/Kazakh modes and mixed automatic recovery: passed.");
+
+
+const missingGeometryMultiscript: OcrCandidate[] = [
+  {script:"cyrillic",text:"Қазақ тіліндегі маңызды мәтін",
+    lines:[{text:"Қазақ тіліндегі маңызды мәтін",script:"cyrillic",left:.05,top:.1,right:.9,bottom:.16}]},
+  {script:"korean",text:"한국어 문서 안내 정보",lines:[]},
+];
+assert.equal(hasUncertainMixedScriptLayout(missingGeometryMultiscript),true);
+assert.equal(hasUncertainMixedScriptLayout([missingGeometryMultiscript[0]]),false);
+assert.equal(hasUncertainMixedScriptLayout([
+  missingGeometryMultiscript[0],
+  {script:"korean",text:"한국어 문서 안내 정보",
+    lines:[{text:"한국어 문서 안내 정보",script:"korean",left:.1,top:.5,right:.9,bottom:.6}]}
+]),false);
+assert.equal(hasUncertainMixedScriptLayout([
+  missingGeometryMultiscript[0],{script:"latin",text:"abc",lines:[]}
+]),false);
+assert.equal(hasUncertainMixedScriptLayout([
+  {script:"japanese",text:"日本語文書東京大阪京都漢字本文詳解",lines:[]},
+  {script:"chinese",text:"中文文档北京上海南京汉字文字详细说明",lines:[]}
+]),false);
+console.log("Uncertain multilingual geometry is referred to review without dropping text: passed.");
