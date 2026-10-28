@@ -10,7 +10,7 @@ import { chooseLocalOcrImagePath, reusableOcrImagePath } from "../src/lib/ocr-in
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "../src/lib/ocr-budget";
 import { isLocalOcrImagePath } from "../src/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "../src/lib/ocr-errors";
-import { lineScore, mergeOcrCandidates, hasAmbiguousHanCandidates, hasUncertainMixedScriptLayout, type OcrCandidate } from "../src/lib/ocr-merge";
+import { lineScore, mergeOcrCandidates, exceedsOcrSpatialBudget, mergeOversizedOcrForReview, OCR_SPATIAL_LINE_LIMIT, hasAmbiguousHanCandidates, hasUncertainMixedScriptLayout, type OcrCandidate } from "../src/lib/ocr-merge";
 
 const line = (text: string, script: OcrCandidate["script"], top: number) =>
   ({ text, script, left: .1, top, right: .85, bottom: top + .04 });
@@ -552,3 +552,28 @@ assert.equal(hasConflictingNativeOcrText({text:"A",blocks:[{lines:[{text:"B"}]}]
 assert.equal(hasConflictingNativeOcrText({text:"日本語",blocks:[{lines:[{text:"日本学"}]}]}),true);
 assert.equal(hasConflictingNativeOcrText({text:"日本語学校",blocks:[]}),false);
 console.log("Native OCR text/line conflicts require review rather than silent glyph changes: passed.");
+
+
+// Very dense OCR pages must not put the WebView into quadratic spatial
+// line matching. Every distinct native full-text reading remains available.
+const denseText = "Қазақ тілі 123456789\n".repeat(370);
+const denseCyrillic: OcrCandidate = {
+  script:"cyrillic", text:denseText,
+  lines:Array.from({length:OCR_SPATIAL_LINE_LIMIT+1},(_,i)=>({
+    script:"cyrillic" as const,text:"Қазақ тілі 123456789",
+    left:.05,top:i/1000,right:.9,bottom:i/1000+.0007,
+  })),
+};
+const denseJapanese: OcrCandidate={
+  script:"japanese",text:"日本語の長い文章を正しく確認してください",lines:[],
+};
+assert.equal(exceedsOcrSpatialBudget([denseCyrillic,denseJapanese]),true);
+assert.equal(exceedsOcrSpatialBudget([{
+  ...denseCyrillic,lines:denseCyrillic.lines.slice(0,OCR_SPATIAL_LINE_LIMIT)
+}]),false);
+const denseReview=mergeOversizedOcrForReview([denseCyrillic,denseJapanese,denseJapanese]);
+assert.ok(denseReview.includes("Қазақ тілі"));
+assert.ok(denseReview.includes("日本語"));
+assert.equal(denseReview.match(/日本語の長い文章/g)?.length,1);
+assert.equal(mergeOversizedOcrForReview([]),"");
+console.log("Large-photo OCR geometry safely falls back without dropping language readings: passed.");

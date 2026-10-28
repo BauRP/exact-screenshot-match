@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrAmbiguousHanError, OcrMixedLayoutReviewError, resumeOcrReviewDraft, recoverFromReviewedText } from "../src/lib/ocr-partial";
+import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrAmbiguousHanError, OcrMixedLayoutReviewError, OcrLargeLayoutReviewError, resumeOcrReviewDraft, recoverFromReviewedText } from "../src/lib/ocr-partial";
 import { saveOcrNoteAndOpenEditor } from "../src/lib/ocr-save-flow";
 import { readPendingOcrDraft, savePendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "../src/lib/ocr-draft";
 const storage=new Map<string,string>();
@@ -185,3 +185,12 @@ assert.equal(applyRecoveredOcrPass(correctedRecovery,["korean"],"한국어").tex
 assert.throws(()=>recoverFromReviewedText(correctedRecovery," ",true),/OCR_EMPTY_TEXT/);
 assert.equal(recoverFromReviewedText(correctedRecovery,"another",false),correctedRecovery);
 console.log("User-corrected OCR remains intact across retries on one photograph: passed.");
+
+
+const denseError=new OcrLargeLayoutReviewError("한국어\n日本語");
+assert.equal(denseError.recognizedText,"한국어\n日本語");
+assert.ok(markRecoveredOcrText("한국어\n日本語","large-layout").includes("слишком много"));
+assert.equal(savePendingOcrDraft({...draft,reason:"large-layout"},25000,draftStore),true);
+assert.equal(readPendingOcrDraft(25001,draftStore)?.reason,"large-layout");
+clearPendingOcrDraft(draftStore);
+console.log("Large-document review warnings survive offline restart: passed.");

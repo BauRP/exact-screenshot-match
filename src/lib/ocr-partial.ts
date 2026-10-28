@@ -1,6 +1,6 @@
 import type { OcrScript } from "./ocr-merge";
 
-export type OcrReviewReason = "recovery" | "ambiguous-han" | "mixed-layout" | "limited-selection" | "native-text";
+export type OcrReviewReason = "recovery" | "ambiguous-han" | "mixed-layout" | "limited-selection" | "native-text" | "large-layout";
 
 export const OCR_SCRIPT_LABELS: Readonly<Record<OcrScript, string>> = {
   latin: "Латиница",
@@ -123,6 +123,9 @@ export function markRecoveredOcrText(
         : reason === "native-text"
           ? "⚠️ Полный текст и отдельные строки распознавания содержат расхождения. " +
             "Проверьте символы и абзацы перед сохранением.\n\n"
+          : reason === "large-layout"
+            ? "⚠️ На фотографии слишком много распознанных строк для надёжного объединения. " +
+              "Сохранены варианты текста из найденных языков. Проверьте повторы и порядок строк.\n\n"
       : "⚠️ Текст восстановлен несколькими проверками одной фотографии. " +
         "Проверьте порядок строк и исправьте возможные ошибки.\n\n";
   return warning + text;
@@ -225,4 +228,17 @@ export function recoverFromReviewedText(
   if (!hasEdits) return previous;
   if (!reviewedText.trim()) throw new Error("OCR_EMPTY_TEXT");
   return {...previous,text:reviewedText};
+}
+
+
+/** The full text is retained, but expensive geometry fusion was skipped.
+ * The user can inspect and correct the separate original OCR readings.
+ */
+export class OcrLargeLayoutReviewError extends Error {
+  readonly recognizedText: string;
+  constructor(text: string) {
+    super("OCR_LARGE_LAYOUT_REVIEW");
+    this.name = "OcrLargeLayoutReviewError";
+    this.recognizedText = text;
+  }
 }

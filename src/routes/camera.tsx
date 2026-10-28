@@ -7,12 +7,12 @@ import { createNote, getNote } from "@/lib/notes-store";
 import { saveOcrNoteAndOpenEditor, reopenSavedOcrNote, OcrEditorNavigationError } from "@/lib/ocr-save-flow";
 import { useT } from "@/lib/i18n";
 import { toast } from "sonner";
-import { mergeOcrCandidates, hasAmbiguousHanCandidates, hasUncertainMixedScriptLayout, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
+import { mergeOcrCandidates, exceedsOcrSpatialBudget, mergeOversizedOcrForReview, hasAmbiguousHanCandidates, hasUncertainMixedScriptLayout, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
 import { linesFromMlKit } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
-import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, type OcrReviewReason, OcrMixedLayoutReviewError, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, resumeOcrReviewDraft, recoverFromReviewedText, hanAlternativesFromCandidates, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
+import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, type OcrReviewReason, OcrMixedLayoutReviewError, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrLargeLayoutReviewError, resumeOcrReviewDraft, recoverFromReviewedText, hanAlternativesFromCandidates, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
 import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
@@ -204,7 +204,8 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       // A timeout leaves an incomplete multilingual page. Do not silently
       // save partial results as if every configured recognizer had completed.
       if (timedOut || !coverage.isComplete()) {
-        const partial = mergeOcrCandidates(results);
+        const partial = exceedsOcrSpatialBudget(results)
+          ? mergeOversizedOcrForReview(results) : mergeOcrCandidates(results);
         if (partial.trim()) throw new OcrIncompleteScanError(partial, coverage.missingScripts());
         if (timedOut) throw new Error("OCR timed out");
         coverage.ensureComplete();
@@ -216,7 +217,10 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       // only when at least one valid geometry source is available. The fallback
       // deliberately chooses a single result instead of duplicating page text.
       onProgress("Объединение распознанных строк");
-      const text = mergeOcrCandidates(results);
+      const tooManyLines = exceedsOcrSpatialBudget(results);
+      const text = tooManyLines
+        ? mergeOversizedOcrForReview(results) : mergeOcrCandidates(results);
+      if (tooManyLines && text) throw new OcrLargeLayoutReviewError(text);
       if (scanPlan.length > 1 && text && hasAmbiguousHanCandidates(results)) {
         throw new OcrAmbiguousHanError(text, hanAlternativesFromCandidates(results));
       }
@@ -492,7 +496,8 @@ function CameraPage() {
         return;
       }
       if (caught instanceof OcrAmbiguousHanError || caught instanceof OcrMixedLayoutReviewError ||
-          caught instanceof OcrLimitedSelectionReviewError || caught instanceof OcrNativeTextReviewError) {
+          caught instanceof OcrLimitedSelectionReviewError || caught instanceof OcrNativeTextReviewError ||
+          caught instanceof OcrLargeLayoutReviewError) {
         const previous = pendingRecoveryRef.current;
         const combined = previous?.path === currentImagePath
           ? applyRecoveredOcrPass(previous, attemptedScripts, caught.recognizedText)
@@ -502,7 +507,8 @@ function CameraPage() {
         setPartialMissingScripts(combined.missingScripts);
         const reason: OcrReviewReason = caught instanceof OcrAmbiguousHanError ? "ambiguous-han" :
           caught instanceof OcrMixedLayoutReviewError ? "mixed-layout" :
-          caught instanceof OcrLimitedSelectionReviewError ? "limited-selection" : "native-text";
+          caught instanceof OcrLimitedSelectionReviewError ? "limited-selection" :
+          caught instanceof OcrLargeLayoutReviewError ? "large-layout" : "native-text";
         setReviewReason(reason);
         setHanAlternatives(caught instanceof OcrAmbiguousHanError ? caught.alternatives : null);
         setReviewEdited(false);
@@ -523,7 +529,8 @@ function CameraPage() {
       handleFailure(readableOcrFailure(caught), operationId,
         caught instanceof OcrEditorNavigationError ? caught.savedNoteId : undefined,
         caught instanceof OcrAmbiguousHanError || caught instanceof OcrMixedLayoutReviewError ||
-        caught instanceof OcrLimitedSelectionReviewError || caught instanceof OcrNativeTextReviewError);
+        caught instanceof OcrLimitedSelectionReviewError || caught instanceof OcrNativeTextReviewError ||
+        caught instanceof OcrLargeLayoutReviewError);
     } finally {
       inFlightRef.current = false;
     }

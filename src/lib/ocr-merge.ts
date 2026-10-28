@@ -395,3 +395,33 @@ export function hasUncertainMixedScriptLayout(candidates: readonly OcrCandidate[
     item.script === "japanese" || item.script === "chinese" ? "han" : item.script));
   return scripts.size >= 2 && credible.some(item => !item.lines.some(valid));
 }
+
+
+/** Spatial fusion compares every plausible line against previous candidates.
+ * Avoid quadratic work and a locked WebView on huge scanned pages.
+ * The fallback keeps native full-text readings from every credible model,
+ * visibly separated for human review rather than dropping a language.
+ */
+export const OCR_SPATIAL_LINE_LIMIT = 350;
+export function exceedsOcrSpatialBudget(candidates: readonly OcrCandidate[]): boolean {
+  let lines = 0;
+  for (const candidate of candidates) {
+    lines += candidate.lines.length;
+    if (lines > OCR_SPATIAL_LINE_LIMIT) return true;
+  }
+  return false;
+}
+
+export function mergeOversizedOcrForReview(candidates: readonly OcrCandidate[]): string {
+  const seen = new Set<string>();
+  const parts: string[] = [];
+  for (const candidate of candidates) {
+    const text = candidate.text.trim();
+    if (!text || lineScore(text,candidate.script,undefined,candidate.confidence) < 20) continue;
+    const key = text.normalize("NFC").replace(/\s+/gu," ").trim().toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    parts.push(text);
+  }
+  return parts.join("\n\n");
+}

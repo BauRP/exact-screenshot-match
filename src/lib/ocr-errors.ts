@@ -32,6 +32,9 @@ export function readableOcrFailure(error: unknown): string {
   if (error instanceof Error && error.message === "OCR_SCAN_BUSY") {
     return "Предыдущее сканирование ещё завершается. Повторите попытку после его окончания.";
   }
+  if (error instanceof Error && error.message === "OCR_LARGE_LAYOUT_REVIEW") {
+    return "Обнаружен большой документ. Чтобы избежать зависания, результаты языковых моделей сохранены раздельно для проверки порядка строк.";
+  }
   if (error instanceof Error && error.message === "OCR_LIMITED_LANGUAGE_SELECTION") {
     return "Проверены только выбранные языки. Проверьте результат и подтвердите сохранение.";
   }
