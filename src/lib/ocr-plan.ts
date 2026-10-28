@@ -1,5 +1,5 @@
 import type { OcrScript } from "./ocr-merge";
-export type OcrMode = OcrScript | "auto";
+export type OcrMode = OcrScript | "auto" | "russian" | "kazakh";
 export type OcrScanRequest = OcrMode | readonly OcrScript[];
 
 // Every bundled recognizer remains available. A recovery pass can target only
@@ -19,6 +19,7 @@ export function ocrScanPlan(request: OcrScanRequest): OcrScript[] {
     return scripts;
   }
   if (request === "auto") return [...AUTO_SCAN_ORDER];
+  if (request === "russian" || request === "kazakh") return ["cyrillic"];
   if (!AUTO_SCAN_ORDER.includes(request)) throw new Error("Invalid OCR scan plan");
   return [request];
 }
@@ -41,4 +42,12 @@ export function prioritizeRemainingOcrScripts(
   return remaining.map((script,index) => ({script,index,score:evidence[script] ?? 0}))
     .sort((a,b) => b.score - a.score || a.index - b.index)
     .map(item => item.script);
+}
+
+/** Manual native language selection, still exclusively from APK-bundled models.
+ * Recovering an automatic failure uses both languages by default.
+ */
+export function cyrillicLanguageForScan(request: OcrScanRequest): "rus" | "kaz" | typeof CYRILLIC_OCR_LANGUAGES {
+  return request === "russian" ? "rus" :
+    request === "kazakh" ? "kaz" : CYRILLIC_OCR_LANGUAGES;
 }

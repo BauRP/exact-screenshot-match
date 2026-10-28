@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { ocrTextToEditorHtml, buildOcrNoteDraft, truncateOcrTitle } from "../src/lib/ocr-note";
 import { composeRecognizedText } from "../src/lib/ocr-text";
-import { ocrScanPlan, prioritizeRemainingOcrScripts, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
+import { ocrScanPlan, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
 import { linesFromMlKit } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
 import { OcrScanCoverage } from "../src/lib/ocr-coverage";
@@ -482,3 +482,13 @@ assert.equal(hanAlternativesFromCandidates([
   {script:"japanese",text:"学校"},{script:"chinese",text:"学校"}
 ]),null);
 console.log("All-script scheduling, rotated geometry, Cyrillic fallback and Han alternatives: passed.");
+
+// Manual Cyrillic OCR must use only the chosen bundled language, while auto
+// and recovery preserve the pinned mixed Russian/Kazakh recognizer.
+assert.deepEqual(ocrScanPlan("russian"), ["cyrillic"]);
+assert.deepEqual(ocrScanPlan("kazakh"), ["cyrillic"]);
+assert.equal(cyrillicLanguageForScan("russian"), "rus");
+assert.equal(cyrillicLanguageForScan("kazakh"), "kaz");
+assert.equal(cyrillicLanguageForScan("auto"), CYRILLIC_OCR_LANGUAGES);
+assert.equal(cyrillicLanguageForScan(["cyrillic"]), CYRILLIC_OCR_LANGUAGES);
+console.log("Separate bundled Russian/Kazakh modes and mixed automatic recovery: passed.");

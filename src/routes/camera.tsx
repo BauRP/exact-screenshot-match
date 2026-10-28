@@ -16,7 +16,7 @@ import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, ma
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText } from "@/lib/ocr-text";
-import { ocrScanPlan, prioritizeRemainingOcrScripts, CYRILLIC_OCR_LANGUAGES, type OcrMode, type OcrScanRequest } from "@/lib/ocr-plan";
+import { ocrScanPlan, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, type OcrMode, type OcrScanRequest } from "@/lib/ocr-plan";
 
 export const Route = createFileRoute("/camera")({
   head: () => ({ meta: [
@@ -171,9 +171,9 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
             coverage.markFailed("cyrillic");
             continue;
           }
-          onProgress(`Распознавание ${index + 1}/${scanPlan.length}: русский и казахский`);
+          onProgress(`Распознавание ${index + 1}/${scanPlan.length}: ${mode === "russian" ? "русский" : mode === "kazakh" ? "казахский" : "русский и казахский"}`);
           try {
-            const data = await timed(() => native.recognize({path:scanPath,language:CYRILLIC_OCR_LANGUAGES}), 18000);
+            const data = await timed(() => native.recognize({path:scanPath,language:cyrillicLanguageForScan(mode)}), 18000);
             coverage.markCompleted("cyrillic");
             const cyrillicText = cyrillicTextWithLineFallback(data);
             if (cyrillicText.trim()) {
@@ -595,10 +595,12 @@ function CameraPage() {
         </div>
 
         <label className="mb-3 flex flex-col gap-1 text-xs text-muted-foreground" htmlFor="ocr-language">
-          Язык текста (обычно определяется автоматически)
+          Режим распознавания (автоматически проверяются все языки)
           <select id="ocr-language" value={ocrMode} disabled={busy} onChange={(e) => setOcrMode(e.target.value as OcrMode)} className="rounded-lg border border-border bg-background p-2 text-foreground">
             <option value="auto">Определять автоматически</option>
-            <option value="cyrillic">Русский / Казахский</option>
+            <option value="cyrillic">Русский + Казахский</option>
+            <option value="russian">Только русский — точная проверка</option>
+            <option value="kazakh">Только казахский — точная проверка</option>
             <option value="latin">Латиница</option>
             <option value="chinese">Китайский</option>
             <option value="japanese">Японский</option>

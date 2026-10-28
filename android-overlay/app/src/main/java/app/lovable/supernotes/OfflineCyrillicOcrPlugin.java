@@ -1,5 +1,6 @@
 package app.lovable.supernotes;
 
+import android.app.ActivityManager;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -280,10 +281,17 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
                 || (long) bounds.outWidth * (long) bounds.outHeight > 200000000L) {
             throw new IllegalArgumentException("Image dimensions exceed safe OCR limits");
         }
+        // Low-RAM Android devices cannot reliably hold a large decoded
+        // bitmap + ML Kit/Tesseract buffers + WebView simultaneously.
+        // Sample before allocating instead of relying on OutOfMemoryError.
+        ActivityManager manager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+        boolean lowRam = manager != null && manager.isLowRamDevice();
+        long maxPixels = lowRam ? 6000000L : 12000000L;
+        int maxEdge = lowRam ? 3200 : 4500;
         BitmapFactory.Options options = new BitmapFactory.Options();
         options.inSampleSize = 1;
-        while ((long)(bounds.outWidth / options.inSampleSize) * (bounds.outHeight / options.inSampleSize) > 12000000L
-                || Math.max(bounds.outWidth, bounds.outHeight) / options.inSampleSize > 4500) {
+        while ((long)(bounds.outWidth / options.inSampleSize) * (bounds.outHeight / options.inSampleSize) > maxPixels
+                || Math.max(bounds.outWidth, bounds.outHeight) / options.inSampleSize > maxEdge) {
             options.inSampleSize *= 2;
         }
         Bitmap bitmap;

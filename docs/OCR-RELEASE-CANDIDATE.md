@@ -71,3 +71,9 @@ The APK contains pinned `rus` and `kaz` assets. On Android the first copy to app
 - Tesseract Russian/Kazakh output falls back to iterated native lines if its aggregate string is unexpectedly blank.
 - ML Kit geometry can use four valid corner points for skewed or rotated lines when a bounding rectangle is absent.
 - Add automated tests for priority, all-model coverage, rotated geometry, fallback and both Han readings. These tests do not demonstrate real-phone OCR accuracy.
+
+## Separate bundled Cyrillic modes and low-memory imports
+
+- Camera/gallery OCR offers separate Russian-only and Kazakh-only modes alongside combined Cyrillic. These call the preinstalled rus and kaz models, without downloading anything to the phone. Automatic scans and multi-script recovery retain the combined pinned kaz+rus model.
+- Native Android decoder now checks the device low-RAM classification before allocating photo bitmaps. On low-RAM devices, it downsamples to at most roughly 6 megapixels and 3200 pixels maximum edge (instead of the ordinary 12 megapixels / 4500 pixels). Actual decoded dimensions depend on power-of-two sampling. Reduced memory pressure may come at the cost of fine-print accuracy.
+- Automated logic tests cover language routing; emulator workflows compile and exercise the native decoder. Physical-device performance and recognition accuracy remain unverified.
