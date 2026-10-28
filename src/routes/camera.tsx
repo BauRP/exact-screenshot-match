@@ -17,7 +17,7 @@ import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
 import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText } from "@/lib/ocr-text";
-import { ocrScanPlan, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, type OcrMode, type OcrScanRequest } from "@/lib/ocr-plan";
+import { ocrScanPlan, selectedOcrScanPlan, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, type OcrMode, type OcrScanRequest } from "@/lib/ocr-plan";
 
 export const Route = createFileRoute("/camera")({
   head: () => ({ meta: [
@@ -215,10 +215,10 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       // deliberately chooses a single result instead of duplicating page text.
       onProgress("Объединение распознанных строк");
       const text = mergeOcrCandidates(results);
-      if (mode === "auto" && text && hasAmbiguousHanCandidates(results)) {
+      if (scanPlan.length > 1 && text && hasAmbiguousHanCandidates(results)) {
         throw new OcrAmbiguousHanError(text, hanAlternativesFromCandidates(results));
       }
-      if (mode === "auto" && text && hasUncertainMixedScriptLayout(results)) {
+      if (scanPlan.length > 1 && text && hasUncertainMixedScriptLayout(results)) {
         throw new OcrMixedLayoutReviewError(text);
       }
       return text;
@@ -276,6 +276,8 @@ function CameraPage() {
   const [partialMissingScripts, setPartialMissingScripts] = useState<readonly OcrScript[]>([]);
   const [retryImagePath, setRetryImagePath] = useState<string | null>(null);
   const [ocrMode, setOcrMode] = useState<OcrMode>("auto");
+  const [selectedOcrScripts, setSelectedOcrScripts] = useState<OcrScript[]>(["latin","cyrillic"]);
+  const [selectionError, setSelectionError] = useState<string | null>(null);
   const [ocrStage, setOcrStage] = useState("");
 
   useEffect(() => {
@@ -382,7 +384,8 @@ function CameraPage() {
       setModalOpen(true);
       return;
     }
-    const scanRequest = retryScripts ?? ocrMode;
+    const scanRequest = retryScripts ?? (ocrMode === "custom" ? selectedOcrScanPlan(selectedOcrScripts) : ocrMode);
+    setSelectionError(null);
     const attemptedScripts = ocrScanPlan(scanRequest);
     inFlightRef.current = true;
     const operationId = operationIdRef.current + 1;
@@ -540,6 +543,10 @@ function CameraPage() {
 
   const startCapture = (source: CaptureSource) => {
     if (inFlightRef.current || partialOcrText) return;
+    if (ocrMode === "custom" && selectedOcrScripts.length === 0) {
+      setSelectionError("Выберите хотя бы один язык для распознавания.");
+      return;
+    }
     setModalOpen(false);
     if (isNativePlatform()) {
       void scanNativeImage(source);
@@ -615,6 +622,13 @@ function CameraPage() {
   };
 
   const busy = status === "preparing" || status === "picking" || status === "scanning";
+  const toggleSelectedLanguage = (script: OcrScript) => {
+    if (busy) return;
+    setSelectedOcrScripts(current => current.includes(script)
+      ? current.filter(value => value !== script)
+      : selectedOcrScanPlan([...current,script]));
+    setSelectionError(null);
+  };
   const savePartialLabel = partialMissingScripts.length
     ? "Сохранить найденный текст (неполный)"
     : reviewReason === "ambiguous-han"
@@ -668,6 +682,7 @@ function CameraPage() {
           Режим распознавания (автоматически проверяются все языки)
           <select id="ocr-language" value={ocrMode} disabled={busy} onChange={(e) => setOcrMode(e.target.value as OcrMode)} className="rounded-lg border border-border bg-background p-2 text-foreground">
             <option value="auto">Определять автоматически</option>
+            <option value="custom">Проверить несколько выбранных языков</option>
             <option value="cyrillic">Русский + Казахский</option>
             <option value="russian">Только русский — точная проверка</option>
             <option value="kazakh">Только казахский — точная проверка</option>
@@ -678,6 +693,23 @@ function CameraPage() {
             <option value="devanagari">Хинди и другие на деванагари</option>
           </select>
         </label>
+        {ocrMode === "custom" && (
+          <div role="group" aria-label="Языки для распознавания" className="mb-3 w-full max-w-sm rounded-xl border border-border bg-card p-3 text-left">
+            <p className="mb-2 text-xs text-muted-foreground">
+              Проверяются только выбранные языковые модели, уже встроенные в приложение.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {AUTO_SCAN_ORDER.map(script => (
+                <label key={script} className="flex items-center gap-2 text-xs text-foreground">
+                  <input type="checkbox" checked={selectedOcrScripts.includes(script)}
+                    disabled={busy} onChange={() => toggleSelectedLanguage(script)} />
+                  {OCR_SCRIPT_LABELS[script]}
+                </label>
+              ))}
+            </div>
+            {selectionError && <p role="alert" className="mt-2 text-xs text-destructive">{selectionError}</p>}
+          </div>
+        )}
         <p className="mx-auto max-w-xs px-4 text-center text-xs leading-relaxed text-muted-foreground">
           Распознавание текста на разных языках — без отправки фото на сервер
         </p>
@@ -814,7 +846,7 @@ function CameraPage() {
               </Button>
             )}
             {retryImagePath && !savedNoteId && (
-              <Button type="button" disabled={busy || ocrMode === "auto"}
+              <Button type="button" disabled={busy || ocrMode === "auto" || (ocrMode === "custom" && !selectedOcrScripts.length)}
                 onClick={retryManualOnSamePhoto}
                 variant="outline"
                 className="h-9 rounded-xl text-xs font-semibold">

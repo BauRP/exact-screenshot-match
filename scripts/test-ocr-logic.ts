@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { ocrTextToEditorHtml, buildOcrNoteDraft, truncateOcrTitle } from "../src/lib/ocr-note";
 import { composeRecognizedText } from "../src/lib/ocr-text";
-import { ocrScanPlan, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
+import { ocrScanPlan, selectedOcrScanPlan, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
 import { linesFromMlKit } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
 import { OcrScanCoverage } from "../src/lib/ocr-coverage";
@@ -514,3 +514,18 @@ assert.equal(hasUncertainMixedScriptLayout([
   {script:"chinese",text:"中文文档北京上海南京汉字文字详细说明",lines:[]}
 ]),false);
 console.log("Uncertain multilingual geometry is referred to review without dropping text: passed.");
+
+
+// Offline multilingual selection uses only bundled models, with stable order
+// even when the checkbox sequence differs. Missing/duplicated models fail.
+assert.deepEqual(selectedOcrScanPlan(["korean","latin","cyrillic"]),
+  ["latin","cyrillic","korean"]);
+assert.deepEqual(selectedOcrScanPlan(["devanagari","chinese"]),
+  ["chinese","devanagari"]);
+assert.deepEqual(selectedOcrScanPlan([...AUTO_SCAN_ORDER]),ocrScanPlan("auto"));
+assert.deepEqual(ocrScanPlan(selectedOcrScanPlan(["korean","japanese"])),
+  ["japanese","korean"]);
+assert.throws(()=>selectedOcrScanPlan([]),/Invalid OCR scan plan/);
+assert.throws(()=>selectedOcrScanPlan(["latin","latin"]),/Invalid OCR scan plan/);
+assert.throws(()=>selectedOcrScanPlan(["unsupported" as never]),/Invalid OCR scan plan/);
+console.log("Offline custom multilingual selection and stable six-script scan plan: passed.");

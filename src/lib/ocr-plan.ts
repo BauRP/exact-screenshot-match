@@ -1,10 +1,10 @@
 import type { OcrScript } from "./ocr-merge";
-export type OcrMode = OcrScript | "auto" | "russian" | "kazakh";
+export type OcrMode = OcrScript | "auto" | "russian" | "kazakh" | "custom";
 export type OcrScanRequest = OcrMode | readonly OcrScript[];
 
 // Every bundled recognizer remains available. A recovery pass can target only
 // models that failed without discarding completed results from the first pass.
-const AUTO_SCAN_ORDER: readonly OcrScript[] = ["latin", "cyrillic", "japanese", "chinese", "korean", "devanagari"];
+export const AUTO_SCAN_ORDER: readonly OcrScript[] = ["latin", "cyrillic", "japanese", "chinese", "korean", "devanagari"];
 // Keep the validated, pinned Russian/Kazakh ordering.
 export const CYRILLIC_OCR_LANGUAGES = "kaz+rus" as const;
 
@@ -50,4 +50,16 @@ export function prioritizeRemainingOcrScripts(
 export function cyrillicLanguageForScan(request: OcrScanRequest): "rus" | "kaz" | typeof CYRILLIC_OCR_LANGUAGES {
   return request === "russian" ? "rus" :
     request === "kazakh" ? "kaz" : CYRILLIC_OCR_LANGUAGES;
+}
+
+
+/** A user-selected group of installed models. Reject invalid requests rather
+ * than silently omit a language. Keep a stable order to allow reproducible OCR.
+ */
+export function selectedOcrScanPlan(selection: readonly OcrScript[]): OcrScript[] {
+  if (!selection.length || new Set(selection).size !== selection.length ||
+      selection.some(script => !AUTO_SCAN_ORDER.includes(script))) {
+    throw new Error("Invalid OCR scan plan");
+  }
+  return AUTO_SCAN_ORDER.filter(script => selection.includes(script));
 }

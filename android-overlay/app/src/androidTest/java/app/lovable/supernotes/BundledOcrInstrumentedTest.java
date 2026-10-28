@@ -105,6 +105,19 @@ public class BundledOcrInstrumentedTest {
     }
 
     @Test
+    public void standaloneRussianKazakhModelsInitializeOffline() {
+        for (String language : new String[]{"rus", "kaz"}) {
+            TessBaseAPI api = new TessBaseAPI();
+            try {
+                assertTrue("Bundled OCR model unavailable: " + language,
+                    api.init(modelsRoot.getAbsolutePath(), language));
+            } finally {
+                api.recycle();
+            }
+        }
+    }
+
+    @Test
     public void russianTextIsRecognizedOnAndroid() {
         verifyRecognition("Привет мир\nЭто тест распознавания", .25);
     }
