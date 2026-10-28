@@ -64,3 +64,42 @@ export function selectedOcrScanPlan(selection: readonly OcrScript[]): OcrScript[
   }
   return AUTO_SCAN_ORDER.filter(script => selection.includes(script));
 }
+
+
+/** Small local-only preference. The automatic full-language scan remains the
+ * default on first install; explicitly chosen models persist across launches.
+ */
+const OCR_PREFERENCE_KEY = "wave.ocr.scan-preferences.v1";
+export type OcrScanPreferences = { mode: OcrMode; scripts: OcrScript[] };
+type PreferenceStore = Pick<Storage,"getItem"|"setItem">;
+function preferencesStorage(): PreferenceStore | null {
+  try { return typeof window !== "undefined" ? window.localStorage : null; }
+  catch { return null; }
+}
+export function readOcrScanPreferences(
+  target: PreferenceStore | null = preferencesStorage(),
+): OcrScanPreferences {
+  const fallback: OcrScanPreferences = {mode:"auto",scripts:["latin","cyrillic"]};
+  try {
+    const raw=target?.getItem(OCR_PREFERENCE_KEY);
+    if (!raw || raw.length > 1000) return fallback;
+    const value: unknown=JSON.parse(raw);
+    if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
+    const data=value as Record<string,unknown>;
+    if (typeof data.mode !== "string" || !["auto","custom","russian","kazakh",...AUTO_SCAN_ORDER].includes(data.mode) ||
+        !Array.isArray(data.scripts)) return fallback;
+    const scripts=selectedOcrScanPlan(data.scripts as OcrScript[]);
+    return {mode:data.mode as OcrMode,scripts};
+  } catch { return fallback; }
+}
+export function saveOcrScanPreferences(
+  value: OcrScanPreferences,
+  target: PreferenceStore | null = preferencesStorage(),
+): boolean {
+  if (!target || !["auto","custom","russian","kazakh",...AUTO_SCAN_ORDER].includes(value.mode)) return false;
+  try {
+    const scripts=selectedOcrScanPlan(value.scripts);
+    target.setItem(OCR_PREFERENCE_KEY,JSON.stringify({mode:value.mode,scripts}));
+    return true;
+  } catch { return false; }
+}

@@ -1,7 +1,7 @@
 import type { OcrNativeTextAlternative } from "./ocr-text";
 import type { OcrScript } from "./ocr-merge";
 
-export type OcrReviewReason = "recovery" | "ambiguous-han" | "mixed-layout" | "limited-selection" | "native-text" | "large-layout";
+export type OcrReviewReason = "recovery" | "ambiguous-han" | "mixed-layout" | "limited-selection" | "native-text" | "large-layout" | "save-retry";
 
 export const OCR_SCRIPT_LABELS: Readonly<Record<OcrScript, string>> = {
   latin: "Латиница",
@@ -112,6 +112,9 @@ export function markRecoveredOcrText(
   text: string, reason: OcrReviewReason = "recovery",
 ): string {
   if (!text.trim()) throw new Error("OCR_EMPTY_TEXT");
+  // The recognition itself completed. A local storage failure is not an OCR
+  // fidelity problem; retrying the save must not corrupt the real note body.
+  if (reason === "save-retry") return text;
   const warning = reason === "ambiguous-han"
     ? "⚠️ Китайский и японский текст могли быть распознаны неоднозначно. " +
       "Проверьте иероглифы и порядок строк.\n\n"

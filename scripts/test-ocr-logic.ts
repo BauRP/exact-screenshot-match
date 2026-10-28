@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { ocrTextToEditorHtml, buildOcrNoteDraft, truncateOcrTitle } from "../src/lib/ocr-note";
 import { composeRecognizedText, hasConflictingNativeOcrText, extractNativeTextAlternative } from "../src/lib/ocr-text";
-import { ocrScanPlan, selectedOcrScanPlan, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
+import { ocrScanPlan, selectedOcrScanPlan, readOcrScanPreferences, saveOcrScanPreferences, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
 import { linesFromMlKit } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
 import { OcrScanCoverage } from "../src/lib/ocr-coverage";
@@ -594,3 +594,32 @@ assert.ok(Array.from(extractNativeTextAlternative("japanese",{
  text:"日本語".repeat(1200),blocks:[{lines:[{text:"日本学".repeat(1200)}]}],
 })?.complete ?? "").length <= 2000);
 console.log("Native OCR alternatives remain visible for manual glyph review: passed.");
+
+
+// A user-selected offline model combination persists, while a new install
+// still scans every script automatically. Malformed preferences fail closed.
+const prefData = new Map<string,string>();
+const prefStore={
+  getItem:(key:string)=>prefData.get(key)??null,
+  setItem:(key:string,value:string)=>{prefData.set(key,value);},
+};
+assert.deepEqual(readOcrScanPreferences(prefStore),{
+  mode:"auto",scripts:["latin","cyrillic"],
+});
+assert.equal(saveOcrScanPreferences({
+  mode:"custom",scripts:["korean","cyrillic","latin"],
+},prefStore),true);
+assert.deepEqual(readOcrScanPreferences(prefStore),{
+  mode:"custom",scripts:["latin","cyrillic","korean"],
+});
+assert.equal(saveOcrScanPreferences({
+  mode:"unknown" as never,scripts:["latin"],
+},prefStore),false);
+assert.equal(saveOcrScanPreferences({
+  mode:"custom",scripts:[],
+},prefStore),false);
+assert.deepEqual(readOcrScanPreferences({
+  getItem:()=>"{corrupted",
+  setItem:()=>undefined,
+}),{mode:"auto",scripts:["latin","cyrillic"]});
+console.log("Offline language selection persists without changing first-install auto defaults: passed.");

@@ -240,3 +240,16 @@ assert.equal(epochGate.canWriteToken(secondEpoch),false);
 epochGate.disarm();
 assert.equal(epochGate.canWrite,false);
 console.log("Large multilingual drafts survive restart and stale autosaves cannot overwrite newer scans: passed.");
+
+
+// A successful OCR pass may fail to write a note (disk full/locked storage).
+// User can retry saving the SAME exact characters without OCR reruns or a
+// permanent, inaccurate 'partial OCR' banner in the real note.
+const storageRetryText="Қазақ тілі\n한국어\n日本語";
+assert.equal(buildReviewedOcrText(storageRetryText,[],"save-retry"),storageRetryText);
+assert.equal(savePendingOcrDraft({...draft,reason:"save-retry",
+  text:storageRetryText,reviewedText:storageRetryText,edited:false},33000,draftStore),true);
+assert.equal(readPendingOcrDraft(33001,draftStore)?.text,storageRetryText);
+assert.equal(readPendingOcrDraft(33001,draftStore)?.reason,"save-retry");
+clearPendingOcrDraft(draftStore);
+console.log("Finished OCR remains recoverable after local note-save failure: passed.");

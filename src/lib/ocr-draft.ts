@@ -12,7 +12,7 @@ const MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 // Both 100k-character text fields plus up to six pairs of 2k-char
 // native alternatives. JSON escaping can expand strings significantly.
 const MAX_SERIALIZED_DRAFT_CHARS = 6 * MAX_CHARS + 32_000;
-const REASONS: readonly OcrReviewReason[] = ["recovery","ambiguous-han","mixed-layout","limited-selection","native-text","large-layout"];
+const REASONS: readonly OcrReviewReason[] = ["recovery","ambiguous-han","mixed-layout","limited-selection","native-text","large-layout","save-retry"];
 type Store = Pick<Storage,"getItem"|"setItem"|"removeItem">;
 export type OcrLocalDraft = {
   text: string;

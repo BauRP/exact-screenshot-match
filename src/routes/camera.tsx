@@ -17,7 +17,7 @@ import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
 import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText, extractNativeTextAlternative, type OcrNativeTextAlternative } from "@/lib/ocr-text";
-import { ocrScanPlan, selectedOcrScanPlan, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, type OcrMode, type OcrScanRequest } from "@/lib/ocr-plan";
+import { ocrScanPlan, selectedOcrScanPlan, AUTO_SCAN_ORDER, readOcrScanPreferences, saveOcrScanPreferences, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, type OcrMode, type OcrScanRequest } from "@/lib/ocr-plan";
 
 export const Route = createFileRoute("/camera")({
   head: () => ({ meta: [
@@ -294,11 +294,17 @@ function CameraPage() {
   const [retryImagePath, setRetryImagePath] = useState<string | null>(null);
   const [ocrMode, setOcrMode] = useState<OcrMode>("auto");
   const [selectedOcrScripts, setSelectedOcrScripts] = useState<OcrScript[]>(["latin","cyrillic"]);
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const [draftPersistenceWarning, setDraftPersistenceWarning] = useState(false);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const [ocrStage, setOcrStage] = useState("");
 
   useEffect(() => {
     mountedRef.current = true;
+    const preferences=readOcrScanPreferences();
+    setOcrMode(preferences.mode);
+    setSelectedOcrScripts(preferences.scripts);
+    setPreferencesReady(true);
     const previous = readPendingOcrDraft();
     if (previous) {
       draftGateRef.current.arm();
@@ -322,15 +328,20 @@ function CameraPage() {
   }, []);
 
   useEffect(() => {
+    if (preferencesReady) saveOcrScanPreferences({mode:ocrMode,scripts:selectedOcrScripts});
+  },[preferencesReady,ocrMode,selectedOcrScripts]);
+
+  useEffect(() => {
     if (!partialOcrText || savedNoteId || !draftGateRef.current.canWrite) return;
     const generation = draftGateRef.current.token;
     const id = window.setTimeout(() => {
       if (!draftGateRef.current.canWriteToken(generation)) return;
       const current = latestReviewRef.current;
-      savePendingOcrDraft({text:partialOcrText,
+      const stored = savePendingOcrDraft({text:partialOcrText,
         reviewedText:current.edited ? current.text : partialOcrText,
         edited:current.edited, missingScripts:[...partialMissingScripts], reason:reviewReason,
         nativeAlternatives:nativeAlternativesRef.current});
+      if (mountedRef.current) setDraftPersistenceWarning(!stored);
     },reviewEdited ? 350 : 0);
     return () => window.clearTimeout(id);
   },[partialOcrText,reviewDraft,reviewEdited,partialMissingScripts,reviewReason,savedNoteId]);
@@ -338,10 +349,11 @@ function CameraPage() {
   const persistDraft = () => {
     if (!partialOcrText || !draftGateRef.current.canWrite) return;
     const current = latestReviewRef.current;
-    savePendingOcrDraft({text:partialOcrText,
+    const stored=savePendingOcrDraft({text:partialOcrText,
       reviewedText:current.edited ? current.text : partialOcrText,
       edited:current.edited, missingScripts:[...partialMissingScripts], reason:reviewReason,
       nativeAlternatives:nativeAlternativesRef.current});
+    if (mountedRef.current) setDraftPersistenceWarning(!stored);
   };
   const retainUnfinishedResult = (state: OcrRecoveryState, reason: OcrReviewReason = "recovery",
     alternatives: OcrNativeTextAlternative[] = []) => {
@@ -349,13 +361,15 @@ function CameraPage() {
     setNativeAlternatives(alternatives);
     draftGateRef.current.arm();
     latestReviewRef.current = {text:state.text,edited:false};
-    savePendingOcrDraft({
+    const stored=savePendingOcrDraft({
       text:state.text,reviewedText:state.text,edited:false,
       missingScripts:[...state.missingScripts],reason,
       nativeAlternatives:alternatives,
     });
+    if (mountedRef.current) setDraftPersistenceWarning(!stored);
   };
   const markDraftFinished = () => {
+    setDraftPersistenceWarning(false);
     draftGateRef.current.disarm();
     clearPendingOcrDraft();
   };
@@ -368,6 +382,7 @@ function CameraPage() {
     setReviewDraft("");
     setReviewEdited(false);
     setRestoredDraft(false);
+    setDraftPersistenceWarning(false);
     setRetryImagePath(null);
     setHanAlternatives(null);
     nativeAlternativesRef.current = [];
@@ -377,6 +392,22 @@ function CameraPage() {
     setError(null);
     setModalOpen(true);
   };
+
+  // Android WebView can be killed while a user edits an OCR draft without
+  // blur. Flush synchronously on backgrounding, app switch and pagehide.
+  useEffect(() => {
+    if (!partialOcrText || savedNoteId) return;
+    const onHidden = () => {
+      if (document.visibilityState === "hidden") persistDraft();
+    };
+    const onPageHide = () => persistDraft();
+    document.addEventListener("visibilitychange", onHidden);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      document.removeEventListener("visibilitychange", onHidden);
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  },[partialOcrText,reviewDraft,reviewEdited,partialMissingScripts,reviewReason,savedNoteId]);
 
   const safeSetStatus = (nextStatus: CaptureStatus, currentOperationId: number) => {
     if (!mountedRef.current || currentOperationId !== operationIdRef.current) return;
@@ -461,6 +492,7 @@ function CameraPage() {
     setStatus("preparing");
 
     let currentImagePath: string | null = previousPhotoPath ?? null;
+    let recognizedBeforeSave: string | null = null;
     try {
       await yieldToMainThread();
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
@@ -502,6 +534,7 @@ function CameraPage() {
         return;
       }
       setOcrStage("Сохранение заметки");
+      recognizedBeforeSave = text;
       await finishWithText(text);
       if (shouldClearPendingDraft("note-saved")) markDraftFinished();
     } catch (caught) {
@@ -509,6 +542,19 @@ function CameraPage() {
       // Never leave a retryable draft that could create a duplicate note.
       if (caught instanceof OcrEditorNavigationError) markDraftFinished();
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
+      // The scanner finished, but the notes store rejected the write.
+      // Keep the exact recognized text for retry, without rescanning the photo.
+      if (recognizedBeforeSave?.trim() && !(caught instanceof OcrEditorNavigationError)) {
+        const unsaved: OcrRecoveryState = {
+          path:currentImagePath ?? "",text:recognizedBeforeSave,missingScripts:[],
+        };
+        pendingRecoveryRef.current=unsaved;
+        setPartialOcrText(unsaved.text);
+        setPartialMissingScripts([]);
+        setReviewReason("save-retry");
+        setReviewEdited(false);
+        retainUnfinishedResult(unsaved,"save-retry");
+      }
       if (isCameraCancellation(caught)) {
         // Backing out of camera/photo picker is normal user intent.
         setStatus("idle");
@@ -715,7 +761,9 @@ function CameraPage() {
       : selectedOcrScanPlan([...current,script]));
     setSelectionError(null);
   };
-  const savePartialLabel = partialMissingScripts.length
+  const savePartialLabel = reviewReason === "save-retry"
+    ? "Повторить сохранение распознанного текста"
+    : partialMissingScripts.length
     ? "Сохранить найденный текст (неполный)"
     : reviewReason === "ambiguous-han"
       ? "Сохранить после проверки иероглифов"
@@ -803,6 +851,9 @@ function CameraPage() {
           {busy ? (ocrStage || t("ocr_scanning")) : "Выберите фотографию с текстом, чтобы извлечь его и добавить в заметку"}
         </h2>
         {error && <p className="mt-3 max-w-sm text-sm text-destructive">{error}</p>}
+        {draftPersistenceWarning && partialOcrText && <p role="alert" className="mt-2 max-w-sm text-xs text-destructive">
+          Недостаточно места для резервного черновика. Не закрывайте приложение до сохранения заметки; освободите память устройства.
+        </p>}
         {restoredDraft && partialOcrText && <p className="mt-2 max-w-sm text-xs text-muted-foreground">
           Черновик восстановлен после перезапуска. Для повторного сканирования нужно выбрать фото заново.
         </p>}
