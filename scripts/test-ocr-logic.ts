@@ -5,6 +5,8 @@ import { ocrScanPlan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
 import { linesFromMlKit } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
 import { OcrScanCoverage } from "../src/lib/ocr-coverage";
+import { OcrIncompleteScanError, markIncompleteOcrText } from "../src/lib/ocr-partial";
+import { chooseLocalOcrImagePath } from "../src/lib/ocr-input";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "../src/lib/ocr-budget";
 import { isLocalOcrImagePath } from "../src/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "../src/lib/ocr-errors";
@@ -399,4 +401,17 @@ const noBoxesHanJp: OcrCandidate={script:"japanese",
 const noBoxesHanZh: OcrCandidate={script:"chinese",
   text:"中文文档北京上海南京汉字文字详细说明",lines:[]};
 assert.equal(mergeOcrCandidates([noBoxesHanJp,noBoxesHanZh]).split("\n\n").length,1);
+const partialCoverage = new OcrScanCoverage(ocrScanPlan("auto"));
+partialCoverage.markCompleted("latin");
+partialCoverage.markCompleted("cyrillic");
+assert.equal(partialCoverage.isComplete(),false);
+assert.equal(partialCoverage.missingScripts().length,4);
+const incomplete=new OcrIncompleteScanError("Қазақ тілі",partialCoverage.missingScripts());
+assert.equal(incomplete.partialText,"Қазақ тілі");
+assert.match(readableOcrFailure(incomplete),/не все языки/);
+assert.ok(markIncompleteOcrText(incomplete.partialText).startsWith("⚠️ Неполное распознавание"));
+assert.throws(() => markIncompleteOcrText("  "),/OCR_EMPTY_TEXT/);
+assert.equal(chooseLocalOcrImagePath({path:"/DCIM/photo.jpg",webPath:"https://example.org"}),"/DCIM/photo.jpg");
+assert.equal(chooseLocalOcrImagePath({path:"https://example.org",webPath:"content://media/external/5"}),"content://media/external/5");
+assert.throws(()=>chooseLocalOcrImagePath({path:"https://example.org",webPath:"blob:photo"}),/no readable local path/);
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");

@@ -12,7 +12,8 @@ import { linesFromMlKit } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
-import { isLocalOcrImagePath } from "@/lib/ocr-input";
+import { OcrIncompleteScanError, markIncompleteOcrText } from "@/lib/ocr-partial";
+import { chooseLocalOcrImagePath } from "@/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText } from "@/lib/ocr-text";
 import { ocrScanPlan, CYRILLIC_OCR_LANGUAGES, type OcrMode } from "@/lib/ocr-plan";
@@ -147,8 +148,8 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         const width = prepared?.width ?? 1;
         const height = prepared?.height ?? 1;
       // A timed-out model must not trigger any more native scans on this photo.
-      const recognize = async (item: typeof scripts[number]) => {
-        onProgress(`Распознавание: ${item.label}`);
+      const recognize = async (item: typeof scripts[number], step: number) => {
+        onProgress(`Распознавание ${step}/${scanPlan.length}: ${item.label}`);
         try {
           const data = await timed(() => mlkit.TextRecognition.processImage({path:scanPath,script:item.script}), 15000);
           coverage.markCompleted(item.id);
@@ -162,14 +163,14 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       };
       // Scan one recognizer at a time. Cyrillic now runs immediately after
       // Latin, rather than being starved by all five ML Kit recognizers.
-      for (const script of scanPlan) {
+      for (const [index, script] of scanPlan.entries()) {
         if (timedOut) break; // Native work cannot be cancelled safely.
         if (script === "cyrillic") {
           if (!native) {
             coverage.markFailed("cyrillic");
             continue;
           }
-          onProgress("Распознавание: русский и казахский");
+          onProgress(`Распознавание ${index + 1}/${scanPlan.length}: русский и казахский`);
           try {
             const data = await timed(() => native.recognize({path:scanPath,language:CYRILLIC_OCR_LANGUAGES}), 18000);
             coverage.markCompleted("cyrillic");
@@ -184,14 +185,18 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
           }
         } else {
           const item = scripts.find(item => item.id === script);
-          if (item) await recognize(item);
+          if (item) await recognize(item, index + 1);
         }
         await yieldToMainThread();
       }
       // A timeout leaves an incomplete multilingual page. Do not silently
       // save partial results as if every configured recognizer had completed.
-      if (timedOut) throw new Error("OCR timed out");
-      coverage.ensureComplete();
+      if (timedOut || !coverage.isComplete()) {
+        const partial = mergeOcrCandidates(results);
+        if (partial.trim()) throw new OcrIncompleteScanError(partial, coverage.missingScripts());
+        if (timedOut) throw new Error("OCR timed out");
+        coverage.ensureComplete();
+      }
       if (!results.length) throw new Error("Не удалось распознать текст. Попробуйте другое фото.");
       // Until all model frames can be normalized using image dimensions, merge
       // only when at least one valid geometry source is available. The fallback
@@ -227,12 +232,7 @@ async function captureNativePhoto(source: CaptureSource): Promise<string> {
     saveToGallery: false,
   });
 
-  const path = photo.path ?? photo.webPath;
-  // Native OCR only accepts local image paths, never a WebView URL.
-  if (!isLocalOcrImagePath(path)) {
-    throw new Error("Selected image has no readable local path.");
-  }
-  return path;
+  return chooseLocalOcrImagePath(photo);
 }
 
 function CameraPage() {
@@ -247,6 +247,7 @@ function CameraPage() {
   const [status, setStatus] = useState<CaptureStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [savedNoteId, setSavedNoteId] = useState<string | null>(null);
+  const [partialOcrText, setPartialOcrText] = useState<string | null>(null);
   const [ocrMode, setOcrMode] = useState<OcrMode>("auto");
   const [ocrStage, setOcrStage] = useState("");
 
@@ -269,6 +270,7 @@ function CameraPage() {
     setOcrStage("");
     setError(null);
     setSavedNoteId(null);
+    setPartialOcrText(null);
     setModalOpen(false);
     navigate({ to: "/" });
   };
@@ -303,6 +305,7 @@ function CameraPage() {
     operationIdRef.current = operationId;
     setError(null);
     setSavedNoteId(null);
+    setPartialOcrText(null);
     setOcrStage("Подготовка камеры");
     setStatus("preparing");
 
@@ -337,6 +340,7 @@ function CameraPage() {
         setModalOpen(true);
         return;
       }
+      if (caught instanceof OcrIncompleteScanError) setPartialOcrText(caught.partialText);
       handleFailure(readableOcrFailure(caught), operationId,
         caught instanceof OcrEditorNavigationError ? caught.savedNoteId : undefined);
     } finally {
@@ -392,6 +396,23 @@ function CameraPage() {
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
       handleFailure(t("ocr_unavailable"), operationId);
     }, 0);
+  };
+
+  const savePartialScan = async () => {
+    if (!partialOcrText || inFlightRef.current) return;
+    inFlightRef.current = true;
+    setStatus("preparing");
+    try {
+      await finishWithText(markIncompleteOcrText(partialOcrText));
+      setPartialOcrText(null);
+    } catch (caught) {
+      const message = readableOcrFailure(caught);
+      setError(message);
+      setSavedNoteId(caught instanceof OcrEditorNavigationError ? caught.savedNoteId : null);
+      if (caught instanceof OcrEditorNavigationError) setPartialOcrText(null);
+      setStatus("error");
+      toast.error(message);
+    } finally { inFlightRef.current = false; }
   };
 
   const openPreviouslySavedNote = async () => {
@@ -478,13 +499,13 @@ function CameraPage() {
 
         <Button
           type="button"
-          onClick={() => savedNoteId ? void openPreviouslySavedNote() : setModalOpen(true)}
+          onClick={() => savedNoteId ? void openPreviouslySavedNote() : partialOcrText ? void savePartialScan() : setModalOpen(true)}
           size="lg"
           disabled={busy}
           className="mt-6 h-11 rounded-xl bg-gradient-to-r from-primary to-primary-glow px-6 text-sm text-primary-foreground shadow-xl hover:opacity-95"
         >
           <ImagePlus className="mr-2 h-5 w-5" />
-          {savedNoteId ? "Открыть сохранённую заметку" : t("camera_pick")}
+          {savedNoteId ? "Открыть сохранённую заметку" : partialOcrText ? "Сохранить найденный текст (неполный)" : t("camera_pick")}
         </Button>
       </main>
 
@@ -517,6 +538,12 @@ function CameraPage() {
               </Button>
             ) : (
             <>
+            {partialOcrText && (
+              <Button type="button" disabled={busy} onClick={() => void savePartialScan()}
+                className="h-9 rounded-xl text-xs font-semibold">
+                Сохранить найденный текст (неполный)
+              </Button>
+            )}
             <Button
               type="button"
               disabled={busy}
