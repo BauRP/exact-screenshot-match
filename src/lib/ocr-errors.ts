@@ -20,6 +20,12 @@ export function readableOcrFailure(error: unknown): string {
   if (/Unable to save notes|Notes storage has an error|Storage write failed|quota.exceeded|local notes storage is unavailable/i.test(detail)) {
     return "Текст распознан, но заметку сохранить не удалось. Проверьте свободное место и состояние хранилища.";
   }
+  if (error instanceof Error && error.message === "OCR_NOTE_SAVED_EDITOR_NOT_OPENED") {
+    return "Текст успешно сохранён в заметках, но редактор не открылся. Откройте сохранённую заметку из списка. Повторно сканировать фотографию не нужно.";
+  }
+  if (error instanceof Error && error.message === "OCR_NOTE_SAVE_FAILED") {
+    return "Не удалось подтвердить сохранение заметки. Проверьте хранилище и повторите попытку.";
+  }
   if (error instanceof Error && error.message === "OCR_SCAN_BUSY") {
     return "Предыдущее сканирование ещё завершается. Повторите попытку после его окончания.";
   }

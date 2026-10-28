@@ -75,6 +75,12 @@ jobs:
       - name: Verify many long mixed-language OCR notes survive storage
         run: bun scripts/test-ocr-stress.ts
 
+      - name: Verify OCR creates note before opening the editor
+        run: bun scripts/test-ocr-save-navigation.ts
+
+      - name: Verify failed editor navigation does not lose saved notes
+        run: bun scripts/test-ocr-navigation-failure.ts
+
       - name: Prepare bundled offline OCR models
         run: bash scripts/prepare-ocr-models.sh
 

@@ -44,3 +44,5 @@ not exercise the interactive picker or real camera hardware.
 **Sizable notes:** An isolated CI test saves 25 sizable mixed-language OCR documents into the real notes-store and verifies all persisted IDs and bodies. This test does not guarantee a physical WebView's available quota.
 
 **Overlapping multilingual lines:** Deduplication now prefers a longer whole-line result when it contains a recognized whole-word fragment in the same image region. It must not merge separate columns or rows; these cases have dedicated regression tests.
+
+**OCR-to-editor handoff:** dedicated CI tests run the real notes-store when saving recognized multi-script text and only then call the editor navigation callback. A failed save never navigates. If navigation fails after a successful save, the user is told to open the existing note; the stored record is never rolled back or silently duplicated. Android UI navigation itself still needs an interactive integration test.

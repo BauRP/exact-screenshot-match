@@ -4,7 +4,7 @@ import { Camera as CameraIcon, ImagePlus, Loader2, ScanLine, X } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { createNote } from "@/lib/notes-store";
-import { buildOcrNoteDraft } from "@/lib/ocr-note";
+import { saveOcrNoteAndOpenEditor } from "@/lib/ocr-save-flow";
 import { useT } from "@/lib/i18n";
 import { toast } from "sonner";
 import { mergeOcrCandidates, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
@@ -235,10 +235,6 @@ async function captureNativePhoto(source: CaptureSource): Promise<string> {
   return path;
 }
 
-function createOcrNote(text: string, title: string) {
-  return createNote(buildOcrNoteDraft(text, title));
-}
-
 function CameraPage() {
   const navigate = useNavigate();
   const t = useT();
@@ -275,9 +271,11 @@ function CameraPage() {
     navigate({ to: "/" });
   };
 
-  const finishWithText = (text: string) => {
-    const note = createOcrNote(text, t("camera"));
-    navigate({ to: "/editor/$id", params: { id: note.id }, search: { folder: undefined } });
+  const finishWithText = async (text: string) => {
+    return saveOcrNoteAndOpenEditor(
+      text, t("camera"), createNote,
+      (id) => navigate({ to: "/editor/$id", params: { id }, search: { folder: undefined } }),
+    );
   };
 
   const handleFailure = (message: string, currentOperationId: number) => {
@@ -326,7 +324,7 @@ function CameraPage() {
       }
 
       setOcrStage("Сохранение заметки");
-      finishWithText(text);
+      await finishWithText(text);
     } catch (caught) {
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
       if (isCameraCancellation(caught)) {

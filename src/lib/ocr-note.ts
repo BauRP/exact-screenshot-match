@@ -41,8 +41,10 @@ export function ocrTextToEditorHtml(value: string): string {
   }).join("");
 }
 
+export type OcrNoteDraft = { title: string; body: string };
+
 /** The OCR route writes plain text as a normal, safely encoded local note. */
-export function buildOcrNoteDraft(text: string, fallbackTitle: string): { title: string; body: string } {
+export function buildOcrNoteDraft(text: string, fallbackTitle: string): OcrNoteDraft {
   if (!text.trim()) throw new Error("OCR_EMPTY_TEXT");
   const firstLine = text.split(/\r\n?|\n|\u2028|\u2029/u).map(line => line.trim()).find(Boolean);
   return {
