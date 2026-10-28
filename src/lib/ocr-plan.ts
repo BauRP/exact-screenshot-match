@@ -22,3 +22,23 @@ export function ocrScanPlan(request: OcrScanRequest): OcrScript[] {
   if (!AUTO_SCAN_ORDER.includes(request)) throw new Error("Invalid OCR scan plan");
   return [request];
 }
+
+/**
+ * Prioritize unmistakable Unicode script evidence in already recognized
+ * local text, but never drop an OCR model from the scan plan.
+ * Han alone cannot reliably distinguish Chinese from Japanese.
+ */
+export function prioritizeRemainingOcrScripts(
+  remaining: readonly OcrScript[], recognized: string,
+): OcrScript[] {
+  const text = recognized.slice(0, 12000);
+  const kana = (text.match(/[\p{Script=Hiragana}\p{Script=Katakana}]/gu) ?? []).length;
+  const korean = (text.match(/\p{Script=Hangul}/gu) ?? []).length;
+  const devanagari = (text.match(/\p{Script=Devanagari}/gu) ?? []).length;
+  const evidence: Partial<Record<OcrScript,number>> = {
+    japanese: kana, korean, devanagari,
+  };
+  return remaining.map((script,index) => ({script,index,score:evidence[script] ?? 0}))
+    .sort((a,b) => b.score - a.score || a.index - b.index)
+    .map(item => item.script);
+}

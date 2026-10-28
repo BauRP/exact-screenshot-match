@@ -1,11 +1,11 @@
 import { strict as assert } from "node:assert";
 import { ocrTextToEditorHtml, buildOcrNoteDraft, truncateOcrTitle } from "../src/lib/ocr-note";
 import { composeRecognizedText } from "../src/lib/ocr-text";
-import { ocrScanPlan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
+import { ocrScanPlan, prioritizeRemainingOcrScripts, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
 import { linesFromMlKit } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
 import { OcrScanCoverage } from "../src/lib/ocr-coverage";
-import { OcrIncompleteScanError, markIncompleteOcrText, OCR_SCRIPT_LABELS } from "../src/lib/ocr-partial";
+import { OcrIncompleteScanError, markIncompleteOcrText, OCR_SCRIPT_LABELS, hanAlternativesFromCandidates, cyrillicTextWithLineFallback } from "../src/lib/ocr-partial";
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "../src/lib/ocr-input";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "../src/lib/ocr-budget";
 import { isLocalOcrImagePath } from "../src/lib/ocr-input";
@@ -453,3 +453,32 @@ assert.equal(hasAmbiguousHanCandidates([
 ]), true);
 console.log("OCR Han-only ambiguity detection: passed.");
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");
+
+// Every enabled model still runs, but an observed script is checked sooner.
+assert.deepEqual(prioritizeRemainingOcrScripts(["japanese","chinese","korean","devanagari"],"한글 한국어"),
+  ["korean","japanese","chinese","devanagari"]);
+assert.deepEqual(prioritizeRemainingOcrScripts(["chinese","japanese","korean"],"かな日本語"),
+  ["japanese","chinese","korean"]);
+assert.deepEqual(prioritizeRemainingOcrScripts(["japanese","chinese","korean"],"中文汉字"),
+  ["japanese","chinese","korean"]);
+assert.deepEqual(prioritizeRemainingOcrScripts(["japanese","chinese","devanagari"],"हिन्दी नमस्ते"),
+  ["devanagari","japanese","chinese"]);
+const rotatedCorners = linesFromMlKit({blocks:[{lines:[{text:"Қазақ",cornerPoints:[
+  {x:300,y:65},{x:790,y:85},{x:780,y:170},{x:295,y:145}
+]}]}]}, "cyrillic", 1000, 500);
+assert.equal(rotatedCorners.length,1);
+assert.equal(rotatedCorners[0].left,.295);
+assert.equal(rotatedCorners[0].bottom,.34);
+assert.equal(linesFromMlKit({blocks:[{lines:[{text:"abc",cornerPoints:[
+  {x:NaN,y:10},{x:100,y:20},{x:110,y:50},{x:10,y:40}
+]}]}]},"latin",1000,500).length,0);
+assert.equal(cyrillicTextWithLineFallback({text:"",lines:[{text:"Қазақ"},{text:"Русский"}]}),
+  "Қазақ\nРусский");
+assert.equal(cyrillicTextWithLineFallback({text:"Нақты",lines:[{text:"другое"}]}),"Нақты");
+assert.deepEqual(hanAlternativesFromCandidates([
+  {script:"japanese",text:"日本語学校"},{script:"chinese",text:"日本学枚"}
+]),{japanese:"日本語学校",chinese:"日本学枚"});
+assert.equal(hanAlternativesFromCandidates([
+  {script:"japanese",text:"学校"},{script:"chinese",text:"学校"}
+]),null);
+console.log("All-script scheduling, rotated geometry, Cyrillic fallback and Han alternatives: passed.");

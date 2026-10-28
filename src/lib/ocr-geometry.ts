@@ -1,7 +1,8 @@
 import type { OcrLine, OcrScript } from "./ocr-merge";
 
 export type MlKitRect = { left: number; top: number; right: number; bottom: number };
-export type MlKitLine = { text: string; boundingBox?: MlKitRect; recognizedLanguage?: string };
+export type MlKitPoint = { x: number; y: number };
+export type MlKitLine = { text: string; boundingBox?: MlKitRect; cornerPoints?: MlKitPoint[]; recognizedLanguage?: string };
 export type MlKitResult = { blocks?: Array<{ lines?: MlKitLine[] }> };
 
 /**
@@ -17,7 +18,17 @@ export function linesFromMlKit(
   const lines: OcrLine[] = [];
   for (const block of data.blocks ?? []) {
     for (const line of block.lines ?? []) {
-      const box = line.boundingBox;
+      // ML Kit may supply only corner points for rotated lines; use their
+      // measured envelope, not fabricated geometry or a blank line.
+      const points = line.cornerPoints;
+      const validPoints = points?.length === 4 &&
+        points.every(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+      const box = line.boundingBox ?? (validPoints ? {
+        left: Math.min(...points!.map(point => point.x)),
+        top: Math.min(...points!.map(point => point.y)),
+        right: Math.max(...points!.map(point => point.x)),
+        bottom: Math.max(...points!.map(point => point.y)),
+      } : undefined);
       if (!box || !line.text?.trim()) continue;
       const { left, top, right, bottom } = box;
       if (![left, top, right, bottom].every(Number.isFinite) ||

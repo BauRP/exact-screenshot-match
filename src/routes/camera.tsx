@@ -12,11 +12,11 @@ import { linesFromMlKit } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
-import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState } from "@/lib/ocr-partial";
+import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, hanAlternativesFromCandidates, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText } from "@/lib/ocr-text";
-import { ocrScanPlan, CYRILLIC_OCR_LANGUAGES, type OcrMode, type OcrScanRequest } from "@/lib/ocr-plan";
+import { ocrScanPlan, prioritizeRemainingOcrScripts, CYRILLIC_OCR_LANGUAGES, type OcrMode, type OcrScanRequest } from "@/lib/ocr-plan";
 
 export const Route = createFileRoute("/camera")({
   head: () => ({ meta: [
@@ -163,7 +163,8 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       };
       // Scan one recognizer at a time. Cyrillic now runs immediately after
       // Latin, rather than being starved by all five ML Kit recognizers.
-      for (const [index, script] of scanPlan.entries()) {
+      for (let index = 0; index < scanPlan.length; index++) {
+        const script = scanPlan[index];
         if (timedOut) break; // Native work cannot be cancelled safely.
         if (script === "cyrillic") {
           if (!native) {
@@ -174,9 +175,10 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
           try {
             const data = await timed(() => native.recognize({path:scanPath,language:CYRILLIC_OCR_LANGUAGES}), 18000);
             coverage.markCompleted("cyrillic");
-            if (data.text.trim()) {
+            const cyrillicText = cyrillicTextWithLineFallback(data);
+            if (cyrillicText.trim()) {
               const lines: OcrLine[] = (data.lines ?? []).map(line => ({...line,script:"cyrillic"}));
-              results.push({text:data.text,script:"cyrillic",lines,confidence:data.confidence});
+              results.push({text:cyrillicText,script:"cyrillic",lines,confidence:data.confidence});
             }
           } catch (error) {
             console.warn("Bundled Russian/Kazakh OCR failed",error);
@@ -186,6 +188,13 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         } else {
           const item = scripts.find(item => item.id === script);
           if (item) await recognize(item, index + 1);
+        }
+        // First Latin and Cyrillic stay early. Later recognizers can move up
+        // based on unambiguous characters already detected, but none is skipped.
+        if (mode === "auto" && index >= 1 && index + 1 < scanPlan.length) {
+          const ordered = prioritizeRemainingOcrScripts(
+            scanPlan.slice(index + 1), results.map(result => result.text).join("\n"));
+          scanPlan.splice(index + 1, ordered.length, ...ordered);
         }
         await yieldToMainThread();
       }
@@ -206,7 +215,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       onProgress("Объединение распознанных строк");
       const text = mergeOcrCandidates(results);
       if (mode === "auto" && text && hasAmbiguousHanCandidates(results)) {
-        throw new OcrAmbiguousHanError(text);
+        throw new OcrAmbiguousHanError(text, hanAlternativesFromCandidates(results));
       }
       return text;
       } finally {
@@ -254,6 +263,7 @@ function CameraPage() {
   const [partialOcrText, setPartialOcrText] = useState<string | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewDraft, setReviewDraft] = useState("");
+  const [hanAlternatives, setHanAlternatives] = useState<OcrHanAlternatives | null>(null);
   const [reviewReason, setReviewReason] = useState<"recovery" | "ambiguous-han">("recovery");
   const pendingRecoveryRef = useRef<OcrRecoveryState | null>(null);
   const [partialMissingScripts, setPartialMissingScripts] = useState<readonly OcrScript[]>([]);
@@ -283,6 +293,7 @@ function CameraPage() {
     setPartialOcrText(null);
     setReviewOpen(false);
     setReviewDraft("");
+    setHanAlternatives(null);
     setReviewReason("recovery");
     setPartialMissingScripts([]);
     pendingRecoveryRef.current = null;
@@ -329,6 +340,7 @@ function CameraPage() {
       setPartialOcrText(null);
       setReviewOpen(false);
       setReviewDraft("");
+      setHanAlternatives(null);
       setReviewReason("recovery");
       setPartialMissingScripts([]);
       setRetryImagePath(null);
@@ -395,6 +407,7 @@ function CameraPage() {
         setPartialOcrText(combined.text);
         setPartialMissingScripts(combined.missingScripts);
         setReviewReason("ambiguous-han");
+        setHanAlternatives(caught.alternatives);
       }
       if (caught instanceof OcrIncompleteScanError) {
         const recovery = pendingRecoveryRef.current;
@@ -404,6 +417,7 @@ function CameraPage() {
         pendingRecoveryRef.current = updated;
         setPartialOcrText(updated.text);
         setPartialMissingScripts(updated.missingScripts);
+        setHanAlternatives(null);
       }
       handleFailure(readableOcrFailure(caught), operationId,
         caught instanceof OcrEditorNavigationError ? caught.savedNoteId : undefined,
@@ -630,6 +644,22 @@ function CameraPage() {
                 : " Результат нескольких проверок может содержать ошибки."}
             </DialogDescription>
           </DialogHeader>
+          {hanAlternatives && (
+            <div className="grid min-h-0 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
+              <div className="min-w-0 rounded-lg border border-border p-2">
+                <p className="mb-1 text-xs font-semibold">Японский распознаватель</p>
+                <p className="max-h-28 overflow-auto whitespace-pre-wrap break-words text-xs">{hanAlternatives.japanese}</p>
+              </div>
+              <div className="min-w-0 rounded-lg border border-border p-2">
+                <p className="mb-1 text-xs font-semibold">Китайский распознаватель</p>
+                <p className="max-h-28 overflow-auto whitespace-pre-wrap break-words text-xs">{hanAlternatives.chinese}</p>
+              </div>
+              <p className="text-xs text-muted-foreground sm:col-span-2">
+                Сравните два варианта с фотографией. Исправьте объединённый текст ниже,
+                не удаляя остальные распознанные языки.
+              </p>
+            </div>
+          )}
           <label htmlFor="ocr-review-text" className="text-sm font-medium">Распознанный текст</label>
           <textarea
             id="ocr-review-text"

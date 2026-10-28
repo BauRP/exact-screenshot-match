@@ -119,10 +119,12 @@ export function markRecoveredOcrText(
 
 export class OcrAmbiguousHanError extends Error {
   readonly recognizedText: string;
-  constructor(recognizedText: string) {
+  readonly alternatives: OcrHanAlternatives | null;
+  constructor(recognizedText: string, alternatives: OcrHanAlternatives | null = null) {
     super("OCR_HAN_LANGUAGE_AMBIGUITY");
     this.name = "OcrAmbiguousHanError";
     this.recognizedText = recognizedText;
+    this.alternatives = alternatives;
   }
 }
 
@@ -136,4 +138,25 @@ export function buildReviewedOcrText(
   if (!editedText.trim()) throw new Error("OCR_EMPTY_TEXT");
   if (missingScripts.length) return markIncompleteOcrText(editedText, missingScripts);
   return markRecoveredOcrText(editedText, reason);
+}
+
+
+/** Preserve both conflicting readings for user review, not auto replacement. */
+export type OcrHanAlternatives = { japanese: string; chinese: string };
+export function hanAlternativesFromCandidates(
+  candidates: readonly {script: OcrScript; text: string}[],
+): OcrHanAlternatives | null {
+  const japanese = candidates.filter(item => item.script === "japanese" && item.text.trim())
+    .sort((a,b) => b.text.length - a.text.length)[0]?.text.trim();
+  const chinese = candidates.filter(item => item.script === "chinese" && item.text.trim())
+    .sort((a,b) => b.text.length - a.text.length)[0]?.text.trim();
+  return japanese && chinese && japanese !== chinese ? {japanese,chinese} : null;
+}
+
+/** Tesseract sometimes supplies native line iteration but no total text. */
+export function cyrillicTextWithLineFallback(
+  data: {text?: string | null; lines?: readonly {text: string}[] | null},
+): string {
+  if (data.text?.trim()) return data.text;
+  return (data.lines ?? []).map(line => line.text).filter(line => line.trim()).join("\n");
 }

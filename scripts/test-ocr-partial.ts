@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass } from "../src/lib/ocr-partial";
+import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrAmbiguousHanError } from "../src/lib/ocr-partial";
 import { saveOcrNoteAndOpenEditor } from "../src/lib/ocr-save-flow";
 const storage=new Map<string,string>();
 Object.defineProperty(globalThis,"window",{configurable:true,value:{localStorage:{
@@ -82,3 +82,8 @@ const reviewedId = await saveOcrNoteAndOpenEditor(
 assert.ok(getNote(reviewedId)?.body.includes("Проверьте иероглифы"));
 assert.equal(JSON.parse(storage.get("sn.notes.v1") ?? "[]").length, 3);
 console.log("Editable OCR review and warning-preserving save: passed.");
+
+const ambiguousPair = new OcrAmbiguousHanError("学校", {japanese:"学校",chinese:"学枚"});
+assert.equal(ambiguousPair.alternatives?.chinese,"学枚");
+assert.equal(ambiguousPair.recognizedText,"学校");
+console.log("Ambiguous Han readings retained independently for editable review: passed.");
