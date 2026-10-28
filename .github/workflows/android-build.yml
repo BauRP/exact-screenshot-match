@@ -84,6 +84,9 @@ jobs:
       - name: Verify failed editor navigation does not lose saved notes
         run: bun scripts/test-ocr-navigation-failure.ts
 
+      - name: Verify complete OCR-to-note handoff
+        run: bun scripts/test-ocr-pipeline.ts
+
       - name: Prepare bundled offline OCR models
         run: bash scripts/prepare-ocr-models.sh
 
