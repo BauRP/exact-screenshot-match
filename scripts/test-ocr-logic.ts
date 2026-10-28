@@ -342,5 +342,5 @@ const receiptLong: OcrCandidate = {
   script:"latin",text:"70",
   lines:[{text:"70",script:"latin",left:.40,right:.55,top:.50,bottom:.54}]
 };
-assert.equal(mergeOcrCandidates([receiptShort,receiptLong]),"70");
+assert.equal(mergeOcrCandidates([receiptShort,receiptLong]),"70\n7");
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");
