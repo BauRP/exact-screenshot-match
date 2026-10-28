@@ -42,3 +42,5 @@ not exercise the interactive picker or real camera hardware.
 
 **Compressed native images:** Android instruments actual JPEG->native decoder->ML Kit Latin/Korean pipelines, alongside JPEG->native decoder->Tesseract Russian/Kazakh. Further EXIF 270° and front-image mirror orientation smoke tests supplement the 90° rotation test.
 **Sizable notes:** An isolated CI test saves 25 sizable mixed-language OCR documents into the real notes-store and verifies all persisted IDs and bodies. This test does not guarantee a physical WebView's available quota.
+
+**Overlapping multilingual lines:** Deduplication now prefers a longer whole-line result when it contains a recognized whole-word fragment in the same image region. It must not merge separate columns or rows; these cases have dedicated regression tests.

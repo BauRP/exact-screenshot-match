@@ -305,4 +305,42 @@ assert.equal(mergeOcrCandidates([anchoredKaz,unlocatedEnglish]),"Қазақ ті
 assert.equal(mergeOcrCandidates([unlocatedEnglish,anchoredKaz]),"Қазақ тілі\n\nComplete English paragraph on the same photo");
 assert.equal(mergeOcrCandidates([anchoredKaz,{script:"cyrillic",text:"Қазақ тілі 2026",lines:[]}]),"Қазақ тілі 2026");
 assert.equal(mergeOcrCandidates([anchoredKaz,{script:"latin",text:"Hi",lines:[]}]),"Қазақ тілі");
+// Real multilingual line: a script recognizer can recognize only its own
+// word while another engine returns the full phrase. Keep the full text once.
+const completeMixedLine: OcrCandidate = {
+  script:"cyrillic",text:"Сәлем Hello",
+  lines:[{text:"Сәлем Hello",script:"cyrillic",left:.10,right:.81,top:.20,bottom:.27}]
+};
+const englishFragment: OcrCandidate = {
+  script:"latin",text:"Hello",
+  lines:[{text:"Hello",script:"latin",left:.57,right:.81,top:.20,bottom:.27}]
+};
+assert.equal(mergeOcrCandidates([englishFragment,completeMixedLine]),"Сәлем Hello");
+assert.equal(mergeOcrCandidates([completeMixedLine,englishFragment]),"Сәлем Hello");
+const partialCyrillic: OcrCandidate = {
+  script:"cyrillic",text:"Сәлем",
+  lines:[{text:"Сәлем",script:"cyrillic",left:.10,right:.40,top:.20,bottom:.27}]
+};
+assert.equal(mergeOcrCandidates([partialCyrillic,completeMixedLine]),"Сәлем Hello");
+// Do not mistake matching text in separate columns or lines for duplicates.
+const secondColumn: OcrCandidate = {
+  script:"latin",text:"Hello",
+  lines:[{text:"Hello",script:"latin",left:.85,right:.98,top:.20,bottom:.27}]
+};
+assert.equal(mergeOcrCandidates([completeMixedLine,secondColumn]),"Сәлем Hello\nHello");
+const nextRow: OcrCandidate = {
+  script:"latin",text:"Hello",
+  lines:[{text:"Hello",script:"latin",left:.57,right:.81,top:.32,bottom:.39}]
+};
+assert.equal(mergeOcrCandidates([completeMixedLine,nextRow]),"Сәлем Hello\nHello");
+// Single digits inside larger receipt values are NOT whole-word duplicates.
+const receiptShort: OcrCandidate = {
+  script:"latin",text:"7",
+  lines:[{text:"7",script:"latin",left:.40,right:.45,top:.50,bottom:.54}]
+};
+const receiptLong: OcrCandidate = {
+  script:"latin",text:"70",
+  lines:[{text:"70",script:"latin",left:.40,right:.55,top:.50,bottom:.54}]
+};
+assert.equal(mergeOcrCandidates([receiptShort,receiptLong]),"70");
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");

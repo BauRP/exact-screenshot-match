@@ -72,9 +72,46 @@ function intersection(a: OcrLine, b: OcrLine): number {
   const height = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
   return width * height;
 }
+/**
+ * Whether one OCR engine returned a complete physical line while another
+ * returned only one of its words. Compare whole words, not substring letters:
+ * "7" must not suppress "70", and separate columns must remain separate.
+ */
+function includesWholePhrase(longer: string, shorter: string): boolean {
+  const full = longer.normalize("NFKC").toLocaleLowerCase().replace(/\s+/gu," ").trim();
+  const part = shorter.normalize("NFKC").toLocaleLowerCase().replace(/\s+/gu," ").trim();
+  if (Array.from(part).length < 3 || full.length <= part.length) return false;
+  let offset = 0;
+  while (offset < full.length) {
+    const at = full.indexOf(part, offset);
+    if (at < 0) return false;
+    const before = at === 0 ? "" : full[at - 1];
+    const after = at + part.length === full.length ? "" : full[at + part.length];
+    if ((!before || !/[\p{L}\p{N}]/u.test(before)) &&
+        (!after || !/[\p{L}\p{N}]/u.test(after))) return true;
+    offset = at + 1;
+  }
+  return false;
+}
+
+function textContainsOther(a: OcrLine, b: OcrLine): boolean {
+  const longer = a.text.length >= b.text.length ? a : b;
+  const shorter = a.text.length < b.text.length ? a : b;
+  if (!includesWholePhrase(longer.text, shorter.text)) return false;
+  const overlap = intersection(longer, shorter);
+  if (overlap <= 0) return false;
+  const overlapHeight = Math.max(0, Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top));
+  const overlapWidth = Math.max(0, Math.min(a.right,b.right)-Math.max(a.left,b.left));
+  return overlapHeight / Math.min(a.bottom-a.top,b.bottom-b.top) >= .70 &&
+    overlapWidth / (shorter.right-shorter.left) >= .75 &&
+    Math.min(a.bottom-a.top,b.bottom-b.top) / Math.max(a.bottom-a.top,b.bottom-b.top) >= .52;
+}
 function sameRegion(a: OcrLine, b: OcrLine): boolean {
   const overlap = intersection(a, b);
   if (overlap <= 0) return false;
+  // Same physical line with full text vs one of its words. Do not create
+  // duplicate paragraphs merely because the full box is much wider.
+  if (textContainsOther(a,b)) return true;
   const vertical = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
   const horizontal = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
   const aWidth = a.right - a.left, bWidth = b.right - b.left;
@@ -146,7 +183,18 @@ export function mergeOcrCandidates(candidates: OcrCandidate[]): string {
   const selected: OcrLine[] = [];
   for (const line of lines) {
     if (lineScore(line.text, line.script, line.language, line.confidence) < 20) continue;
-    if (selected.some(existing => sameRegion(existing, line))) continue;
+    const sameIndex = selected.findIndex(existing => sameRegion(existing, line));
+    if (sameIndex !== -1) {
+      const current = selected[sameIndex];
+      // Scoring favours pure-script fragments, so the shorter recognizer
+      // often wins first. Replace it with the confirmed whole-line text.
+      if (includesWholePhrase(line.text, current.text) &&
+          textContainsOther(line,current) &&
+          lineScore(line.text,line.script,line.language,line.confidence) >= 20) {
+        selected[sameIndex] = line;
+      }
+      continue;
+    }
     selected.push(line);
   }
   if (!selected.length) return plausible[0]?.candidate.text.trim() ?? "";
