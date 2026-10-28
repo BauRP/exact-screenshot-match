@@ -25,6 +25,15 @@ assert.ok(getNote(id)?.body.includes("日本語 中文"));
 assert.ok(getNote(id)?.body.includes("<p><br></p>"));
 assert.equal(JSON.parse(data.get("sn.notes.v1")!).length,1);
 
+// Empty OCR data must not create an empty note or navigate.
+let calledWithEmpty=false;
+await assert.rejects(saveOcrNoteAndOpenEditor("  \n", "OCR", () => {
+  calledWithEmpty=true;
+  return {id:"invalid"};
+}, () => {calledWithEmpty=true;}), /OCR_EMPTY_TEXT/);
+assert.equal(calledWithEmpty,false);
+assert.equal(JSON.parse(data.get("sn.notes.v1")!).length,1);
+
 // If persistence fails, opening the editor must NEVER be attempted.
 throwWrites=true;
 let navigatedAfterFailedSave=false;

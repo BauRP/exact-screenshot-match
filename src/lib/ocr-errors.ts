@@ -23,6 +23,9 @@ export function readableOcrFailure(error: unknown): string {
   if (error instanceof Error && error.message === "OCR_NOTE_SAVED_EDITOR_NOT_OPENED") {
     return "Текст успешно сохранён в заметках, но редактор не открылся. Откройте сохранённую заметку из списка. Повторно сканировать фотографию не нужно.";
   }
+  if (error instanceof Error && error.message === "OCR_SAVED_NOTE_NOT_FOUND") {
+    return "Сохранённая заметка больше не найдена. Проверьте список заметок.";
+  }
   if (error instanceof Error && error.message === "OCR_NOTE_SAVE_FAILED") {
     return "Не удалось подтвердить сохранение заметки. Проверьте хранилище и повторите попытку.";
   }

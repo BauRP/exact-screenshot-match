@@ -34,3 +34,20 @@ export async function saveOcrNoteAndOpenEditor(
   }
   return saved.id;
 }
+
+
+/** Reopen an existing saved OCR note. This NEVER calls createNote. */
+export async function reopenSavedOcrNote(
+  savedId: string,
+  find: (id: string) => { id: string } | undefined,
+  open: (id: string) => void | Promise<unknown>,
+): Promise<void> {
+  if (!savedId || find(savedId)?.id !== savedId) {
+    throw new Error("OCR_SAVED_NOTE_NOT_FOUND");
+  }
+  try {
+    await open(savedId);
+  } catch {
+    throw new OcrEditorNavigationError(savedId);
+  }
+}

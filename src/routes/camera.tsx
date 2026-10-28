@@ -3,8 +3,8 @@ import { Component, useEffect, useRef, useState, type ErrorInfo, type ReactNode 
 import { Camera as CameraIcon, ImagePlus, Loader2, ScanLine, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { createNote } from "@/lib/notes-store";
-import { saveOcrNoteAndOpenEditor } from "@/lib/ocr-save-flow";
+import { createNote, getNote } from "@/lib/notes-store";
+import { saveOcrNoteAndOpenEditor, reopenSavedOcrNote, OcrEditorNavigationError } from "@/lib/ocr-save-flow";
 import { useT } from "@/lib/i18n";
 import { toast } from "sonner";
 import { mergeOcrCandidates, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
@@ -246,6 +246,7 @@ function CameraPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [status, setStatus] = useState<CaptureStatus>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [savedNoteId, setSavedNoteId] = useState<string | null>(null);
   const [ocrMode, setOcrMode] = useState<OcrMode>("auto");
   const [ocrStage, setOcrStage] = useState("");
 
@@ -267,6 +268,7 @@ function CameraPage() {
     setStatus("idle");
     setOcrStage("");
     setError(null);
+    setSavedNoteId(null);
     setModalOpen(false);
     navigate({ to: "/" });
   };
@@ -278,9 +280,10 @@ function CameraPage() {
     );
   };
 
-  const handleFailure = (message: string, currentOperationId: number) => {
+  const handleFailure = (message: string, currentOperationId: number, existingId?: string) => {
     if (!mountedRef.current || currentOperationId !== operationIdRef.current) return;
     setError(message);
+    setSavedNoteId(existingId ?? null);
     setStatus("error");
     setModalOpen(true);
     toast.error(message);
@@ -299,6 +302,7 @@ function CameraPage() {
     const operationId = operationIdRef.current + 1;
     operationIdRef.current = operationId;
     setError(null);
+    setSavedNoteId(null);
     setOcrStage("Подготовка камеры");
     setStatus("preparing");
 
@@ -333,7 +337,8 @@ function CameraPage() {
         setModalOpen(true);
         return;
       }
-      handleFailure(readableOcrFailure(caught), operationId);
+      handleFailure(readableOcrFailure(caught), operationId,
+        caught instanceof OcrEditorNavigationError ? caught.savedNoteId : undefined);
     } finally {
       inFlightRef.current = false;
     }
@@ -387,6 +392,23 @@ function CameraPage() {
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
       handleFailure(t("ocr_unavailable"), operationId);
     }, 0);
+  };
+
+  const openPreviouslySavedNote = async () => {
+    if (!savedNoteId || inFlightRef.current) return;
+    inFlightRef.current = true;
+    setStatus("preparing");
+    try {
+      await reopenSavedOcrNote(savedNoteId, getNote, id =>
+        navigate({ to: "/editor/$id", params: { id }, search: { folder: undefined } }));
+    } catch (caught) {
+      const message = readableOcrFailure(caught);
+      setError(message);
+      setStatus("error");
+      toast.error(message);
+    } finally {
+      inFlightRef.current = false;
+    }
   };
 
   const busy = status === "preparing" || status === "picking" || status === "scanning";
@@ -456,13 +478,13 @@ function CameraPage() {
 
         <Button
           type="button"
-          onClick={() => setModalOpen(true)}
+          onClick={() => savedNoteId ? void openPreviouslySavedNote() : setModalOpen(true)}
           size="lg"
           disabled={busy}
           className="mt-6 h-11 rounded-xl bg-gradient-to-r from-primary to-primary-glow px-6 text-sm text-primary-foreground shadow-xl hover:opacity-95"
         >
           <ImagePlus className="mr-2 h-5 w-5" />
-          {t("camera_pick")}
+          {savedNoteId ? "Открыть сохранённую заметку" : t("camera_pick")}
         </Button>
       </main>
 
@@ -487,6 +509,14 @@ function CameraPage() {
           </div>
 
           <div className="grid gap-2 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+            {savedNoteId ? (
+              <Button type="button" disabled={busy}
+                className="h-9 rounded-xl text-xs font-semibold"
+                onClick={() => void openPreviouslySavedNote()}>
+                Открыть сохранённую заметку
+              </Button>
+            ) : (
+            <>
             <Button
               type="button"
               disabled={busy}
@@ -506,6 +536,8 @@ function CameraPage() {
               <ImagePlus className="mr-1.5 h-4 w-4" />
               {t("camera_pick")}
             </Button>
+            </>
+            )}
           </div>
         </DialogContent>
       </Dialog>
