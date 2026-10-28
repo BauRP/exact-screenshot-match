@@ -5,8 +5,8 @@ import { ocrScanPlan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
 import { linesFromMlKit } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
 import { OcrScanCoverage } from "../src/lib/ocr-coverage";
-import { OcrIncompleteScanError, markIncompleteOcrText } from "../src/lib/ocr-partial";
-import { chooseLocalOcrImagePath } from "../src/lib/ocr-input";
+import { OcrIncompleteScanError, markIncompleteOcrText, OCR_SCRIPT_LABELS } from "../src/lib/ocr-partial";
+import { chooseLocalOcrImagePath, reusableOcrImagePath } from "../src/lib/ocr-input";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "../src/lib/ocr-budget";
 import { isLocalOcrImagePath } from "../src/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "../src/lib/ocr-errors";
@@ -414,4 +414,13 @@ assert.throws(() => markIncompleteOcrText("  "),/OCR_EMPTY_TEXT/);
 assert.equal(chooseLocalOcrImagePath({path:"/DCIM/photo.jpg",webPath:"https://example.org"}),"/DCIM/photo.jpg");
 assert.equal(chooseLocalOcrImagePath({path:"https://example.org",webPath:"content://media/external/5"}),"content://media/external/5");
 assert.throws(()=>chooseLocalOcrImagePath({path:"https://example.org",webPath:"blob:photo"}),/no readable local path/);
+assert.equal(reusableOcrImagePath("content://media/external/images/5"),
+  "content://media/external/images/5");
+assert.equal(reusableOcrImagePath("/data/user/0/app/cache/photo.jpg"),
+  "/data/user/0/app/cache/photo.jpg");
+assert.throws(()=>reusableOcrImagePath("https://example.org/photo.jpg"),/no readable local path/);
+assert.equal(OCR_SCRIPT_LABELS.cyrillic,"Русский и казахский");
+assert.equal(new OcrIncompleteScanError("Қазақ",["japanese","japanese"]).missingScripts.length,1);
+assert.ok(markIncompleteOcrText("Қазақ",["chinese","korean"]).includes("Не завершены проверки: Китайский, Корейский."));
+assert.equal(markIncompleteOcrText("Қазақ",[]).includes("Не завершены проверки:"),false);
 console.log("OCR text fallback, scan order, geometry, cancellation, budget, session gate, note safety: passed.");

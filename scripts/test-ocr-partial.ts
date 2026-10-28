@@ -10,10 +10,11 @@ const {createNote,getNote}=await import("../src/lib/notes-store");
 const failure=new OcrIncompleteScanError("Қазақ тілі\n中文",["japanese","korean"]);
 assert.equal(storage.get("sn.notes.v1"),undefined);
 let opened=0;
-const id=await saveOcrNoteAndOpenEditor(markIncompleteOcrText(failure.partialText),
+const id=await saveOcrNoteAndOpenEditor(markIncompleteOcrText(failure.partialText,failure.missingScripts),
  "OCR",createNote,async noteId=>{
   assert.ok(getNote(noteId)?.body.includes("⚠️ Неполное распознавание"));
   assert.ok(getNote(noteId)?.body.includes("中文"));
+  assert.ok(getNote(noteId)?.body.includes("Японский, Корейский"));
   opened++;
 });
 assert.equal(opened,1);

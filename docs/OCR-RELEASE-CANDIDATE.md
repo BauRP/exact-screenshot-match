@@ -44,3 +44,5 @@ The APK contains pinned `rus` and `kaz` assets. On Android the first copy to app
 
 **User-consented incomplete results:** a partial multilingual OCR result is not saved automatically; the camera screen offers an explicit action to save available text with a persistent warning in its note. CI exercises the real storage and navigation handoff for the incomplete case.
 **Native compressed JPEG:** all five bundled ML Kit text recognizers now have Android instrumented compressed-JPEG test cases (Latin, Korean, Chinese, Japanese and Devanagari). Offline emulators test model execution, not quality on physical camera photos.
+
+**Same-photo manual retry:** after an incomplete or failed native scan, users may choose one model and reprocess the exact same local photo without reopening the camera or gallery. Cached file paths are validated against local-only URI rules; closing the scan page drops the retained path. A partial note includes an enduring explanation identifying which script models failed. Real-device picker persistence remains unverified.

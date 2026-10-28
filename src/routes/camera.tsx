@@ -12,8 +12,8 @@ import { linesFromMlKit } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
-import { OcrIncompleteScanError, markIncompleteOcrText } from "@/lib/ocr-partial";
-import { chooseLocalOcrImagePath } from "@/lib/ocr-input";
+import { OcrIncompleteScanError, markIncompleteOcrText, OCR_SCRIPT_LABELS } from "@/lib/ocr-partial";
+import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText } from "@/lib/ocr-text";
 import { ocrScanPlan, CYRILLIC_OCR_LANGUAGES, type OcrMode } from "@/lib/ocr-plan";
@@ -248,6 +248,8 @@ function CameraPage() {
   const [error, setError] = useState<string | null>(null);
   const [savedNoteId, setSavedNoteId] = useState<string | null>(null);
   const [partialOcrText, setPartialOcrText] = useState<string | null>(null);
+  const [partialMissingScripts, setPartialMissingScripts] = useState<readonly OcrScript[]>([]);
+  const [retryImagePath, setRetryImagePath] = useState<string | null>(null);
   const [ocrMode, setOcrMode] = useState<OcrMode>("auto");
   const [ocrStage, setOcrStage] = useState("");
 
@@ -271,6 +273,8 @@ function CameraPage() {
     setError(null);
     setSavedNoteId(null);
     setPartialOcrText(null);
+    setPartialMissingScripts([]);
+    setRetryImagePath(null);
     setModalOpen(false);
     navigate({ to: "/" });
   };
@@ -291,7 +295,7 @@ function CameraPage() {
     toast.error(message);
   };
 
-  const scanNativeImage = async (source: CaptureSource) => {
+  const scanNativeImage = async (source: CaptureSource, previousPhotoPath?: string) => {
     if (inFlightRef.current) return;
     if (nativeOcrGate.busy) {
       const message = readableOcrFailure(new Error("OCR_SCAN_BUSY"));
@@ -306,15 +310,21 @@ function CameraPage() {
     setError(null);
     setSavedNoteId(null);
     setPartialOcrText(null);
-    setOcrStage("Подготовка камеры");
+    setPartialMissingScripts([]);
+    if (!previousPhotoPath) setRetryImagePath(null);
+    setOcrStage(previousPhotoPath ? "Повторное распознавание фотографии" : "Подготовка камеры");
     setStatus("preparing");
 
     try {
       await yieldToMainThread();
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
-      safeSetStatus("picking", operationId);
-      const imagePath = await captureNativePhoto(source);
+      if (!previousPhotoPath) safeSetStatus("picking", operationId);
+      // Manual retry bypasses the OS photo picker, preserving the same photo.
+      const imagePath = previousPhotoPath
+        ? reusableOcrImagePath(previousPhotoPath)
+        : await captureNativePhoto(source);
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
+      setRetryImagePath(imagePath);
       await yieldToMainThread();
       safeSetStatus("scanning", operationId);
       const engine = await initializeOcrEngine();
@@ -340,12 +350,25 @@ function CameraPage() {
         setModalOpen(true);
         return;
       }
-      if (caught instanceof OcrIncompleteScanError) setPartialOcrText(caught.partialText);
+      if (caught instanceof OcrIncompleteScanError) {
+        setPartialOcrText(caught.partialText);
+        setPartialMissingScripts(caught.missingScripts);
+      }
       handleFailure(readableOcrFailure(caught), operationId,
         caught instanceof OcrEditorNavigationError ? caught.savedNoteId : undefined);
     } finally {
       inFlightRef.current = false;
     }
+  };
+
+  const retryManualOnSamePhoto = () => {
+    if (!retryImagePath || inFlightRef.current || status !== "error") return;
+    if (ocrMode === "auto") {
+      toast.error("Для повторной проверки выберите язык в списке.");
+      return;
+    }
+    setModalOpen(false);
+    void scanNativeImage("gallery",retryImagePath);
   };
 
   const openWebPicker = (source: CaptureSource) => {
@@ -403,13 +426,17 @@ function CameraPage() {
     inFlightRef.current = true;
     setStatus("preparing");
     try {
-      await finishWithText(markIncompleteOcrText(partialOcrText));
+      await finishWithText(markIncompleteOcrText(partialOcrText,partialMissingScripts));
       setPartialOcrText(null);
+      setPartialMissingScripts([]);
     } catch (caught) {
       const message = readableOcrFailure(caught);
       setError(message);
       setSavedNoteId(caught instanceof OcrEditorNavigationError ? caught.savedNoteId : null);
-      if (caught instanceof OcrEditorNavigationError) setPartialOcrText(null);
+      if (caught instanceof OcrEditorNavigationError) {
+        setPartialOcrText(null);
+        setPartialMissingScripts([]);
+      }
       setStatus("error");
       toast.error(message);
     } finally { inFlightRef.current = false; }
@@ -496,6 +523,11 @@ function CameraPage() {
           {busy ? (ocrStage || t("ocr_scanning")) : "Выберите фотографию с текстом, чтобы извлечь его и добавить в заметку"}
         </h2>
         {error && <p className="mt-3 max-w-sm text-sm text-destructive">{error}</p>}
+        {partialMissingScripts.length > 0 && (
+          <p className="mt-2 max-w-sm text-xs text-muted-foreground">
+            Не завершены: {partialMissingScripts.map(s => OCR_SCRIPT_LABELS[s]).join(", ")}
+          </p>
+        )}
 
         <Button
           type="button"
@@ -542,6 +574,14 @@ function CameraPage() {
               <Button type="button" disabled={busy} onClick={() => void savePartialScan()}
                 className="h-9 rounded-xl text-xs font-semibold">
                 Сохранить найденный текст (неполный)
+              </Button>
+            )}
+            {retryImagePath && !savedNoteId && (
+              <Button type="button" disabled={busy || ocrMode === "auto"}
+                onClick={retryManualOnSamePhoto}
+                variant="outline"
+                className="h-9 rounded-xl text-xs font-semibold">
+                Повторить на этом фото с выбранным языком
               </Button>
             )}
             <Button

@@ -21,3 +21,11 @@ export function chooseLocalOcrImagePath(photo: { path?: string | null; webPath?:
   if (isLocalOcrImagePath(photo.webPath)) return photo.webPath;
   throw new Error("Selected image has no readable local path.");
 }
+
+/** Reuse the exact local photo after a partial scan; never refetch remotely. */
+export function reusableOcrImagePath(path: unknown): string {
+  if (!isLocalOcrImagePath(path)) {
+    throw new Error("Selected image has no readable local path.");
+  }
+  return path;
+}
