@@ -7,12 +7,12 @@ import { createNote, getNote } from "@/lib/notes-store";
 import { saveOcrNoteAndOpenEditor, reopenSavedOcrNote, OcrEditorNavigationError } from "@/lib/ocr-save-flow";
 import { useT } from "@/lib/i18n";
 import { toast } from "sonner";
-import { mergeOcrCandidates, hasAmbiguousHanCandidates, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
+import { mergeOcrCandidates, hasAmbiguousHanCandidates, hasUncertainMixedScriptLayout, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
 import { linesFromMlKit } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
-import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, hanAlternativesFromCandidates, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
+import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, type OcrReviewReason, OcrMixedLayoutReviewError, resumeOcrReviewDraft, hanAlternativesFromCandidates, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText } from "@/lib/ocr-text";
@@ -217,6 +217,9 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       if (mode === "auto" && text && hasAmbiguousHanCandidates(results)) {
         throw new OcrAmbiguousHanError(text, hanAlternativesFromCandidates(results));
       }
+      if (mode === "auto" && text && hasUncertainMixedScriptLayout(results)) {
+        throw new OcrMixedLayoutReviewError(text);
+      }
       return text;
       } finally {
         // Releasing an image while ML Kit still reads it causes intermittent
@@ -252,6 +255,7 @@ function CameraPage() {
   const navigate = useNavigate();
   const t = useT();
   const inputRef = useRef<HTMLInputElement>(null);
+  const pickerCleanupRef = useRef<(() => void) | null>(null);
   const mountedRef = useRef(false);
   const operationIdRef = useRef(0);
   const inFlightRef = useRef(false);
@@ -263,8 +267,9 @@ function CameraPage() {
   const [partialOcrText, setPartialOcrText] = useState<string | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewDraft, setReviewDraft] = useState("");
+  const [reviewEdited, setReviewEdited] = useState(false);
   const [hanAlternatives, setHanAlternatives] = useState<OcrHanAlternatives | null>(null);
-  const [reviewReason, setReviewReason] = useState<"recovery" | "ambiguous-han">("recovery");
+  const [reviewReason, setReviewReason] = useState<OcrReviewReason>("recovery");
   const pendingRecoveryRef = useRef<OcrRecoveryState | null>(null);
   const [partialMissingScripts, setPartialMissingScripts] = useState<readonly OcrScript[]>([]);
   const [retryImagePath, setRetryImagePath] = useState<string | null>(null);
@@ -276,6 +281,7 @@ function CameraPage() {
     return () => {
       mountedRef.current = false;
       operationIdRef.current += 1;
+      pickerCleanupRef.current?.();
     };
   }, []);
 
@@ -285,6 +291,7 @@ function CameraPage() {
   };
 
   const closeCamera = () => {
+    pickerCleanupRef.current?.();
     operationIdRef.current += 1;
     setStatus("idle");
     setOcrStage("");
@@ -293,6 +300,7 @@ function CameraPage() {
     setPartialOcrText(null);
     setReviewOpen(false);
     setReviewDraft("");
+    setReviewEdited(false);
     setHanAlternatives(null);
     setReviewReason("recovery");
     setPartialMissingScripts([]);
@@ -340,6 +348,7 @@ function CameraPage() {
       setPartialOcrText(null);
       setReviewOpen(false);
       setReviewDraft("");
+      setReviewEdited(false);
       setHanAlternatives(null);
       setReviewReason("recovery");
       setPartialMissingScripts([]);
@@ -398,7 +407,7 @@ function CameraPage() {
         setModalOpen(true);
         return;
       }
-      if (caught instanceof OcrAmbiguousHanError) {
+      if (caught instanceof OcrAmbiguousHanError || caught instanceof OcrMixedLayoutReviewError) {
         const previous = pendingRecoveryRef.current;
         const combined = previous?.path === currentImagePath
           ? applyRecoveredOcrPass(previous, attemptedScripts, caught.recognizedText)
@@ -406,8 +415,9 @@ function CameraPage() {
         pendingRecoveryRef.current = combined;
         setPartialOcrText(combined.text);
         setPartialMissingScripts(combined.missingScripts);
-        setReviewReason("ambiguous-han");
-        setHanAlternatives(caught.alternatives);
+        setReviewReason(caught instanceof OcrAmbiguousHanError ? "ambiguous-han" : "mixed-layout");
+        setHanAlternatives(caught instanceof OcrAmbiguousHanError ? caught.alternatives : null);
+        setReviewEdited(false);
       }
       if (caught instanceof OcrIncompleteScanError) {
         const recovery = pendingRecoveryRef.current;
@@ -418,10 +428,11 @@ function CameraPage() {
         setPartialOcrText(updated.text);
         setPartialMissingScripts(updated.missingScripts);
         setHanAlternatives(null);
+        setReviewEdited(false);
       }
       handleFailure(readableOcrFailure(caught), operationId,
         caught instanceof OcrEditorNavigationError ? caught.savedNoteId : undefined,
-        caught instanceof OcrAmbiguousHanError);
+        caught instanceof OcrAmbiguousHanError || caught instanceof OcrMixedLayoutReviewError);
     } finally {
       inFlightRef.current = false;
     }
@@ -458,7 +469,7 @@ function CameraPage() {
 
     const operationId = operationIdRef.current;
     const handleFocusReturn = () => {
-      window.removeEventListener("focus", handleFocusReturn);
+      pickerCleanupRef.current?.();
       window.setTimeout(() => {
         if (!mountedRef.current || operationId !== operationIdRef.current) return;
         if (!input.files || input.files.length === 0) {
@@ -468,6 +479,11 @@ function CameraPage() {
       }, 250);
     };
 
+    pickerCleanupRef.current?.();
+    pickerCleanupRef.current = () => {
+      window.removeEventListener("focus", handleFocusReturn);
+      pickerCleanupRef.current = null;
+    };
     window.addEventListener("focus", handleFocusReturn);
     input.click();
   };
@@ -483,6 +499,7 @@ function CameraPage() {
   };
 
   const handleWebFileSelected = () => {
+    pickerCleanupRef.current?.();
     const operationId = operationIdRef.current + 1;
     operationIdRef.current = operationId;
     setStatus("scanning");
@@ -496,7 +513,7 @@ function CameraPage() {
 
   const showReview = () => {
     if (!partialOcrText || inFlightRef.current) return;
-    setReviewDraft(partialOcrText);
+    setReviewDraft(previous => resumeOcrReviewDraft(partialOcrText,previous,reviewEdited));
     setModalOpen(false);
     setReviewOpen(true);
   };
@@ -510,6 +527,7 @@ function CameraPage() {
       await finishWithText(buildReviewedOcrText(reviewDraft, partialMissingScripts, reviewReason));
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
       setReviewOpen(false);
+      setReviewEdited(false);
       setPartialOcrText(null);
       setPartialMissingScripts([]);
     } catch (caught) {
@@ -667,7 +685,7 @@ function CameraPage() {
             id="ocr-review-text"
             aria-label="Исправление распознанного текста"
             value={reviewDraft}
-            onChange={event => setReviewDraft(event.target.value)}
+            onChange={event => { setReviewDraft(event.target.value); setReviewEdited(true); }}
             spellCheck={false}
             disabled={busy}
             className="min-h-48 w-full flex-1 resize-y overflow-auto rounded-xl border border-border bg-background p-3 text-sm leading-relaxed text-foreground"
