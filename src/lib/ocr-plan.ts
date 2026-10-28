@@ -20,6 +20,7 @@ export function ocrScanPlan(request: OcrScanRequest): OcrScript[] {
   }
   if (request === "auto") return [...AUTO_SCAN_ORDER];
   if (request === "russian" || request === "kazakh") return ["cyrillic"];
+  if (request === "custom") throw new Error("Select at least one OCR script");
   if (!AUTO_SCAN_ORDER.includes(request)) throw new Error("Invalid OCR scan plan");
   return [request];
 }
