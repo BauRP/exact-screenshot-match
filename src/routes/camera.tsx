@@ -16,7 +16,7 @@ import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, ma
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
 import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
-import { composeRecognizedText, extractNativeTextAlternative, type OcrNativeTextAlternative } from "@/lib/ocr-text";
+import { composeRecognizedText, extractNativeTextAlternative, recoverNativeFullTextForReview, type OcrNativeTextAlternative } from "@/lib/ocr-text";
 import { ocrScanPlan, selectedOcrScanPlan, AUTO_SCAN_ORDER, readOcrScanPreferences, saveOcrScanPreferences, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, type OcrMode, type OcrScanRequest } from "@/lib/ocr-plan";
 
 export const Route = createFileRoute("/camera")({
@@ -241,7 +241,11 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       // Give priority to presenting the recognizer's own full-text reading
       // when its geometry omitted paragraphs. Otherwise an independent
       // mixed-layout warning would hide these concrete comparison excerpts.
-      if (text && nativeAlternatives.length) throw new OcrNativeTextReviewError(text,nativeAlternatives);
+      if (text && nativeAlternatives.length) {
+        const complete = recoverNativeFullTextForReview(
+          text,results,nativeAlternatives.map(alt => alt.script));
+        throw new OcrNativeTextReviewError(complete,nativeAlternatives);
+      }
       if (scanPlan.length > 1 && text && hasUncertainMixedScriptLayout(results)) {
         throw new OcrMixedLayoutReviewError(text);
       }

@@ -94,3 +94,42 @@ export function extractNativeTextAlternative(
   const preview = (value: string) => Array.from(value).slice(0,2000).join("");
   return {script,complete:preview(result.text ?? ""),lines:preview(lines)};
 }
+
+
+/** A native OCR engine can produce the whole page even when its returned
+ * bounding boxes only cover some lines. The main geometric merger may then
+ * drop unlocated sentences. Keep those complete original lines in the EDITABLE
+ * result, marked for human review by OcrNativeTextReviewError.
+ *
+ * This is not a second OCR pass, automatic translation, or a claim that every
+ * extra character is correct. Keep at most one copy of each added line and
+ * preserve the already merged languages in their original order.
+ */
+export function recoverNativeFullTextForReview(
+  merged: string,
+  readings: readonly {script: OcrScript; text: string}[],
+  alternativeScripts: readonly OcrScript[],
+): string {
+  if (!merged.trim() || !alternativeScripts.length) return merged;
+  const normalize = (value: string) => value.normalize("NFC")
+    .replace(/\s+/gu,"").toLocaleLowerCase();
+  const seen = new Set<string>();
+  const additions: string[] = [];
+  let searchable = normalize(merged);
+  for (const reading of readings) {
+    if (!alternativeScripts.includes(reading.script) || reading.text.length > 100000) continue;
+    for (const line of reading.text.replace(/\r\n?/gu,"\n").split("\n")) {
+      const original = line.trim();
+      const key=normalize(original);
+      // Single letters, short receipt numbers and punctuation in this path
+      // have insufficient independent evidence. They remain in the visible
+      // native comparison but are not appended to the editable main body.
+      if (Array.from(key).length < 3 || !/[\p{L}\p{N}]/u.test(key) ||
+          searchable.includes(key) || seen.has(key)) continue;
+      seen.add(key);
+      additions.push(original);
+      searchable += "\n" + key;
+    }
+  }
+  return additions.length ? merged.trimEnd() + "\n\n" + additions.join("\n") : merged;
+}

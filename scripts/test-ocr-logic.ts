@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { ocrTextToEditorHtml, buildOcrNoteDraft, truncateOcrTitle } from "../src/lib/ocr-note";
-import { composeRecognizedText, hasConflictingNativeOcrText, extractNativeTextAlternative } from "../src/lib/ocr-text";
+import { composeRecognizedText, hasConflictingNativeOcrText, extractNativeTextAlternative, recoverNativeFullTextForReview } from "../src/lib/ocr-text";
 import { ocrScanPlan, selectedOcrScanPlan, readOcrScanPreferences, saveOcrScanPreferences, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
 import { linesFromMlKit, linesFromMlKitBounded, mlKitReportedLanguages } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
@@ -809,3 +809,31 @@ assert.equal(extractNativeTextAlternative("latin",{
   text:"Hello world!",blocks:[{lines:[{text:"Hello world"}]}],
 }),null);
 console.log("Complete OCR readings with unlocated paragraphs require manual review: passed.");
+
+
+// The spatial merge can omit a line despite the recognizer reporting it
+// in full native text. Put genuinely absent lines into the editable review,
+// not just the read-only 2000-character comparison preview.
+const nativeFullPage = [
+ {script:"japanese" as const,text:"日本語学校\n新しい文章"},
+ {script:"cyrillic" as const,text:"Қазақ тілі"}
+];
+assert.equal(recoverNativeFullTextForReview(
+  "Қазақ тілі\n\n日本語学校",nativeFullPage,["japanese"]),
+  "Қазақ тілі\n\n日本語学校\n\n新しい文章");
+assert.equal(recoverNativeFullTextForReview(
+  "Қазақ тілі\n\n日本語学校\n\n新しい文章",nativeFullPage,["japanese"]),
+  "Қазақ тілі\n\n日本語学校\n\n新しい文章");
+assert.equal(recoverNativeFullTextForReview(
+  "Қазақ тілі",nativeFullPage,["cyrillic"]),"Қазақ тілі");
+assert.equal(recoverNativeFullTextForReview(
+  "Қазақ тілі",nativeFullPage,[]),"Қазақ тілі");
+assert.equal(recoverNativeFullTextForReview(
+  "Қазақ тілі",[{script:"japanese",text:"あ\n3\n日\n2026"}],["japanese"]),
+  "Қазақ тілі\n\n2026");
+assert.equal(recoverNativeFullTextForReview(
+  "Қазақ тілі",[{script:"japanese",text:"日本語学校\n日本語学校\n新しい文章"}],
+  ["japanese"]),"Қазақ тілі\n\n日本語学校\n新しい文章");
+assert.equal(recoverNativeFullTextForReview(
+  "",nativeFullPage,["japanese"]),"");
+console.log("Native full-text gaps become editable review lines without losing earlier scripts: passed.");
