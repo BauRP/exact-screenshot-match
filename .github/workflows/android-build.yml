@@ -1,4 +1,4 @@
-name: Android APK - Super Notes
+name: Android APK - Wave Notes
 
 # One click in Actions -> Run workflow. Pushing the staging branch tests the setup.
 on:
@@ -162,20 +162,21 @@ jobs:
           set -euo pipefail
           if [ "$GITHUB_REF_NAME" = "main" ]; then
             TAG="super-notes-latest"
-            TITLE="Super Notes - latest APK"
+            TITLE="Wave Notes - latest APK"
           elif [ "$GITHUB_REF_NAME" = "chatgpt/super-notes-stability-20261025" ]; then
             TAG="super-notes-stability-test"
-            TITLE="Super Notes - stability test APK"
+            TITLE="Wave Notes - stability test APK"
           else
             TAG="super-notes-preview"
-            TITLE="Super Notes - test APK"
+            TITLE="Wave Notes - test APK"
           fi
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --target "$GITHUB_SHA" --title "$TITLE" --notes "Android test APK, built automatically from GitHub. Back up local notes before replacing the app." --prerelease
           fi
+          # The legacy asset filename remains stable so existing download links do not break.
           gh release upload "$TAG" output/SuperNotes-debug.apk --clobber
 
           DOWNLOAD="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/SuperNotes-debug.apk"
           echo "## Скачать APK" >> "$GITHUB_STEP_SUMMARY"
-          echo "[Скачать Супер заметки APK]($DOWNLOAD)" >> "$GITHUB_STEP_SUMMARY"
+          echo "[Скачать Wave Notes APK]($DOWNLOAD)" >> "$GITHUB_STEP_SUMMARY"
           echo "APK download: $DOWNLOAD"
