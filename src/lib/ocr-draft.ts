@@ -71,3 +71,10 @@ export function readPendingOcrDraft(
 export function clearPendingOcrDraft(store: Store | null = storage()): void {
   try { store?.removeItem(KEY); } catch { /* Best-effort cleanup. */ }
 }
+
+
+/** A picker cancellation or failed scan must not erase unsaved text. */
+export function shouldClearPendingDraft(action:
+  "picker-open" | "picker-cancel" | "scan-failed" | "note-saved" | "discard"): boolean {
+  return action === "note-saved" || action === "discard";
+}

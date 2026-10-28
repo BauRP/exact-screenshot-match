@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrAmbiguousHanError, OcrMixedLayoutReviewError, resumeOcrReviewDraft } from "../src/lib/ocr-partial";
 import { saveOcrNoteAndOpenEditor } from "../src/lib/ocr-save-flow";
-import { readPendingOcrDraft, savePendingOcrDraft, clearPendingOcrDraft } from "../src/lib/ocr-draft";
+import { readPendingOcrDraft, savePendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft } from "../src/lib/ocr-draft";
 const storage=new Map<string,string>();
 Object.defineProperty(globalThis,"window",{configurable:true,value:{localStorage:{
  getItem(key:string){return storage.get(key)??null;},
@@ -126,3 +126,11 @@ clearPendingOcrDraft(draftStore);
 assert.equal(readPendingOcrDraft(11000,draftStore),null);
 assert.equal(JSON.parse(storage.get("sn.notes.v1")??"[]").length,3);
 console.log("Bounded offline unsaved OCR draft recovery, validation and cleanup: passed.");
+
+
+assert.equal(shouldClearPendingDraft("picker-open"),false);
+assert.equal(shouldClearPendingDraft("picker-cancel"),false);
+assert.equal(shouldClearPendingDraft("scan-failed"),false);
+assert.equal(shouldClearPendingDraft("note-saved"),true);
+assert.equal(shouldClearPendingDraft("discard"),true);
+console.log("Canceled picker and failed OCR cannot erase an unsaved review draft: passed.");

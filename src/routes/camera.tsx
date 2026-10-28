@@ -14,7 +14,7 @@ import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
 import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, type OcrReviewReason, OcrMixedLayoutReviewError, resumeOcrReviewDraft, hanAlternativesFromCandidates, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
-import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft } from "@/lib/ocr-draft";
+import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText } from "@/lib/ocr-text";
 import { ocrScanPlan, selectedOcrScanPlan, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, type OcrMode, type OcrScanRequest } from "@/lib/ocr-plan";
@@ -317,7 +317,7 @@ function CameraPage() {
   };
   const discardDraft = () => {
     if (inFlightRef.current) return;
-    clearPendingOcrDraft();
+    if (shouldClearPendingDraft("discard")) clearPendingOcrDraft();
     pendingRecoveryRef.current = null;
     setPartialOcrText(null);
     setPartialMissingScripts([]);
@@ -393,7 +393,8 @@ function CameraPage() {
     setError(null);
     setSavedNoteId(null);
     if (!previousPhotoPath) {
-      clearPendingOcrDraft();
+      // Starting a photo picker is not permission to erase a review draft.
+      if (shouldClearPendingDraft("picker-open")) clearPendingOcrDraft();
       setRestoredDraft(false);
       pendingRecoveryRef.current = null;
       setPartialOcrText(null);
@@ -450,7 +451,7 @@ function CameraPage() {
       }
       setOcrStage("Сохранение заметки");
       await finishWithText(text);
-      clearPendingOcrDraft();
+      if (shouldClearPendingDraft("note-saved")) clearPendingOcrDraft();
     } catch (caught) {
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
       if (isCameraCancellation(caught)) {
@@ -582,7 +583,7 @@ function CameraPage() {
     setStatus("preparing");
     try {
       await finishWithText(buildReviewedOcrText(reviewDraft, partialMissingScripts, reviewReason));
-      clearPendingOcrDraft();
+      if (shouldClearPendingDraft("note-saved")) clearPendingOcrDraft();
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
       setReviewOpen(false);
       setReviewEdited(false);
