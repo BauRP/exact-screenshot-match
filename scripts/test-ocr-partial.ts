@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrAmbiguousHanError, OcrMixedLayoutReviewError, resumeOcrReviewDraft } from "../src/lib/ocr-partial";
 import { saveOcrNoteAndOpenEditor } from "../src/lib/ocr-save-flow";
+import { readPendingOcrDraft, savePendingOcrDraft, clearPendingOcrDraft } from "../src/lib/ocr-draft";
 const storage=new Map<string,string>();
 Object.defineProperty(globalThis,"window",{configurable:true,value:{localStorage:{
  getItem(key:string){return storage.get(key)??null;},
@@ -97,3 +98,31 @@ assert.equal(layoutReview.recognizedText,"Қазақ тілі\n한국어");
 assert.ok(buildReviewedOcrText("Қазақ тілі\n한국어",[],"mixed-layout")
   .includes("расположение строк"));
 console.log("Review edits survive reopening; uncertain layout is persistently labelled: passed.");
+
+
+// Unsaved OCR survives a WebView restart as a bounded local text draft only.
+// It never creates a saved note without explicit user confirmation.
+const draftData = new Map<string,string>();
+const draftStore = {
+  getItem:(key:string) => draftData.get(key) ?? null,
+  setItem:(key:string,value:string) => { draftData.set(key,value); },
+  removeItem:(key:string) => { draftData.delete(key); },
+};
+const draft = {text:"Қазақ тілі\n日本語\n한국어",
+  reviewedText:"Қазақ тілі\n日本語 исправлено\n한국어",
+  missingScripts:["devanagari" as const], reason:"mixed-layout" as const, edited:true};
+assert.equal(savePendingOcrDraft(draft,10000,draftStore),true);
+assert.equal(readPendingOcrDraft(11000,draftStore)?.reviewedText,draft.reviewedText);
+assert.deepEqual(readPendingOcrDraft(11000,draftStore)?.missingScripts,["devanagari"]);
+assert.equal(readPendingOcrDraft(10000 + 8*86400000,draftStore),null);
+assert.equal(savePendingOcrDraft({...draft,text:"A".repeat(100001)},10000,draftStore),false);
+assert.equal(savePendingOcrDraft({...draft,missingScripts:["bad" as never]},10000,draftStore),false);
+assert.equal(savePendingOcrDraft(draft,10000,{...draftStore,
+  setItem:(_:string,__:string)=>{throw new Error("quota");}}),false);
+assert.equal(readPendingOcrDraft(11000,{...draftStore,
+  getItem:(_:string)=>"{not-json"}),null);
+assert.equal(JSON.parse(draftData.values().next().value as string).path,undefined);
+clearPendingOcrDraft(draftStore);
+assert.equal(readPendingOcrDraft(11000,draftStore),null);
+assert.equal(JSON.parse(storage.get("sn.notes.v1")??"[]").length,3);
+console.log("Bounded offline unsaved OCR draft recovery, validation and cleanup: passed.");
