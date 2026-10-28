@@ -12,11 +12,11 @@ import { linesFromMlKit } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
-import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, type OcrReviewReason, OcrMixedLayoutReviewError, resumeOcrReviewDraft, hanAlternativesFromCandidates, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
+import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, type OcrReviewReason, OcrMixedLayoutReviewError, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, resumeOcrReviewDraft, hanAlternativesFromCandidates, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
 import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
-import { composeRecognizedText } from "@/lib/ocr-text";
+import { composeRecognizedText, hasConflictingNativeOcrText } from "@/lib/ocr-text";
 import { ocrScanPlan, selectedOcrScanPlan, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, type OcrMode, type OcrScanRequest } from "@/lib/ocr-plan";
 
 export const Route = createFileRoute("/camera")({
@@ -123,6 +123,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       const outstanding: Promise<unknown>[] = [];
       let prepared: {path:string;width:number;height:number} | null = null;
       let timedOut = false;
+      let nativeTextConflict = false;
       let timeBudget: OcrTimeBudget | null = null;
       const timed = <T,>(start: () => Promise<T>, duration: number): Promise<T> => {
         if (!timeBudget) throw new Error("OCR budget was not initialized");
@@ -155,6 +156,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
           const data = await timed(() => mlkit.TextRecognition.processImage({path:scanPath,script:item.script}), 15000);
           coverage.markCompleted(item.id);
           const value = composeRecognizedText(data);
+          if (value.trim() && hasConflictingNativeOcrText(data)) nativeTextConflict = true;
           if (value.trim()) results.push({text:value,script:item.id,lines:linesFromMlKit(data,item.id,width,height)});
         } catch(error) {
           console.warn("OCR model failed",item.id,error);
@@ -220,6 +222,10 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       }
       if (scanPlan.length > 1 && text && hasUncertainMixedScriptLayout(results)) {
         throw new OcrMixedLayoutReviewError(text);
+      }
+      if (text && nativeTextConflict) throw new OcrNativeTextReviewError(text);
+      if (text && Array.isArray(mode) && scanPlan.length < AUTO_SCAN_ORDER.length) {
+        throw new OcrLimitedSelectionReviewError(text);
       }
       return text;
       } finally {
@@ -482,7 +488,8 @@ function CameraPage() {
         setModalOpen(true);
         return;
       }
-      if (caught instanceof OcrAmbiguousHanError || caught instanceof OcrMixedLayoutReviewError) {
+      if (caught instanceof OcrAmbiguousHanError || caught instanceof OcrMixedLayoutReviewError ||
+          caught instanceof OcrLimitedSelectionReviewError || caught instanceof OcrNativeTextReviewError) {
         const previous = pendingRecoveryRef.current;
         const combined = previous?.path === currentImagePath
           ? applyRecoveredOcrPass(previous, attemptedScripts, caught.recognizedText)
@@ -490,10 +497,13 @@ function CameraPage() {
         pendingRecoveryRef.current = combined;
         setPartialOcrText(combined.text);
         setPartialMissingScripts(combined.missingScripts);
-        setReviewReason(caught instanceof OcrAmbiguousHanError ? "ambiguous-han" : "mixed-layout");
+        const reason: OcrReviewReason = caught instanceof OcrAmbiguousHanError ? "ambiguous-han" :
+          caught instanceof OcrMixedLayoutReviewError ? "mixed-layout" :
+          caught instanceof OcrLimitedSelectionReviewError ? "limited-selection" : "native-text";
+        setReviewReason(reason);
         setHanAlternatives(caught instanceof OcrAmbiguousHanError ? caught.alternatives : null);
         setReviewEdited(false);
-        retainUnfinishedResult(combined, caught instanceof OcrAmbiguousHanError ? "ambiguous-han" : "mixed-layout");
+        retainUnfinishedResult(combined, reason);
       }
       if (caught instanceof OcrEditorNavigationError) markDraftFinished();
       if (caught instanceof OcrIncompleteScanError) {
@@ -510,7 +520,8 @@ function CameraPage() {
       }
       handleFailure(readableOcrFailure(caught), operationId,
         caught instanceof OcrEditorNavigationError ? caught.savedNoteId : undefined,
-        caught instanceof OcrAmbiguousHanError || caught instanceof OcrMixedLayoutReviewError);
+        caught instanceof OcrAmbiguousHanError || caught instanceof OcrMixedLayoutReviewError ||
+        caught instanceof OcrLimitedSelectionReviewError || caught instanceof OcrNativeTextReviewError);
     } finally {
       inFlightRef.current = false;
     }

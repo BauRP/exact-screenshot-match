@@ -43,3 +43,24 @@ export function composeRecognizedText(result: TextScanResult): string {
   }
   return structured;
 }
+
+
+/**
+ * ML Kit can report a different full-text string from the text represented
+ * by its block/line iterator. A silent choice would risk changing glyphs or
+ * losing paragraphs. Differences in whitespace/normalization alone are OK.
+ * If one text is simply a longer complete version, preserve the existing
+ * fallback behaviour; only conflicting textual content requests review.
+ */
+export function hasConflictingNativeOcrText(result: TextScanResult): boolean {
+  const full = (result.text ?? "").normalize("NFC").replace(/\s+/gu,"");
+  const blocks = (result.blocks ?? []).flatMap(block => block.lines ?? [])
+    .map(line => (line.text ?? "").trim()).filter(Boolean);
+  if (!full || !blocks.length) return false;
+  const combined = blocks.join("").normalize("NFC").replace(/\s+/gu,"");
+  if (!combined || full === combined || full.includes(combined) ||
+      combined.includes(full)) return false;
+  // Very short hallucinations are not enough evidence of a document conflict.
+  if (Array.from(full).length < 6 || Array.from(combined).length < 6) return false;
+  return true;
+}

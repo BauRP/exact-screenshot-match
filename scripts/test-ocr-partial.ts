@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrAmbiguousHanError, OcrMixedLayoutReviewError, resumeOcrReviewDraft } from "../src/lib/ocr-partial";
+import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrAmbiguousHanError, OcrMixedLayoutReviewError, resumeOcrReviewDraft } from "../src/lib/ocr-partial";
 import { saveOcrNoteAndOpenEditor } from "../src/lib/ocr-save-flow";
 import { readPendingOcrDraft, savePendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "../src/lib/ocr-draft";
 const storage=new Map<string,string>();
@@ -153,3 +153,22 @@ assert.equal(gate.canWrite,true);
 gate.disarm();
 assert.equal(gate.canWrite,false);
 console.log("OCR debounced draft gate prevents post-save resurrection: passed.");
+
+
+// A deliberately limited script selection is not a failed model: carry the
+// correct warning into the real note and survive restart in local storage.
+assert.ok(markRecoveredOcrText("Қазақша 한국어", "limited-selection")
+  .includes("Проверены только выбранные языки"));
+assert.ok(markRecoveredOcrText("日本語", "native-text")
+  .includes("отдельные строки распознавания"));
+assert.equal(new OcrLimitedSelectionReviewError("Қазақша").recognizedText,"Қазақша");
+assert.equal(new OcrNativeTextReviewError("日本語").recognizedText,"日本語");
+assert.equal(savePendingOcrDraft({...draft,reason:"native-text"},20000,draftStore),true);
+assert.equal(readPendingOcrDraft(20001,draftStore)?.reason,"native-text");
+clearPendingOcrDraft(draftStore);
+const limitedId=await saveOcrNoteAndOpenEditor(
+  buildReviewedOcrText("Қазақша 한국어",[], "limited-selection"),"OCR",
+  createNote,async savedId=>assert.ok(getNote(savedId)?.body.includes("языки")));
+assert.ok(getNote(limitedId)?.body.includes("Остальные языковые модели"));
+assert.equal(JSON.parse(storage.get("sn.notes.v1")??"[]").length,4);
+console.log("Custom language limits and conflicting native glyphs are reviewed and saved safely: passed.");

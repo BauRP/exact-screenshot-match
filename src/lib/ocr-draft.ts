@@ -8,7 +8,7 @@ const KEY = "wave.ocr.pending-draft.v1";
 const VERSION = 1;
 const MAX_CHARS = 100_000;
 const MAX_AGE = 7 * 24 * 60 * 60 * 1000;
-const REASONS: readonly OcrReviewReason[] = ["recovery","ambiguous-han","mixed-layout"];
+const REASONS: readonly OcrReviewReason[] = ["recovery","ambiguous-han","mixed-layout","limited-selection","native-text"];
 type Store = Pick<Storage,"getItem"|"setItem"|"removeItem">;
 export type OcrLocalDraft = {
   text: string;

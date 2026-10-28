@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { ocrTextToEditorHtml, buildOcrNoteDraft, truncateOcrTitle } from "../src/lib/ocr-note";
-import { composeRecognizedText } from "../src/lib/ocr-text";
+import { composeRecognizedText, hasConflictingNativeOcrText } from "../src/lib/ocr-text";
 import { ocrScanPlan, selectedOcrScanPlan, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
 import { linesFromMlKit } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
@@ -529,3 +529,24 @@ assert.throws(()=>selectedOcrScanPlan([]),/Invalid OCR scan plan/);
 assert.throws(()=>selectedOcrScanPlan(["latin","latin"]),/Invalid OCR scan plan/);
 assert.throws(()=>selectedOcrScanPlan(["unsupported" as never]),/Invalid OCR scan plan/);
 console.log("Offline custom multilingual selection and stable six-script scan plan: passed.");
+
+
+// A native full-text/blocks discrepancy can corrupt Chinese, Japanese,
+// Korean and Cyrillic text even when every bundled recognizer returned success.
+assert.equal(hasConflictingNativeOcrText({text:"日本語学校",blocks:[
+  {lines:[{text:"日本語学校"}]}
+]}),false);
+assert.equal(hasConflictingNativeOcrText({text:"日本語学校 大阪",blocks:[
+  {lines:[{text:"日本語学校"}]}
+]}),false);
+assert.equal(hasConflictingNativeOcrText({text:"日本語学校",blocks:[
+  {lines:[{text:"日本語学枚"}]}
+]}),true);
+assert.equal(hasConflictingNativeOcrText({text:"Қазақ тіліндегі мәтін",blocks:[
+  {lines:[{text:"Қазақ тіліндегі мətin"}]}
+]}),true);
+assert.equal(hasConflictingNativeOcrText({text:"text",blocks:[
+  {lines:[{text:"tast"}]}
+]}),false);
+assert.equal(hasConflictingNativeOcrText({text:"日本語学校",blocks:[]}),false);
+console.log("Native OCR text/line conflicts require review rather than silent glyph changes: passed.");

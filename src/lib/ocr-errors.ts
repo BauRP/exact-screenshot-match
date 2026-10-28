@@ -32,6 +32,12 @@ export function readableOcrFailure(error: unknown): string {
   if (error instanceof Error && error.message === "OCR_SCAN_BUSY") {
     return "Предыдущее сканирование ещё завершается. Повторите попытку после его окончания.";
   }
+  if (error instanceof Error && error.message === "OCR_LIMITED_LANGUAGE_SELECTION") {
+    return "Проверены только выбранные языки. Проверьте результат и подтвердите сохранение.";
+  }
+  if (error instanceof Error && error.message === "OCR_NATIVE_TEXT_CONFLICT") {
+    return "Распознаватель вернул разные символы в полном тексте и отдельных строках. Проверьте результат перед сохранением.";
+  }
   if (error instanceof Error && error.message === "OCR_MIXED_LAYOUT_REVIEW") {
     return "На фотографии есть несколько языков, но порядок строк ненадёжен. Проверьте текст перед сохранением.";
   }

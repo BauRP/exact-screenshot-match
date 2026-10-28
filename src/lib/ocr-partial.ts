@@ -1,6 +1,6 @@
 import type { OcrScript } from "./ocr-merge";
 
-export type OcrReviewReason = "recovery" | "ambiguous-han" | "mixed-layout";
+export type OcrReviewReason = "recovery" | "ambiguous-han" | "mixed-layout" | "limited-selection" | "native-text";
 
 export const OCR_SCRIPT_LABELS: Readonly<Record<OcrScript, string>> = {
   latin: "Латиница",
@@ -117,6 +117,12 @@ export function markRecoveredOcrText(
     : reason === "mixed-layout"
       ? "⚠️ Языки распознаны, но расположение строк на фотографии подтверждено не полностью. " +
         "Проверьте порядок абзацев и столбцов.\n\n"
+      : reason === "limited-selection"
+        ? "⚠️ Проверены только выбранные языки. Остальные языковые модели не запускались. " +
+          "Проверьте текст и сохраните его только после подтверждения.\n\n"
+        : reason === "native-text"
+          ? "⚠️ Полный текст и отдельные строки распознавания содержат расхождения. " +
+            "Проверьте символы и абзацы перед сохранением.\n\n"
       : "⚠️ Текст восстановлен несколькими проверками одной фотографии. " +
         "Проверьте порядок строк и исправьте возможные ошибки.\n\n";
   return warning + text;
@@ -181,4 +187,27 @@ export function resumeOcrReviewDraft(
   scannedText: string, editedText: string, hasEdits: boolean,
 ): string {
   return hasEdits ? editedText : scannedText;
+}
+
+
+/** A custom scan of a subset is not verified against all installed languages.
+ * Do not mislabel deliberately unselected languages as broken models.
+ */
+export class OcrLimitedSelectionReviewError extends Error {
+  readonly recognizedText: string;
+  constructor(text: string) {
+    super("OCR_LIMITED_LANGUAGE_SELECTION");
+    this.name = "OcrLimitedSelectionReviewError";
+    this.recognizedText = text;
+  }
+}
+
+/** The native recognizer returned conflicting glyphs in its two text views. */
+export class OcrNativeTextReviewError extends Error {
+  readonly recognizedText: string;
+  constructor(text: string) {
+    super("OCR_NATIVE_TEXT_CONFLICT");
+    this.name = "OcrNativeTextReviewError";
+    this.recognizedText = text;
+  }
 }
