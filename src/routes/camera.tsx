@@ -12,7 +12,7 @@ import { linesFromMlKit } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
-import { OcrIncompleteScanError, markIncompleteOcrText, OCR_SCRIPT_LABELS } from "@/lib/ocr-partial";
+import { OcrIncompleteScanError, markIncompleteOcrText, combineRecoveredOcrText, OCR_SCRIPT_LABELS } from "@/lib/ocr-partial";
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText } from "@/lib/ocr-text";
@@ -248,6 +248,7 @@ function CameraPage() {
   const [error, setError] = useState<string | null>(null);
   const [savedNoteId, setSavedNoteId] = useState<string | null>(null);
   const [partialOcrText, setPartialOcrText] = useState<string | null>(null);
+  const pendingRecoveryRef = useRef<{ path: string; text: string; missing: readonly OcrScript[] } | null>(null);
   const [partialMissingScripts, setPartialMissingScripts] = useState<readonly OcrScript[]>([]);
   const [retryImagePath, setRetryImagePath] = useState<string | null>(null);
   const [ocrMode, setOcrMode] = useState<OcrMode>("auto");
@@ -274,6 +275,7 @@ function CameraPage() {
     setSavedNoteId(null);
     setPartialOcrText(null);
     setPartialMissingScripts([]);
+    pendingRecoveryRef.current = null;
     setRetryImagePath(null);
     setModalOpen(false);
     navigate({ to: "/" });
@@ -309,12 +311,16 @@ function CameraPage() {
     operationIdRef.current = operationId;
     setError(null);
     setSavedNoteId(null);
-    setPartialOcrText(null);
-    setPartialMissingScripts([]);
-    if (!previousPhotoPath) setRetryImagePath(null);
+    if (!previousPhotoPath) {
+      pendingRecoveryRef.current = null;
+      setPartialOcrText(null);
+      setPartialMissingScripts([]);
+      setRetryImagePath(null);
+    }
     setOcrStage(previousPhotoPath ? "Повторное распознавание фотографии" : "Подготовка камеры");
     setStatus("preparing");
 
+    let currentImagePath: string | null = previousPhotoPath ?? null;
     try {
       await yieldToMainThread();
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
@@ -324,6 +330,7 @@ function CameraPage() {
         ? reusableOcrImagePath(previousPhotoPath)
         : await captureNativePhoto(source);
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
+      currentImagePath = imagePath;
       setRetryImagePath(imagePath);
       await yieldToMainThread();
       safeSetStatus("scanning", operationId);
@@ -340,6 +347,15 @@ function CameraPage() {
         return;
       }
 
+      const recovery = pendingRecoveryRef.current;
+      if (previousPhotoPath && recovery?.path === imagePath) {
+        const combined = combineRecoveredOcrText(recovery.text, text);
+        const remaining = recovery.missing.filter(script => script !== ocrMode);
+        pendingRecoveryRef.current = { path: imagePath, text: combined, missing: remaining };
+        setPartialOcrText(combined);
+        setPartialMissingScripts(remaining);
+        throw new OcrIncompleteScanError(combined, remaining);
+      }
       setOcrStage("Сохранение заметки");
       await finishWithText(text);
     } catch (caught) {
@@ -351,8 +367,16 @@ function CameraPage() {
         return;
       }
       if (caught instanceof OcrIncompleteScanError) {
-        setPartialOcrText(caught.partialText);
-        setPartialMissingScripts(caught.missingScripts);
+        const recovery = pendingRecoveryRef.current;
+        const combined = previousPhotoPath && recovery?.path === previousPhotoPath
+          ? combineRecoveredOcrText(recovery.text, caught.partialText)
+          : caught.partialText;
+        const missing = previousPhotoPath && recovery?.path === previousPhotoPath
+          ? [...new Set([...recovery.missing.filter(script => script !== ocrMode), ...caught.missingScripts])]
+          : caught.missingScripts;
+        pendingRecoveryRef.current = { path: currentImagePath ?? "", text: combined, missing };
+        setPartialOcrText(combined);
+        setPartialMissingScripts(missing);
       }
       handleFailure(readableOcrFailure(caught), operationId,
         caught instanceof OcrEditorNavigationError ? caught.savedNoteId : undefined);
