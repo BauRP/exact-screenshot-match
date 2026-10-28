@@ -22,6 +22,8 @@ import com.google.mlkit.vision.text.devanagari.DevanagariTextRecognizerOptions;
 import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions;
 import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
+import com.googlecode.tesseract.android.TessBaseAPI;
+import java.io.InputStream;
 import java.util.concurrent.TimeUnit;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -95,6 +97,65 @@ public class BundledMlKitInstrumentedTest {
     public void compressedJpegDevanagariModelWorksOffline() throws Exception {
         verifyCompressedPhoto("नमस्ते हिन्दी", Character.UnicodeScript.DEVANAGARI,
             TextRecognition.getClient(new DevanagariTextRecognizerOptions.Builder().build()));
+    }
+
+
+    @Test
+    public void twoIndependentBundledEnginesReadOneMixedLanguageJpegOffline() throws Exception {
+        // The same camera-format JPEG flows through the REAL app decoder,
+        // then ML Kit Latin and bundled Tesseract Cyrillic. Both run on the
+        // emulator with Wi-Fi and cellular data disabled.
+        Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File jpeg=File.createTempFile("wave-mixed-ocr-", ".jpg", context.getCacheDir());
+        File modelRoot=new File(context.getCacheDir(), "wave-mixed-models");
+        File tessdata=new File(modelRoot,"tessdata");
+        assertTrue(tessdata.isDirectory() || tessdata.mkdirs());
+        Bitmap original=Bitmap.createBitmap(1600,480,Bitmap.Config.ARGB_8888);
+        Bitmap decoded=null;
+        TextRecognizer latin=TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+        TessBaseAPI cyrillic=new TessBaseAPI();
+        try {
+            for (String lang:new String[]{"kaz","rus"}) {
+                File model=new File(tessdata,lang+".traineddata");
+                try (InputStream in=context.getAssets().open("tessdata/"+lang+".traineddata");
+                     FileOutputStream out=new FileOutputStream(model)) {
+                    byte[] buf=new byte[65536];
+                    int n;
+                    while ((n=in.read(buf))!=-1) out.write(buf,0,n);
+                }
+            }
+            Canvas canvas=new Canvas(original);
+            canvas.drawColor(Color.WHITE);
+            Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
+            paint.setColor(Color.BLACK);
+            paint.setTypeface(Typeface.create("sans-serif",Typeface.NORMAL));
+            paint.setTextSize(92f);
+            canvas.drawText("HELLO WORLD 2026",65,172,paint);
+            canvas.drawText("Привет мир",65,350,paint);
+            try (FileOutputStream out=new FileOutputStream(jpeg)) {
+                assertTrue(original.compress(Bitmap.CompressFormat.JPEG,97,out));
+            }
+            decoded=OfflineCyrillicOcrPlugin.loadBitmap(context,Uri.fromFile(jpeg).toString());
+            assertEquals(1600,decoded.getWidth());
+            assertEquals(480,decoded.getHeight());
+            Text latinText=Tasks.await(latin.process(InputImage.fromBitmap(decoded,0)),40,TimeUnit.SECONDS);
+            String english=latinText.getText()==null?"":latinText.getText();
+            assertTrue("Latin model lost the English sentence: "+english,
+                english.toUpperCase(java.util.Locale.ROOT).contains("HELLO"));
+            assertTrue(cyrillic.init(modelRoot.getAbsolutePath(),"kaz+rus"));
+            cyrillic.setPageSegMode(TessBaseAPI.PageSegMode.PSM_AUTO);
+            cyrillic.setImage(decoded);
+            String output=cyrillic.getUTF8Text();
+            assertNotNull(output);
+            assertTrue("Bundled Cyrillic OCR lost Russian text: "+output,
+                output.toLowerCase(java.util.Locale.ROOT).contains("привет"));
+        } finally {
+            latin.close();
+            cyrillic.recycle();
+            original.recycle();
+            if (decoded!=null) decoded.recycle();
+            assertTrue(jpeg.delete());
+        }
     }
 
     private static void verifyCompressedPhoto(

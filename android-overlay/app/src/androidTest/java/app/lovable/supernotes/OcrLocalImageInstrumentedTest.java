@@ -213,6 +213,44 @@ public class OcrLocalImageInstrumentedTest {
         }
     }
 
+
+    /** Orientation must transform actual pixels, not only bitmap dimensions.
+     * OCR rectangles must use this same corrected coordinate frame.
+     */
+    @Test
+    public void ninetyDegreeExifRotationMovesPixelsToCorrectCorner() throws Exception {
+        File photo=File.createTempFile("wave-exif-pixel-", ".jpg",
+            InstrumentationRegistry.getInstrumentation().getTargetContext().getCacheDir());
+        Bitmap original=Bitmap.createBitmap(400,300,Bitmap.Config.ARGB_8888);
+        Bitmap decoded=null;
+        try {
+            Canvas canvas=new Canvas(original);
+            canvas.drawColor(Color.WHITE);
+            Paint mark=new Paint();
+            mark.setColor(Color.RED);
+            canvas.drawRect(0,0,110,100,mark);
+            try (FileOutputStream out=new FileOutputStream(photo)) {
+                assertTrue(original.compress(Bitmap.CompressFormat.JPEG,97,out));
+            }
+            ExifInterface exif=new ExifInterface(photo.getAbsolutePath());
+            exif.setAttribute(ExifInterface.TAG_ORIENTATION,
+                String.valueOf(ExifInterface.ORIENTATION_ROTATE_90));
+            exif.saveAttributes();
+            decoded=loadWithActualPlugin(photo.getAbsolutePath());
+            assertEquals(300,decoded.getWidth());
+            assertEquals(400,decoded.getHeight());
+            int topRight=decoded.getPixel(265,25);
+            int topLeft=decoded.getPixel(25,25);
+            assertTrue("EXIF rotation misplaced red content",
+                Color.green(topRight)+40<Color.green(topLeft));
+            assertTrue("Red rotated marker must remain red",Color.red(topRight)>170);
+        } finally {
+            original.recycle();
+            if(decoded!=null) decoded.recycle();
+            assertTrue(photo.delete());
+        }
+    }
+
     @Test
     public void remoteUriIsRejectedWithoutNetwork() throws Exception {
         try {

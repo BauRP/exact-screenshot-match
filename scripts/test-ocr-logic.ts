@@ -732,7 +732,7 @@ assert.equal(restoreOmittedOcrScriptTextForReview(
   "Қазақ тіліндегі мәтін",[shortKazakh,{script:"latin",text:"abc",lines:[]}]),
   "Қазақ тіліндегі мәтін");
 assert.equal(restoreOmittedOcrScriptTextForReview(
-  "学校",{length:0} as never),"学校");
+  "学校",[]),"学校");
 assert.equal(restoreOmittedOcrScriptTextForReview(
   "日本語学校",[{script:"chinese",text:"中文测试文字",lines:[]}]),"日本語学校");
 assert.equal(restoreOmittedOcrScriptTextForReview(
@@ -740,3 +740,22 @@ assert.equal(restoreOmittedOcrScriptTextForReview(
   "Привет\n\nनमस्ते हिन्दी");
 assert.equal(restoreOmittedOcrScriptTextForReview("",[shortJapanese]),"");
 console.log("Short independent language fragments survive multilingual fusion for review: passed.");
+
+
+// Candidate iteration must be an actual readonly array, never a casted
+// non-iterable fake. CJK texts can include several scripts on one line.
+const mixedHanKana = [
+  {script:"japanese" as const,text:"日本語こんにちは",lines:[]},
+  {script:"chinese" as const,text:"日本語测试",lines:[]},
+];
+assert.equal(restoreOmittedOcrScriptTextForReview(
+  "中文文章说明",mixedHanKana),"中文文章说明\n\n日本語こんにちは");
+assert.equal(restoreOmittedOcrScriptTextForReview(
+  "Hello world",[{script:"latin",text:"HELLO WORLD",lines:[]}]),
+  "Hello world");
+const devanagariPassage={script:"devanagari" as const,
+  text:"मराठी भाषा",lines:[]};
+const cjkAndDevanagari=restoreOmittedOcrScriptTextForReview(
+  "こんにちは",[devanagariPassage]);
+assert.equal(cjkAndDevanagari,"こんにちは\n\nमराठी भाषा");
+console.log("OCR regression: actual arrays, mixed Han/Kana and Devanagari loss safeguards: passed.");
