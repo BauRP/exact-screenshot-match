@@ -14,6 +14,7 @@ import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
 import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, type OcrReviewReason, OcrMixedLayoutReviewError, resumeOcrReviewDraft, hanAlternativesFromCandidates, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
 import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
+import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText } from "@/lib/ocr-text";
 import { ocrScanPlan, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, type OcrMode, type OcrScanRequest } from "@/lib/ocr-plan";
@@ -268,6 +269,7 @@ function CameraPage() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewDraft, setReviewDraft] = useState("");
   const [reviewEdited, setReviewEdited] = useState(false);
+  const [restoredDraft, setRestoredDraft] = useState(false);
   const [hanAlternatives, setHanAlternatives] = useState<OcrHanAlternatives | null>(null);
   const [reviewReason, setReviewReason] = useState<OcrReviewReason>("recovery");
   const pendingRecoveryRef = useRef<OcrRecoveryState | null>(null);
@@ -278,6 +280,17 @@ function CameraPage() {
 
   useEffect(() => {
     mountedRef.current = true;
+    const previous = readPendingOcrDraft();
+    if (previous) {
+      setPartialOcrText(previous.text);
+      setPartialMissingScripts(previous.missingScripts);
+      setReviewReason(previous.reason);
+      setReviewDraft(previous.reviewedText);
+      setReviewEdited(previous.edited);
+      setRestoredDraft(true);
+      setStatus("error");
+      setError("Найден незавершённый текст. Проверьте его перед сохранением.");
+    }
     return () => {
       mountedRef.current = false;
       operationIdRef.current += 1;
@@ -285,12 +298,45 @@ function CameraPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!partialOcrText || savedNoteId) return;
+    const id = window.setTimeout(() => {
+      savePendingOcrDraft({text:partialOcrText,
+        reviewedText:reviewEdited ? reviewDraft : partialOcrText,
+        edited:reviewEdited, missingScripts:[...partialMissingScripts], reason:reviewReason});
+    },reviewEdited ? 350 : 0);
+    return () => window.clearTimeout(id);
+  },[partialOcrText,reviewDraft,reviewEdited,partialMissingScripts,reviewReason,savedNoteId]);
+
+  const persistDraft = () => {
+    if (partialOcrText) savePendingOcrDraft({text:partialOcrText,
+      reviewedText:reviewEdited ? reviewDraft : partialOcrText,
+      edited:reviewEdited, missingScripts:[...partialMissingScripts], reason:reviewReason});
+  };
+  const discardDraft = () => {
+    if (inFlightRef.current) return;
+    clearPendingOcrDraft();
+    pendingRecoveryRef.current = null;
+    setPartialOcrText(null);
+    setPartialMissingScripts([]);
+    setReviewDraft("");
+    setReviewEdited(false);
+    setRestoredDraft(false);
+    setRetryImagePath(null);
+    setHanAlternatives(null);
+    setReviewOpen(false);
+    setStatus("idle");
+    setError(null);
+    setModalOpen(true);
+  };
+
   const safeSetStatus = (nextStatus: CaptureStatus, currentOperationId: number) => {
     if (!mountedRef.current || currentOperationId !== operationIdRef.current) return;
     setStatus(nextStatus);
   };
 
   const closeCamera = () => {
+    persistDraft();
     pickerCleanupRef.current?.();
     operationIdRef.current += 1;
     setStatus("idle");
@@ -344,6 +390,8 @@ function CameraPage() {
     setError(null);
     setSavedNoteId(null);
     if (!previousPhotoPath) {
+      clearPendingOcrDraft();
+      setRestoredDraft(false);
       pendingRecoveryRef.current = null;
       setPartialOcrText(null);
       setReviewOpen(false);
@@ -399,6 +447,7 @@ function CameraPage() {
       }
       setOcrStage("Сохранение заметки");
       await finishWithText(text);
+      clearPendingOcrDraft();
     } catch (caught) {
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
       if (isCameraCancellation(caught)) {
@@ -419,6 +468,7 @@ function CameraPage() {
         setHanAlternatives(caught instanceof OcrAmbiguousHanError ? caught.alternatives : null);
         setReviewEdited(false);
       }
+      if (caught instanceof OcrEditorNavigationError) clearPendingOcrDraft();
       if (caught instanceof OcrIncompleteScanError) {
         const recovery = pendingRecoveryRef.current;
         const updated: OcrRecoveryState = previousPhotoPath && recovery?.path === previousPhotoPath
@@ -489,7 +539,7 @@ function CameraPage() {
   };
 
   const startCapture = (source: CaptureSource) => {
-    if (inFlightRef.current) return;
+    if (inFlightRef.current || partialOcrText) return;
     setModalOpen(false);
     if (isNativePlatform()) {
       void scanNativeImage(source);
@@ -525,6 +575,7 @@ function CameraPage() {
     setStatus("preparing");
     try {
       await finishWithText(buildReviewedOcrText(reviewDraft, partialMissingScripts, reviewReason));
+      clearPendingOcrDraft();
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
       setReviewOpen(false);
       setReviewEdited(false);
@@ -536,6 +587,7 @@ function CameraPage() {
       setError(message);
       setSavedNoteId(caught instanceof OcrEditorNavigationError ? caught.savedNoteId : null);
       if (caught instanceof OcrEditorNavigationError) {
+        clearPendingOcrDraft();
         setReviewOpen(false);
         setPartialOcrText(null);
         setPartialMissingScripts([]);
@@ -633,6 +685,9 @@ function CameraPage() {
           {busy ? (ocrStage || t("ocr_scanning")) : "Выберите фотографию с текстом, чтобы извлечь его и добавить в заметку"}
         </h2>
         {error && <p className="mt-3 max-w-sm text-sm text-destructive">{error}</p>}
+        {restoredDraft && partialOcrText && <p className="mt-2 max-w-sm text-xs text-muted-foreground">
+          Черновик восстановлен после перезапуска. Для повторного сканирования нужно выбрать фото заново.
+        </p>}
         {partialMissingScripts.length > 0 && (
           <p className="mt-2 max-w-sm text-xs text-muted-foreground">
             Не завершены: {partialMissingScripts.map(s => OCR_SCRIPT_LABELS[s]).join(", ")}
@@ -652,7 +707,10 @@ function CameraPage() {
       </main>
 
       <Dialog open={reviewOpen} onOpenChange={(open) => {
-        if (!inFlightRef.current) setReviewOpen(open);
+        if (!inFlightRef.current) {
+          if (!open) persistDraft();
+          setReviewOpen(open);
+        }
       }}>
         <DialogContent className="flex max-h-[85dvh] w-[min(35rem,calc(100vw-2rem))] max-w-[35rem] flex-col overflow-hidden rounded-2xl p-4">
           <DialogHeader>
@@ -686,6 +744,7 @@ function CameraPage() {
             aria-label="Исправление распознанного текста"
             value={reviewDraft}
             onChange={event => { setReviewDraft(event.target.value); setReviewEdited(true); }}
+            onBlur={persistDraft}
             spellCheck={false}
             disabled={busy}
             className="min-h-48 w-full flex-1 resize-y overflow-auto rounded-xl border border-border bg-background p-3 text-sm leading-relaxed text-foreground"
@@ -697,7 +756,7 @@ function CameraPage() {
           )}
           <div className="flex flex-wrap justify-end gap-2">
             <Button type="button" variant="outline" disabled={busy}
-              onClick={() => { setReviewOpen(false); setModalOpen(true); }}>
+              onClick={() => { persistDraft(); setReviewOpen(false); setModalOpen(true); }}>
               Вернуться к проверкам
             </Button>
             <Button type="button" disabled={busy || !reviewDraft.trim()}
@@ -743,6 +802,10 @@ function CameraPage() {
                 {savePartialLabel}
               </Button>
             )}
+            {partialOcrText && <Button type="button" variant="outline"
+              disabled={busy} onClick={discardDraft} className="h-9 rounded-xl text-xs font-semibold">
+              Удалить черновик и выбрать новое фото
+            </Button>}
             {retryImagePath && partialOcrText && partialMissingScripts.length > 0 && (
               <Button type="button" variant="outline" disabled={busy}
                 onClick={retryUnfinishedOnSamePhoto}
@@ -760,7 +823,7 @@ function CameraPage() {
             )}
             <Button
               type="button"
-              disabled={busy}
+              disabled={busy || Boolean(partialOcrText)}
               className="h-9 rounded-xl bg-gradient-to-r from-primary to-primary-glow text-xs font-semibold text-primary-foreground hover:opacity-95"
               onClick={() => startCapture("camera")}
             >
@@ -770,7 +833,7 @@ function CameraPage() {
             <Button
               type="button"
               variant="outline"
-              disabled={busy}
+              disabled={busy || Boolean(partialOcrText)}
               className="h-9 rounded-xl text-xs font-semibold"
               onClick={() => startCapture("gallery")}
             >
