@@ -8,7 +8,7 @@ import { saveOcrNoteAndOpenEditor, reopenSavedOcrNote, OcrEditorNavigationError 
 import { useT } from "@/lib/i18n";
 import { toast } from "sonner";
 import { mergeOcrCandidates, exceedsOcrSpatialBudget, mergeOversizedOcrForReview, hasAmbiguousHanCandidates, hasUncertainMixedScriptLayout, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
-import { linesFromMlKit } from "@/lib/ocr-geometry";
+import { linesFromMlKitBounded } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
@@ -161,7 +161,11 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
             const alternative = extractNativeTextAlternative(item.id,data);
             if (alternative) nativeAlternatives.push(alternative);
           }
-          if (value.trim()) results.push({text:value,script:item.id,lines:linesFromMlKit(data,item.id,width,height)});
+          if (value.trim()) {
+            const geometry = linesFromMlKitBounded(data,item.id,width,height);
+            if (geometry.truncated) nativeGeometryTruncated = true;
+            results.push({text:value,script:item.id,lines:geometry.lines});
+          }
         } catch(error) {
           console.warn("OCR model failed",item.id,error);
           coverage.markFailed(item.id);

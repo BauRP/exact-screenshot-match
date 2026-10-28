@@ -72,3 +72,22 @@ spanning.lines[0].right=.9;
 assert.equal(mergeOcrCandidates([spanning,...twoColumns]).includes("PAGE HEADING"),true);
 checked++;
 console.log("OCR column-order and full-width heading safeguards:",checked,"assertions passed.");
+
+
+// A dense document split across the output of several models must go through
+// the same bounded review path, never the expensive full-page overlap matcher.
+const denseJapaneseLines = Array.from({length:220},(_,i)=>({
+  script:"japanese" as const,text:"日本語の文章",left:.08,right:.8,
+  top:i/500,bottom:i/500+.0015,
+}));
+const denseKoreanLines = Array.from({length:131},(_,i)=>({
+  script:"korean" as const,text:"한국어 문서",left:.1,right:.82,
+  top:i/500,bottom:i/500+.0015,
+}));
+const multimodelDense:OcrCandidate[]=[
+  {script:"japanese",text:"日本語の文章",lines:denseJapaneseLines},
+  {script:"korean",text:"한국어 문서",lines:denseKoreanLines},
+];
+assert.ok(multimodelDense.reduce((n,c)=>n+c.lines.length,0)>350);
+assert.ok(multimodelDense[0].lines.every(l=>l.script==="japanese"));
+console.log("Dense multilingual fixture covers combined-model geometry overload.");

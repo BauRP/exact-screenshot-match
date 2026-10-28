@@ -1,4 +1,4 @@
-import type { OcrLine, OcrScript } from "./ocr-merge";
+import { OCR_SPATIAL_LINE_LIMIT, type OcrLine, type OcrScript } from "./ocr-merge";
 
 export type MlKitRect = { left: number; top: number; right: number; bottom: number };
 export type MlKitPoint = { x: number; y: number };
@@ -10,11 +10,17 @@ export type MlKitResult = { blocks?: Array<{ lines?: MlKitLine[] }> };
  * Tesseract supplies 0..1 normalized lines; use a common coordinate space.
  * Malformed rectangles must never corrupt the combined result.
  */
-export function linesFromMlKit(
+export type BoundedOcrGeometry = { lines: OcrLine[]; truncated: boolean };
+/** Bound geometry BEFORE it reaches the cross-model quadratic overlap matcher.
+ * Preserve complete recognized text in the OCR result separately. Only valid
+ * rectangles consume the shared 350-line budget; the next valid line marks
+ * a review-required truncated layout.
+ */
+export function linesFromMlKitBounded(
   data: MlKitResult, script: OcrScript, imageWidth: number, imageHeight: number,
-): OcrLine[] {
+): BoundedOcrGeometry {
   if (!Number.isFinite(imageWidth) || !Number.isFinite(imageHeight) ||
-      imageWidth <= 0 || imageHeight <= 0) return [];
+      imageWidth <= 0 || imageHeight <= 0) return {lines:[],truncated:false};
   const lines: OcrLine[] = [];
   for (const block of data.blocks ?? []) {
     for (const line of block.lines ?? []) {
@@ -41,9 +47,17 @@ export function linesFromMlKit(
       // Some camera/gallery providers yield boxes far outside the actual
       // decoded image. Do not clamp those to misleading edge labels.
       if (right <= 0 || bottom <= 0 || left >= imageWidth || top >= imageHeight) continue;
+      if (lines.length >= OCR_SPATIAL_LINE_LIMIT) return {lines,truncated:true};
       lines.push({ text: line.text, left: x1, top: y1, right: x2, bottom: y2,
         script, language: line.recognizedLanguage });
     }
   }
-  return lines;
+  return {lines,truncated:false};
+}
+
+/** Existing callers that only need located lines use the same bounded path. */
+export function linesFromMlKit(
+  data: MlKitResult, script: OcrScript, imageWidth: number, imageHeight: number,
+): OcrLine[] {
+  return linesFromMlKitBounded(data,script,imageWidth,imageHeight).lines;
 }

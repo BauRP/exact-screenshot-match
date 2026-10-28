@@ -244,3 +244,8 @@ public class OcrLocalImageInstrumentedTest {
         }
     }
 }
+
+
+// The bitmap decoder must not touch the network, and the auto-downsample
+// fallback used on low-RAM phones still respects EXIF after sampling.
+// Separate geometry-cap tests run in the pure OCR verification workflow.

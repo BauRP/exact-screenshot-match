@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { ocrTextToEditorHtml, buildOcrNoteDraft, truncateOcrTitle } from "../src/lib/ocr-note";
 import { composeRecognizedText, hasConflictingNativeOcrText, extractNativeTextAlternative } from "../src/lib/ocr-text";
 import { ocrScanPlan, selectedOcrScanPlan, readOcrScanPreferences, saveOcrScanPreferences, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
-import { linesFromMlKit } from "../src/lib/ocr-geometry";
+import { linesFromMlKit, linesFromMlKitBounded } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
 import { OcrScanCoverage } from "../src/lib/ocr-coverage";
 import { OcrIncompleteScanError, markIncompleteOcrText, OCR_SCRIPT_LABELS, hanAlternativesFromCandidates, previewHanAlternatives, cyrillicTextWithLineFallback } from "../src/lib/ocr-partial";
@@ -637,3 +637,37 @@ assert.equal(exceedsOcrSpatialBudget([],true),true);
 assert.equal(exceedsOcrSpatialBudget([{script:"cyrillic",text:"Қазақ тілі",lines:[]}],false),false);
 assert.equal(exceedsOcrSpatialBudget([{script:"cyrillic",text:"Қазақ тілі",lines:[]}],true),true);
 console.log("Native geometry truncation forces full-text manual review: passed.");
+
+
+// A real ML Kit result can contain thousands of lines. Without bounding,
+// the WebView builds thousands of JS objects and performs quadratic matching.
+// All text must still be retained in the native complete-text result.
+const manyMlKitLines = Array.from({length:OCR_SPATIAL_LINE_LIMIT + 40},(_,i)=>({
+  text:"日本語の文章",
+  boundingBox:{left:10,top:10+i*3,right:240,bottom:12+i*3},
+}));
+const hugeMlKitResult={blocks:[{lines:manyMlKitLines}]};
+const boundedMlKit=linesFromMlKitBounded(hugeMlKitResult,"japanese",320,2000);
+assert.equal(boundedMlKit.lines.length,OCR_SPATIAL_LINE_LIMIT);
+assert.equal(boundedMlKit.truncated,true);
+assert.equal(linesFromMlKit(hugeMlKitResult,"japanese",320,2000).length,OCR_SPATIAL_LINE_LIMIT);
+assert.ok(boundedMlKit.lines.every(line=>line.script==="japanese"));
+const exactMlKit=linesFromMlKitBounded({blocks:[{
+  lines:manyMlKitLines.slice(0,OCR_SPATIAL_LINE_LIMIT)
+}]},"japanese",320,2000);
+assert.equal(exactMlKit.truncated,false);
+const oneBadBeforeCap=linesFromMlKitBounded({blocks:[{
+  lines:[{text:"invalid",boundingBox:{left:NaN,top:0,right:10,bottom:20}},
+    ...manyMlKitLines.slice(0,OCR_SPATIAL_LINE_LIMIT)]
+}]},"japanese",320,2000);
+assert.equal(oneBadBeforeCap.truncated,false);
+assert.equal(oneBadBeforeCap.lines.length,OCR_SPATIAL_LINE_LIMIT);
+const overMultipleBlocks=linesFromMlKitBounded({blocks:[
+  {lines:manyMlKitLines.slice(0,200)},
+  {lines:manyMlKitLines.slice(0,200)}
+]},"japanese",320,2000);
+assert.equal(overMultipleBlocks.truncated,true);
+assert.equal(overMultipleBlocks.lines.length,OCR_SPATIAL_LINE_LIMIT);
+assert.deepEqual(linesFromMlKitBounded(hugeMlKitResult,"japanese",0,2000),
+  {lines:[],truncated:false});
+console.log("All ML Kit recognizers now bound expensive text geometry before fusion: passed.");
