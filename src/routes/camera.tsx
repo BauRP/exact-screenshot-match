@@ -391,6 +391,7 @@ function CameraPage() {
   // The only visible OCR mode is automatic.
   const [draftPersistenceWarning, setDraftPersistenceWarning] = useState(false);
   const [ocrStage, setOcrStage] = useState("");
+  const restoredAutoSaveRef=useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -409,7 +410,7 @@ function CameraPage() {
       setReviewEdited(previous.edited);
       setRestoredDraft(true);
       setStatus("error");
-      setError("Найден незавершённый текст. Проверьте его перед сохранением.");
+      setError(null);
     }
     return () => {
       mountedRef.current = false;
@@ -669,7 +670,7 @@ function CameraPage() {
       if (isCameraCancellation(caught)) {
         // Backing out of camera/photo picker is normal user intent.
         setStatus("idle");
-        setModalOpen(true);
+        setModalOpen(false);
         return;
       }
       if (caught instanceof OcrAmbiguousHanError || caught instanceof OcrMixedLayoutReviewError ||
@@ -843,6 +844,32 @@ function CameraPage() {
     } finally { inFlightRef.current = false; }
   };
 
+  const saveRecoveredDraft=async()=>{
+    if(inFlightRef.current || !partialOcrText?.trim())return;
+    inFlightRef.current=true;
+    setStatus("preparing");
+    try{
+      const edited=latestReviewRef.current;
+      await finishWithText(edited.edited && edited.text.trim() ? edited.text : partialOcrText);
+      markDraftFinished();
+    }catch(caught){
+      if(caught instanceof OcrEditorNavigationError)markDraftFinished();
+      else {
+        setError(readableOcrFailure(caught));
+        setStatus("error");
+      }
+    }finally{inFlightRef.current=false;}
+  };
+
+  // After an Android WebView restart, restore the recovered text straight
+  // into a normal note. No separate OCR decision screen.
+  useEffect(()=>{
+    if(!restoredDraft || !partialOcrText?.trim() ||
+       restoredAutoSaveRef.current || status==="preparing")return;
+    restoredAutoSaveRef.current=true;
+    void saveRecoveredDraft();
+  },[restoredDraft,partialOcrText]);
+
   const openPreviouslySavedNote = async () => {
     if (!savedNoteId || inFlightRef.current) return;
     inFlightRef.current = true;
@@ -910,41 +937,39 @@ function CameraPage() {
           }}
         />
 
-        <div className="relative mb-8">
-          <div className="absolute inset-0 -z-10 animate-pulse rounded-3xl bg-primary/30 blur-2xl" />
-          <div className="grid h-40 w-40 place-items-center rounded-3xl border border-primary/30 bg-card/70 backdrop-blur">
-            {busy ? <Loader2 className="h-12 w-12 animate-spin text-primary" strokeWidth={1.5} /> : <ScanLine className="h-12 w-12 text-primary" strokeWidth={1.4} />}
+        <div className="relative mb-8 grid h-44 w-44 place-items-center" role={busy ? "status" : undefined} aria-live="polite">
+          {busy && <div className="absolute inset-0 animate-pulse rounded-[2.75rem] bg-primary/10 blur-2xl" />}
+          <div className="relative grid h-40 w-40 place-items-center overflow-hidden rounded-[2rem] border border-primary/30 bg-card shadow-[0_0_32px_rgba(245,171,45,0.08)]">
+            {busy ? <>
+              <div className="absolute inset-4 rounded-full border-2 border-primary/10" />
+              <div className="absolute inset-4 animate-spin rounded-full border-2 border-transparent border-t-primary border-r-primary/40" />
+              <div className="absolute inset-8 animate-pulse rounded-full border border-primary/20" />
+              <ScanLine className="h-11 w-11 text-primary" strokeWidth={1.5} />
+            </> : <ImagePlus className="h-12 w-12 text-primary" strokeWidth={1.5}/>}
           </div>
         </div>
 
-        <p className="mx-auto max-w-xs px-4 text-center text-xs leading-relaxed text-muted-foreground">
-          Язык текста определяется автоматически. Никаких загрузок моделей и отправки фото.
-        </p>
+        {!busy && <p className="mx-auto max-w-xs px-4 text-center text-xs leading-relaxed text-muted-foreground">
+          Камера или галерея — всё остальное сделаем автоматически
+        </p>}
         <h2 className="mt-3 px-4 text-center font-display text-base font-semibold leading-snug">
-          {busy ? (ocrStage || t("ocr_scanning")) : "Добавьте фотографию — язык распознавания выберется автоматически"}
+          {busy ? "Переносим текст в заметку…" : "Добавьте фото — текст появится в заметке"}
         </h2>
         {error && <p className="mt-3 max-w-sm text-sm text-destructive">{error}</p>}
         {draftPersistenceWarning && partialOcrText && <p role="alert" className="mt-2 max-w-sm text-xs text-destructive">
           Недостаточно места для резервного черновика. Не закрывайте приложение до сохранения заметки; освободите память устройства.
         </p>}
-        {restoredDraft && partialOcrText && <p className="mt-2 max-w-sm text-xs text-muted-foreground">
-          Черновик восстановлен после перезапуска. Для повторного сканирования нужно выбрать фото заново.
-        </p>}
-        {partialMissingScripts.length > 0 && (
-          <p className="mt-2 max-w-sm text-xs text-muted-foreground">
-            Не завершены: {partialMissingScripts.map(s => OCR_SCRIPT_LABELS[s]).join(", ")}
-          </p>
-        )}
+
 
         <Button
           type="button"
-          onClick={() => savedNoteId ? void openPreviouslySavedNote() : partialOcrText ? showReview() : setModalOpen(true)}
+          onClick={() => savedNoteId ? void openPreviouslySavedNote() : partialOcrText ? void saveRecoveredDraft() : setModalOpen(true)}
           size="lg"
           disabled={busy}
           className="mt-6 h-11 rounded-xl bg-gradient-to-r from-primary to-primary-glow px-6 text-sm text-primary-foreground shadow-xl hover:opacity-95"
         >
           <ImagePlus className="mr-2 h-5 w-5" />
-          {savedNoteId ? "Открыть сохранённую заметку" : partialOcrText ? savePartialLabel : "Добавить фото"}
+          {savedNoteId ? "Открыть заметку" : partialOcrText ? "Открыть восстановленный текст" : "Добавить фото"}
         </Button>
       </main>
 
@@ -956,9 +981,9 @@ function CameraPage() {
       }}>
         <DialogContent className="flex max-h-[85dvh] w-[min(35rem,calc(100vw-2rem))] max-w-[35rem] flex-col overflow-hidden rounded-2xl p-4">
           <DialogHeader>
-            <DialogTitle>Проверьте распознанный текст</DialogTitle>
+            <DialogTitle>Восстановленный текст</DialogTitle>
             <DialogDescription>
-              Исправьте символы и порядок строк перед сохранением. Текст обрабатывается на устройстве.
+              Текст можно редактировать в заметке.
               {partialMissingScripts.length > 0
                 ? " Некоторые языки не были проверены — заметка сохранится с предупреждением."
                 : " Результат нескольких проверок может содержать ошибки."}
@@ -1074,23 +1099,11 @@ function CameraPage() {
               </Button>
             ) : (
             <>
-            {partialOcrText && (
-              <Button type="button" disabled={busy} onClick={showReview}
-                className="h-9 rounded-xl text-xs font-semibold">
-                {savePartialLabel}
-              </Button>
-            )}
-            {partialOcrText && <Button type="button" variant="outline"
-              disabled={busy} onClick={discardDraft} className="h-9 rounded-xl text-xs font-semibold">
-              Удалить черновик и выбрать новое фото
+            {partialOcrText && <Button type="button" disabled={busy}
+              onClick={() => void saveRecoveredDraft()}
+              className="h-10 rounded-xl text-xs font-semibold">
+              Открыть восстановленный текст
             </Button>}
-            {retryImagePath && partialOcrText && partialMissingScripts.length > 0 && (
-              <Button type="button" variant="outline" disabled={busy}
-                onClick={retryUnfinishedOnSamePhoto}
-                className="h-9 rounded-xl text-xs font-semibold">
-                Повторить недостающие языки ({partialMissingScripts.length})
-              </Button>
-            )}
             <Button
               type="button"
               disabled={busy || Boolean(partialOcrText)}
