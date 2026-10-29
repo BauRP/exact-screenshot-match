@@ -139,7 +139,7 @@ export function restoreFolderBackup(folders: Folder[], restoredHidden: string[])
   const known = new Set([...SYSTEM_FOLDERS, ...customFolders].map((folder) => folder.id));
   const pending: Folder[] = [];
   for (const folder of folders) {
-    if (!folder || typeof folder.id !== "string" || !/^[\\w-]{1,128}$/.test(folder.id) ||
+    if (!folder || typeof folder.id !== "string" || !/^[\w-]{1,128}$/.test(folder.id) ||
         typeof folder.name !== "string" || folder.name.length > 120) {
       throw new Error("Invalid folder record in backup");
     }
