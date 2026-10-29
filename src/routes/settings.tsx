@@ -185,9 +185,9 @@ function SettingsPage() {
       try {
         const { Capacitor } = await import("@capacitor/core");
         if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "android") return;
-        const { AdMob, PrivacyOptionsRequirementStatus } = await import("@capacitor-community/admob");
+        const { AdMob } = await import("@capacitor-community/admob");
         const info = await AdMob.requestConsentInfo();
-        if (!cancelled) setAdPrivacyAvailable(info.privacyOptionsRequirementStatus === PrivacyOptionsRequirementStatus.REQUIRED);
+        if (!cancelled) setAdPrivacyAvailable(info.privacyOptionsRequirementStatus === "REQUIRED");
       } catch (error) {
         console.info("AdMob privacy options unavailable", error);
         if (!cancelled) setAdPrivacyAvailable(false);
