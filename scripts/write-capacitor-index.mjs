@@ -85,8 +85,12 @@ for (const file of cssFiles) {
 const legacyFile = "wave-notes-legacy.css";
 const legacyText = "html,body{margin:0;padding:0;width:100%;max-width:100%;overflow-x:hidden;}" +
   "*,*::before,*::after{box-sizing:border-box;}\n" + legacyOutput.join("\n");
-if (!legacyText.includes(".fixed") || !legacyText.includes("position:fixed")) {
-  throw new Error("Legacy CSS lost essential Tailwind position utility");
+// Lightning CSS pretty-prints declarations with whitespace: "position: fixed".
+ // Validate actual CSS, not the formatting of the serialized output.
+if (!/\\.fixed\\s*\\{[^}]*\\bposition\\s*:\\s*fixed\\s*;/m.test(legacyText)) {
+  const matches = legacyText.match(/.{0,65}position\\s*:\\s*fixed.{0,65}/g) ?? [];
+  throw new Error("Legacy CSS missing .fixed utility; candidate declarations: " +
+    JSON.stringify(matches.slice(0, 5)) + "; output bytes=" + legacyText.length);
 }
 await writeFile(join(assetsDir, legacyFile), legacyText);
 console.log("Generated legacy WebView stylesheet for Android 7/8/10");
