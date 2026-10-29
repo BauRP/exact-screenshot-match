@@ -27,6 +27,7 @@ on:
       - 'src/routes/__root.tsx'
       - 'src/components/BottomNav.tsx'
       - 'src/styles.css'
+      - 'scripts/write-capacitor-index.mjs'
       - 'capacitor.config.json'
 
 permissions:
