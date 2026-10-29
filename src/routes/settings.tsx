@@ -200,7 +200,7 @@ function SettingsPage() {
       const { AdMob } = await import("@capacitor-community/admob");
       await AdMob.showPrivacyOptionsForm();
       invalidateConsentForSession();
-      toast.info("Настройки рекламной конфиденциальности открыты");
+      toast.info("Рекламные настройки обновлены");
     } catch (error) {
       console.warn("Google UMP privacy options unavailable", error);
       toast.error("Google пока не предоставил форму рекламных настроек. Проверьте публикацию сообщения в AdMob.");

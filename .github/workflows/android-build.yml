@@ -75,6 +75,9 @@ jobs:
       - name: Verify diagnostic screen separation and cross-route retry
         run: bun scripts/test-admob-diagnostics.ts
 
+      - name: Verify consent withdrawal interrupts native advertising
+        run: bun scripts/test-admob-consent-change.ts
+
       - name: Verify persistent feed, three-dot menu and three display modes
         run: bun scripts/test-admob-menu-grid.ts
 

@@ -16,7 +16,14 @@ export function requestConsentForSession(): ReturnType<typeof fetchConsent> {
   });
   return consentForSession;
 }
-export function invalidateConsentForSession(): void { consentForSession = null; }
+export function invalidateConsentForSession(): void {
+  consentForSession = null;
+  // The user may revoke ads. Every currently displayed native view must
+  // be destroyed before the next ad request checks Google's revised choice.
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("wave-admob-consent-changed"));
+  }
+}
 export function initializeMobileAdsForSession(): Promise<void> {
   if (!sdkForSession) sdkForSession = import("@capacitor-community/admob")
     .then(({AdMob}) => AdMob.initialize())

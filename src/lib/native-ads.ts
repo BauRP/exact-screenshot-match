@@ -45,6 +45,7 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
     const knownSlots = new Set<string>();
     const slotTimers = new Set<ReturnType<typeof setTimeout>>();
     const handles: Array<{ remove(): Promise<void> }> = [];
+    let restartingConsent = false;
     const report = (state: string, details?: unknown) => console.info(`[SuperNotes AdMob] ${state}`, details ?? "");
 
     const initialize = async () => {
@@ -167,7 +168,33 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
       // network-related errors with a quiet backoff instead.
       retryTimer = setTimeout(() => { retryTimer = null; void initialize(); }, Math.min(15_000 * Math.max(attempts, 1), 90_000));
     };
-    const onOnline = () => { updateAdDiagnostic("waiting", "Интернет доступен, повторяем запрос"); void initialize(); };
+    const onOnline = () => {
+      updateAdDiagnostic("waiting", "Интернет восстановлен");
+      if (feedRef.current) {
+        feedRef.current.resume();
+        void feedRef.current.invalidateLayout().catch(console.warn);
+      } else void initialize();
+    };
+    const onPrivacyChanged = async () => {
+      if (disposed || restartingConsent) return;
+      restartingConsent = true;
+      // Stop existing ads immediately when the consent preferences change.
+      const oldFeed = feedRef.current;
+      feedRef.current = null;
+      setReady(false);
+      for (const handle of handles.splice(0)) await handle.remove().catch(console.warn);
+      if (oldFeed) {
+        await oldFeed.pause().catch(console.warn);
+        await oldFeed.destroy().catch(console.warn);
+      }
+      if (!disposed) {
+        knownSlots.clear();
+        slotRetries.clear();
+        attempts = 0;
+      }
+      restartingConsent = false;
+      if (!disposed) void initialize();
+    };
     const onRetry = () => {
       consumePendingAdRetry();
       attempts = 0;
@@ -187,12 +214,14 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
     };
     window.addEventListener("supernotes-admob-retry", onRetry);
     window.addEventListener("online", onOnline);
+    window.addEventListener("wave-admob-consent-changed", onPrivacyChanged);
     if (consumePendingAdRetry()) onRetry();
     else void initialize();
     return () => {
       disposed = true;
       abort.abort();
       window.removeEventListener("online", onOnline);
+      window.removeEventListener("wave-admob-consent-changed", onPrivacyChanged);
       window.removeEventListener("supernotes-admob-retry", onRetry);
       for (const timer of slotTimers) clearTimeout(timer);
       if (retryTimer !== null) clearTimeout(retryTimer);
