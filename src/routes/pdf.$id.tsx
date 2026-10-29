@@ -56,6 +56,7 @@ import {
   getSelectionOffsets,
   nearestTextOffset,
   insertAt,
+  replaceAt,
   rangeAll,
   readRunsFromDom,
   renderRunsInto,
@@ -469,6 +470,15 @@ function PdfViewerScreen() {
     setFontMenuOpen(false);
   }, [editingId, overlays, persistOverlays, setDraftOverlay]);
 
+  const cancelEditing = useCallback(() => {
+    // Cancel is lossless for an untouched or modified source draft.
+    if (draftOverlayRef.current) setDraftOverlay(null);
+    draftStartRef.current = null;
+    editingNodeRef.current = null;
+    setEditingId(null);
+    setFontMenuOpen(false);
+  }, [setDraftOverlay]);
+
   // Switching pages or rotating never leaves the old caret floating over
   // another page. Saved annotations remain attached to their PDF page.
   const lastPageRotationRef = useRef(`${page}:${rotation}`);
@@ -476,13 +486,24 @@ function PdfViewerScreen() {
     const next = `${page}:${rotation}`;
     if (lastPageRotationRef.current === next) return;
     lastPageRotationRef.current = next;
+    // A page turn or rotation may not silently discard the user's typing.
+    const previous = draftOverlayRef.current;
+    const original = draftStartRef.current;
+    if (previous && original && hasPdfDraftChanges(original, previous) && hasSaveablePdfContent(previous)) {
+      const latest = getNote(id);
+      if (latest?.pdf) updateNote(id, {
+        pdf: { ...latest.pdf, overlays: [
+          ...(latest.pdf.overlays ?? []).filter(item => item.id !== previous.id), previous,
+        ] },
+      });
+    }
     setDraftOverlay(null);
     draftStartRef.current = null;
     setEditingId(null);
     editingNodeRef.current = null;
     setTextBoxes([]);
     setMargins({ left: 8, right: 92 });
-  }, [page, rotation, setDraftOverlay]);
+  }, [page, rotation, id, setDraftOverlay]);
 
   /* ---------------- Scoped rich-text formatting for the active box -------- */
   type FullRun = RunStyle & { text: string };
@@ -697,9 +718,11 @@ function PdfViewerScreen() {
         setActiveStyle(styleAt(runs, end, baseStyle(overlay)));
       }
       node.addEventListener("beforeinput", (event: InputEvent) => {
-        if (event.inputType !== "insertText" || !event.data) return;
+        const newline = event.inputType === "insertParagraph" || event.inputType === "insertLineBreak";
+        if (!newline && (event.inputType !== "insertText" || !event.data)) return;
         const offsets = getSelectionOffsets(node);
-        if (!offsets || offsets.start !== offsets.end) return;
+        if (!offsets) return;
+        if (!newline && offsets.start !== offsets.end) return;
         const base = baseStyle(editingOverlayRef.current ?? overlay);
         const current = readRunsFromDom(node, renderedRunsRef.current, base);
         let pending = pendingRef.current;
@@ -709,11 +732,13 @@ function PdfViewerScreen() {
           const at = styleAt(current, offsets.start, base);
           if (at.color.toLowerCase() !== sticky.toLowerCase()) pending = { offset: offsets.start, style: { ...at, color: sticky } };
         }
-        if (!pending) return;
+        if (!pending && !newline) return;
         event.preventDefault();
-        const next = insertAt(current, offsets.start, event.data, pending.style);
-        const caret = offsets.start + event.data.length;
-        pendingRef.current = { offset: caret, style: pending.style };
+        const inserted = newline ? "\n" : event.data!;
+        const style = pending?.style ?? styleAt(current, offsets.start, base);
+        const next = replaceAt(current, offsets.start, offsets.end, inserted, style);
+        const caret = offsets.start + inserted.length;
+        pendingRef.current = { offset: caret, style };
         const liveFace = editingOverlayRef.current ?? overlay;
         renderRunsInto(node, next, viewScaleRef.current, {
           fontFamily: liveFace.fontFamily, cssFamily: liveFace.sourceFontCss,
@@ -756,7 +781,10 @@ function PdfViewerScreen() {
     const yPct = ((event.clientY - rect.top) / rect.height) * 100;
     const sourcePoint = displayToSourceRect({x:xPct,y:yPct,width:0,height:0},rotation);
 
-    const existing = pageOverlays.find(
+    // Tap elsewhere ends the active draft. Previously this silently dropped
+    // typing and also prevented opening a second source line.
+    if (draftOverlayRef.current && editingId) commitEditing();
+    const existing = overlays.filter(item => item.page === page).find(
       (item) =>
         sourcePoint.x >= item.xPct &&
         sourcePoint.x <= item.xPct + item.widthPct &&
@@ -773,7 +801,7 @@ function PdfViewerScreen() {
     }
 
     // Never hit-test stale text extracted for a previous page/rotation.
-    const hit = renderedPageRef.current === `${page}:${rotation}` && !draftOverlayRef.current
+    const hit = renderedPageRef.current === `${page}:${rotation}`
       ? textBoxes.find(
       (box) =>
         xPct >= box.leftPct &&
@@ -977,7 +1005,21 @@ function PdfViewerScreen() {
         }
       }
       const maxWidth = Math.max(1, (overlay.widthPct / 100) * width);
-      const lines = wrapPdfGlyphs(glyphs, maxWidth);
+      const measureLine = (items: typeof glyphs) => {
+        let total = 0;
+        for (let i = 0; i < items.length;) {
+          const first = items[i];
+          let j = i + 1;
+          while (j < items.length && items[j].font === first.font &&
+            items[j].run === first.run) j++;
+          total += first.font.widthOfTextAtSize(
+            items.slice(i, j).map(item => item.text).join(""), first.run.fontSize,
+          );
+          i = j;
+        }
+        return total;
+      };
+      const lines = wrapPdfGlyphs(glyphs, maxWidth, measureLine);
       const lineAdvance = maxSize * 1.2;
       const firstBaseline = overlay.sourceBaselinePct !== undefined
         ? height - overlay.sourceBaselinePct / 100 * height
@@ -1395,7 +1437,10 @@ function PdfViewerScreen() {
             <PanelAction label="Поворот" onClick={() => setRotation((r) => (r + 90) % 360)}>
               <RotateCw className="h-4 w-4" />
             </PanelAction>
-            <PanelAction label="Текст" active={textTool} onClick={() => setTextTool((value) => !value)}>
+            <PanelAction label="Текст" active={textTool} onClick={() => {
+              if (textTool && editingId) commitEditing();
+              setTextTool((value) => !value);
+            }}>
               <Type className="h-4 w-4" />
             </PanelAction>
             <PanelAction label="Инфо" onClick={() => setInfoOpen(true)}>
@@ -1621,6 +1666,7 @@ function PdfViewerScreen() {
                   onClick={(event) => {
                     event.stopPropagation();
                     if (!isEditing && textTool) {
+                      if (draftOverlayRef.current) commitEditing();
                       pendingTapRef.current = { x: event.clientX, y: event.clientY };
                       editingNodeRef.current = null;
                       setMargins(normalizePdfMargins(overlay.xPct, overlay.xPct + overlay.widthPct));
@@ -1670,11 +1716,16 @@ function PdfViewerScreen() {
                       }}
                       onKeyDown={(event) => {
                         event.stopPropagation();
-                        if (event.key === "Enter") {
+                        // Enter inserts a real paragraph break via beforeinput.
+                        // Ctrl/Command + Enter finishes editing without losing text.
+                        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
                           event.preventDefault();
                           commitEditing();
                         }
-                        if (event.key === "Escape") commitEditing();
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          cancelEditing();
+                        }
                       }}
                     />
                   ) : (

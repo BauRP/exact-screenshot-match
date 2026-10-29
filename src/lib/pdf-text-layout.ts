@@ -17,36 +17,50 @@ export function pdfBaselineTopPx(baselinePct: number, pageHeightPx: number, font
   return baselinePct / 100 * pageHeightPx - (fontSizePx * 1.2 - asc - desc) / 2 - asc;
 }
 export type PdfMeasuredGlyph = { text: string; width: number };
-/** Wraps at whitespace first, then safely breaks long words. No text is discarded. */
-export function wrapPdfGlyphs<T extends PdfMeasuredGlyph>(glyphs: T[], maxWidth: number): T[][] {
-  if (!Number.isFinite(maxWidth) || maxWidth <= 0) throw new Error("Invalid PDF text block width");
+
+/**
+ * Word-like wrapping without deleting characters. An optional measurement
+ * callback takes account of kerning inside a complete font run, instead of
+ * summing individual glyph advances (which is not always equivalent).
+ * Reject a glyph that cannot fit even on an empty line before mutating PDF.
+ */
+export function wrapPdfGlyphs<T extends PdfMeasuredGlyph>(
+  glyphs: T[],
+  maxWidth: number,
+  measure: (items: T[]) => number = items => items.reduce((sum, item) => sum + item.width, 0),
+): T[][] {
+  if (!Number.isFinite(maxWidth) || maxWidth <= 0)
+    throw new Error("Неверная ширина текстового блока PDF.");
   const lines: T[][] = [[]];
-  let width = 0;
-  const newline = () => { lines.push([]); width = 0; };
-  let index = 0;
-  while (index < glyphs.length) {
-    const current = glyphs[index];
-    if (current.text === "\n" || current.text === "\r") {
-      if (current.text === "\r" && glyphs[index + 1]?.text === "\n") index++;
-      newline(); index++; continue;
+  let line = lines[0];
+  const nextLine = () => { line = []; lines.push(line); };
+  const fits = (items: T[]) => measure(items) <= maxWidth + 0.001;
+
+  for (let i = 0; i < glyphs.length;) {
+    if (glyphs[i].text === "\n" || glyphs[i].text === "\r") {
+      if (glyphs[i].text === "\r" && glyphs[i + 1]?.text === "\n") i++;
+      nextLine();
+      i++;
+      continue;
     }
-    const isSpace = /[ \t]/u.test(current.text);
-    let end = index + 1;
+    const whitespace = /^[ \t]$/u.test(glyphs[i].text);
+    let end = i + 1;
     while (end < glyphs.length && glyphs[end].text !== "\n" &&
-      glyphs[end].text !== "\r" && /[ \t]/u.test(glyphs[end].text) === isSpace) end++;
-    const token = glyphs.slice(index, end);
-    const tokenWidth = token.reduce((sum, ch) => sum + ch.width, 0);
-    if (width > 0 && width + tokenWidth > maxWidth && !isSpace) newline();
-    for (const glyph of token) {
-      if (width + glyph.width > maxWidth && lines[lines.length - 1].length > 0) {
-        newline();
-        if (isSpace) continue;
+      glyphs[end].text !== "\r" && /^[ \t]$/u.test(glyphs[end].text) === whitespace) end++;
+    const token = glyphs.slice(i, end);
+    if (!fits([...line, ...token]) && line.length && !whitespace) nextLine();
+    if (fits([...line, ...token])) {
+      line.push(...token);
+    } else {
+      // Very long tokens and whitespace at boundaries are wrapped character
+      // by character, but never silently discarded or replaced with spaces.
+      for (const glyph of token) {
+        if (!fits([glyph])) throw new Error("Один символ шире установленной текстовой области PDF.");
+        if (line.length && !fits([...line, glyph])) nextLine();
+        line.push(glyph);
       }
-      // Keep spaces for faithful text round-tripping, including line breaks.
-      lines[lines.length - 1].push(glyph);
-      width += glyph.width;
     }
-    index = end;
+    i = end;
   }
   return lines;
 }

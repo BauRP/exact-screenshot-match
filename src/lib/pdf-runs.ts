@@ -112,6 +112,31 @@ function pick(run: RunStyle): RunStyle {
   return out;
 }
 
+/** Replace a selection with text, preserving formatting of untouched runs. */
+export function replaceAt(
+  runs: FullRun[], start: number, end: number, text: string, style: RunStyle,
+): FullRun[] {
+  const length = runsText(runs).length;
+  const from = Math.max(0, Math.min(length, Math.min(start, end)));
+  const to = Math.max(from, Math.min(length, Math.max(start, end)));
+  const pieces = splitAt(splitAt(runs, from), to);
+  const out: FullRun[] = [];
+  let pos = 0;
+  let inserted = false;
+  for (const part of pieces) {
+    const partStart = pos;
+    pos += part.text.length;
+    if (!inserted && partStart >= from) {
+      if (text) out.push({ ...style, text });
+      inserted = true;
+    }
+    if (partStart >= from && pos <= to) continue;
+    out.push(part);
+  }
+  if (!inserted && text) out.push({ ...style, text });
+  return normalize(out);
+}
+
 export function insertAt(runs: FullRun[], offset: number, text: string, style: RunStyle): FullRun[] {
   const split = splitAt(runs, offset);
   const out: FullRun[] = [];
@@ -182,7 +207,9 @@ export function readRunsFromDom(node: HTMLElement, rendered: FullRun[], fallback
       const idx = Number(host.dataset.r);
       if (rendered[idx]) lastStyle = pick(rendered[idx]);
     }
-    const text = (current.textContent ?? "").replace(/\n/g, " ");
+    // A real newline is part of the document, not a space. Mobile keyboard
+    // insertParagraph is handled explicitly, so each editable run remains text.
+    const text = current.textContent ?? "";
     if (text) out.push({ ...lastStyle, text });
     current = walker.nextNode();
   }
