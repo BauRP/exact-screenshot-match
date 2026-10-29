@@ -16,6 +16,7 @@ import { ThemeBoot } from "../lib/theme";
 import { AppLockGate } from "../lib/app-lock";
 import { NativeShellBoot } from "../lib/native-shell";
 import { NativeBackHandler } from "../lib/native-back";
+import { NativeAdRuntime } from "@/components/NativeAdRuntime";
 import { startLocalBackupAutoSync } from "../lib/local-backup";
 import { normalizeLang, dirOf } from "../lib/i18n";
 
@@ -166,6 +167,7 @@ function RootComponent() {
       <NativeShellBoot />
       <NativeBackHandler />
       <AppLockGate>
+        <NativeAdRuntime />
         <SafeFrame>
           <div className="relative mx-auto flex min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden bg-background shadow-2xl lg:max-w-5xl lg:border-x lg:border-slate-800">
             <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">

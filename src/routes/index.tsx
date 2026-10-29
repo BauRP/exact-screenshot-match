@@ -20,7 +20,7 @@ import { useLongPress } from "@/hooks/use-long-press";
 import { BottomNav } from "@/components/BottomNav";
 import { NoteCard } from "@/components/NoteCard";
 import { NativeAdCard } from "@/components/NativeAdCard";
-import { useNativeAdFeed } from "@/lib/native-ads";
+import { setNativeAdDialogBlocked } from "@/lib/native-ad-ui";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -29,14 +29,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   addFolder,
@@ -106,8 +98,12 @@ function Index() {
   const [renameValue, setRenameValue] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [folderDialog, setFolderDialog] = useState<FolderDialogState>(null);
-  // Selecting notes/PDFs is not a modal; native ads remain visible.
-  useNativeAdFeed(view, menuOpen || Boolean(renameValue) || confirmDelete || Boolean(folderDialog));
+  // The three-dot menu is in normal flow: it never pauses or blanks ads.
+  // Blocking dialogs are still allowed to hide native overlays for safety.
+  useEffect(() => {
+    setNativeAdDialogBlocked(renameValue !== null || confirmDelete || Boolean(folderDialog));
+    return () => setNativeAdDialogBlocked(false);
+  }, [renameValue, confirmDelete, folderDialog]);
 
   // Selection is scoped to the folder being viewed and to notes that still exist.
   useEffect(() => setSelected(new Set()), [activeFolder]);
@@ -256,6 +252,16 @@ function Index() {
           }
         />
 
+        {menuOpen && (
+          <TopContextMenuPanel
+            onDismiss={() => setMenuOpen(false)}
+            view={view}
+            sort={sort}
+            onCreateNote={createNoteInCurrentFolder}
+            onCreateFolder={() => setFolderDialog({ mode: "add", value: "" })}
+            onImportPdf={() => void importPdf()}
+          />
+        )}
         <TopFolderTabs
           folders={folders}
           activeFolder={activeFolder}
@@ -377,13 +383,7 @@ function Index() {
 }
 
 function TopContextMenu({
-  open,
-  onOpenChange,
-  view,
-  sort,
-  onCreateNote,
-  onCreateFolder,
-  onImportPdf,
+  open, onOpenChange,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -394,43 +394,56 @@ function TopContextMenu({
   onImportPdf: () => void;
 }) {
   const t = useT();
-
   return (
-    <DropdownMenu open={open} onOpenChange={onOpenChange}>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          aria-label={t("menu")}
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-secondary/60 text-foreground transition-colors hover:bg-secondary active:scale-95"
-        >
-          <MoreVertical className="h-5 w-5" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={8} collisionPadding={12} className="w-56 origin-top-right rounded-2xl">
-        <DropdownMenuItem onClick={onCreateNote} className="gap-2 py-2.5">
-          <Plus className="h-4 w-4 text-primary" />
-          {t("add_note")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onCreateFolder} className="gap-2 py-2.5">
-          <FolderPlus className="h-4 w-4 text-primary" />
-          {t("add_folder")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={onImportPdf} className="gap-2 py-2.5">
-          <FileType2 className="h-4 w-4 text-destructive" />
-          {t("add_pdf")}
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{t("view")}</DropdownMenuLabel>
-        <ViewItem current={view} value="list" label={t("list")} icon={<List className="h-4 w-4" />} />
-        <ViewItem current={view} value="grid" label={t("grid")} icon={<LayoutGrid className="h-4 w-4" />} />
-        <ViewItem current={view} value="table" label={t("table")} icon={<Table2 className="h-4 w-4" />} />
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{t("sort")}</DropdownMenuLabel>
-        <SortItem current={sort} value="created" label={t("by_created")} icon={<CalendarPlus className="h-4 w-4" />} />
-        <SortItem current={sort} value="updated" label={t("by_updated")} icon={<CalendarClock className="h-4 w-4" />} />
-        <SortItem current={sort} value="alpha" label={t("alpha")} icon={<ArrowDownAZ className="h-4 w-4" />} />
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <button type="button" aria-label={t("menu")} aria-expanded={open}
+      onClick={() => onOpenChange(!open)}
+      className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-secondary/60 text-foreground transition-colors hover:bg-secondary active:scale-95">
+      <MoreVertical className="h-5 w-5" />
+    </button>
+  );
+}
+
+/**
+ * This is deliberately NOT a popover above the WebView. Google NativeAdView
+ * is a separate Android overlay and would either cover an HTML popover or
+ * vanish when paused. In-flow actions keep the native ads mounted and visible.
+ */
+function TopContextMenuPanel({
+  onDismiss, view, sort, onCreateNote, onCreateFolder, onImportPdf,
+}: {
+  onDismiss: () => void;
+  view: ViewMode;
+  sort: SortMode;
+  onCreateNote: () => void;
+  onCreateFolder: () => void;
+  onImportPdf: () => void;
+}) {
+  const t = useT();
+  const run = (action: () => void) => { onDismiss(); action(); };
+  const actionClass = "flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-secondary/60";
+  return (
+    <div role="group" aria-label={t("menu")}
+      className="mx-3 my-2 max-h-[min(54vh,390px)] shrink-0 overflow-y-auto rounded-2xl border border-border bg-card p-2 shadow-lg">
+      <button type="button" className={actionClass} onClick={() => run(onCreateNote)}>
+        <Plus className="h-4 w-4 text-primary" />{t("add_note")}
+      </button>
+      <button type="button" className={actionClass} onClick={() => run(onCreateFolder)}>
+        <FolderPlus className="h-4 w-4 text-primary" />{t("add_folder")}
+      </button>
+      <button type="button" className={actionClass} onClick={() => run(onImportPdf)}>
+        <FileType2 className="h-4 w-4 text-destructive" />{t("add_pdf")}
+      </button>
+      <div className="my-1 border-t border-border" />
+      <p className="px-3 py-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{t("view")}</p>
+      <ViewItem current={view} value="list" label={t("list")} icon={<List className="h-4 w-4" />} onChoose={onDismiss} />
+      <ViewItem current={view} value="grid" label={t("grid")} icon={<LayoutGrid className="h-4 w-4" />} onChoose={onDismiss} />
+      <ViewItem current={view} value="table" label={t("table")} icon={<Table2 className="h-4 w-4" />} onChoose={onDismiss} />
+      <div className="my-1 border-t border-border" />
+      <p className="px-3 py-1 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{t("sort")}</p>
+      <SortItem current={sort} value="created" label={t("by_created")} icon={<CalendarPlus className="h-4 w-4" />} onChoose={onDismiss} />
+      <SortItem current={sort} value="updated" label={t("by_updated")} icon={<CalendarClock className="h-4 w-4" />} onChoose={onDismiss} />
+      <SortItem current={sort} value="alpha" label={t("alpha")} icon={<ArrowDownAZ className="h-4 w-4" />} onChoose={onDismiss} />
+    </div>
   );
 }
 
@@ -605,25 +618,27 @@ function FolderTab({
 }
 
 
-function ViewItem({ current, value, label, icon }: { current: ViewMode; value: ViewMode; label: string; icon: React.ReactNode }) {
+function ViewItem({current, value, label, icon, onChoose}: {
+  current: ViewMode; value: ViewMode; label: string; icon: React.ReactNode; onChoose: () => void;
+}) {
   const active = current === value;
   return (
-    <DropdownMenuItem onClick={() => setView(value)} className={`gap-2 py-2.5 ${active ? "text-primary" : ""}`}>
-      {icon}
-      {label}
-      {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
-    </DropdownMenuItem>
+    <button type="button" onClick={() => {setView(value); onChoose();}}
+      className={`flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm hover:bg-secondary/60 ${active ? "text-primary" : "text-foreground"}`}>
+      {icon}{label}{active && <span aria-hidden="true" className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
+    </button>
   );
 }
 
-function SortItem({ current, value, label, icon }: { current: SortMode; value: SortMode; label: string; icon: React.ReactNode }) {
+function SortItem({current, value, label, icon, onChoose}: {
+  current: SortMode; value: SortMode; label: string; icon: React.ReactNode; onChoose: () => void;
+}) {
   const active = current === value;
   return (
-    <DropdownMenuItem onClick={() => setSort(value)} className={`gap-2 py-2.5 ${active ? "text-primary" : ""}`}>
-      {icon}
-      {label}
-      {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
-    </DropdownMenuItem>
+    <button type="button" onClick={() => {setSort(value); onChoose();}}
+      className={`flex min-h-10 w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm hover:bg-secondary/60 ${active ? "text-primary" : "text-foreground"}`}>
+      {icon}{label}{active && <span aria-hidden="true" className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
+    </button>
   );
 }
 
@@ -646,7 +661,7 @@ function NotesGrid({
       : view === "table"
         ? "flex flex-col gap-2"
         : "flex flex-col gap-3 md:grid md:grid-cols-2 md:gap-4 lg:grid-cols-3"}>
-      <NativeAdCard slotKey="home-first" />
+      <div className="col-span-full min-w-0"><NativeAdCard slotKey="home-first" /></div>
       {notes.map((note, index) => (
         <Fragment key={note.id}>
           <NoteCard
@@ -658,7 +673,9 @@ function NotesGrid({
             onOpen={() => onOpen(note)}
           />
           {(index + 1) % 5 === 0 && (
-            <NativeAdCard slotKey={`home-after-${Math.floor((index + 1) / 5) * 5}`} />
+            <div className="col-span-full min-w-0">
+              <NativeAdCard slotKey={`home-after-${Math.floor((index + 1) / 5) * 5}`} />
+            </div>
           )}
         </Fragment>
       ))}
