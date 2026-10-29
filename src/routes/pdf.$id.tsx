@@ -277,7 +277,9 @@ function PdfViewerScreen() {
       setCanvasHeight(viewport.height);
       setViewScale(viewport.scale || 1);
       setUnrotatedPageSize({width:sourceViewport.width,height:sourceViewport.height});
-      renderedPageRef.current = `${page}:${rotation}`;
+      // Invalidate old click targets before the new page is fully rendered.
+      renderedPageRef.current = "";
+      setTextBoxes([]);
 
       task = pdfPage.render({
         canvasContext: context,
@@ -325,7 +327,10 @@ function PdfViewerScreen() {
             heightPct: bounds.height,
           };
         });
-      if (!cancelled) setTextBoxes(boxes);
+      if (!cancelled) {
+        renderedPageRef.current = `${page}:${rotation}`;
+        setTextBoxes(boxes);
+      }
     }).catch((error) => {
       if (!cancelled) console.error("Unable to render PDF page", error);
     });
