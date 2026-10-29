@@ -229,10 +229,14 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         // session to every remaining bundled recognizer automatically.
         if (mode === "auto" && visualFastPath && index === scanPlan.length-1 &&
             results.length === 0 && !timedOut) {
+          const previouslyFailed = new Set(coverage.missingScripts());
           scanPlan.push(...AUTO_SCAN_ORDER.filter(item=>!scanPlan.includes(item)));
           coverage = new OcrScanCoverage(scanPlan);
-          // Existing completed short-list checks must be retained.
-          for(const prior of scanPlan.slice(0,index+1)) coverage.markCompleted(prior);
+          // Preserve the completed/failed result of each earlier model.
+          for(const prior of scanPlan.slice(0,index+1)) {
+            if(previouslyFailed.has(prior))coverage.markFailed(prior);
+            else coverage.markCompleted(prior);
+          }
           visualFastPath = false;
           onProgress("Письменность не подтверждена — расширяем проверку");
         }
