@@ -21,6 +21,13 @@ on:
       - 'package.json'
       - 'bun.lock'
       - 'android-overlay/app/src/main/AndroidManifest.xml'
+      - 'android-overlay/app/src/main/java/app/lovable/supernotes/MainActivity.java'
+      - 'android-overlay/app/src/main/java/app/lovable/supernotes/SystemUiInsets.java'
+      - 'src/lib/native-shell.ts'
+      - 'src/routes/__root.tsx'
+      - 'src/components/BottomNav.tsx'
+      - 'src/styles.css'
+      - 'capacitor.config.json'
 
 permissions:
   contents: read
@@ -35,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api-level: [29, 34]
+        api-level: [26, 29, 34, 36]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
