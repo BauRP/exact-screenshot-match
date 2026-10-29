@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ViewMode } from "@/lib/notes-store";
 import { waitForPlugin } from "@/lib/native-ready";
 import { updateAdDiagnostic } from "@/lib/ad-diagnostics";
+import { classifyAdMobFailure, type AdFailureStage } from "@/lib/admob-error-guide";
 
 export const HOME_AD_FEED_ID = "super-notes-home";
 const NATIVE_AD_UNIT_ID = "ca-app-pub-9902253594429663/7940562510";
@@ -37,6 +38,7 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
     const abort = new AbortController();
     let starting = false;
     let attempts = 0;
+    let stage: AdFailureStage = "bridge";
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     const slotRetries = new Map<string, number>();
     const knownSlots = new Set<string>();
@@ -46,11 +48,13 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
 
     const initialize = async () => {
       if (starting || disposed || feedRef.current) return;
+      stage = "bridge";
       updateAdDiagnostic("bridge", "Проверка подключения AdMob");
       const bridgeReady = await waitForPlugin("AdMob", 12_000, abort.signal);
       if (disposed) return;
       if (!bridgeReady) {
-        updateAdDiagnostic("failed", "Android-плагин AdMob недоступен");
+        const failure = classifyAdMobFailure(new Error("Bridge not ready after 12 seconds"), "bridge");
+        updateAdDiagnostic("failed", failure.label, { code:failure.code, advice:failure.advice, error:"Android AdMob plugin unavailable" });
         scheduleRetry();
         return;
       }
@@ -66,17 +70,24 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
         } = await import("@capacitor-community/admob");
 
         // Google's UMP consent must be checked before any ad request.
-        updateAdDiagnostic("consent", "Проверка согласия Google");
+        stage = "consent";
+        updateAdDiagnostic("consent", "Проверка опубликованной GDPR-формы Google");
         let consent = await AdMob.requestConsentInfo();
         if (disposed) return;
         if (consent.isConsentFormAvailable && consent.status === AdmobConsentStatus.REQUIRED) {
+          stage = "form";
+          updateAdDiagnostic("consent", "Открывается форма согласия Google");
           consent = await AdMob.showConsentForm();
         }
         if (disposed || !consent.canRequestAds) {
-          updateAdDiagnostic("blocked", "Запрос рекламы пока не разрешён Google");
+          updateAdDiagnostic("blocked", "Google пока не разрешил запрос рекламы", {
+            code: "CONSENT_NOT_READY",
+            advice: "Если пользователь ещё не дал согласие, реклама не загружается. Это не ошибка заметок. Проверьте выбор в форме Google.",
+          });
           return;
         }
 
+        stage = "sdk";
         updateAdDiagnostic("initializing", "Запуск Google Mobile Ads");
         await AdMob.initialize();
         if (disposed) return;
@@ -85,7 +96,8 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
         // only for a real release, after validating the native UI on a device.
         // APK built by this workflow is a debug build: use Google test inventory.
         const testAds = import.meta.env.VITE_ADMOB_LIVE_ADS !== "true";
-        updateAdDiagnostic("loading", "Загрузка тестового нативного объявления");
+        stage = "native";
+        updateAdDiagnostic("loading", testAds ? "Загрузка тестовой нативной рекламы" : "Загрузка нативной рекламы");
         const feed = await NativeAdFeed.create({
           feedId: HOME_AD_FEED_ID,
           template: NativeAdTemplate.Small,
@@ -107,8 +119,11 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
           console.warn("[SuperNotes AdMob] Native ad failed to load", event);
           const slot = event.slotKey;
           if (slot) knownSlots.add(slot);
-          updateAdDiagnostic("failed", `Ошибка Google: ${event.code} — ${event.message}`, { error: `${event.code}: ${event.message}`, slot });
-          if (slot && !disposed) {
+          const failure = classifyAdMobFailure({ code: event.code, message: event.message }, "native");
+          updateAdDiagnostic("failed", failure.label, {
+            error: `${event.code}: ${event.message}`, slot, code: failure.code, advice: failure.advice,
+          });
+          if (failure.retryable && slot && !disposed) {
             const retries = slotRetries.get(slot) ?? 0;
             if (retries < 3) {
               slotRetries.set(slot, retries + 1);
@@ -126,7 +141,8 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
         const loaded = await feed.addListener(NativeAdPluginEvents.Loaded, (event) => {
           slotRetries.delete(event.slotKey);
           knownSlots.add(event.slotKey);
-          updateAdDiagnostic("loaded", "Тестовое объявление загружено", { slot: event.slotKey });
+          const mode = import.meta.env.VITE_ADMOB_LIVE_ADS === "true" ? "Нативное объявление" : "Тестовое нативное объявление";
+          updateAdDiagnostic("loaded", mode + " успешно загружено", { slot: event.slotKey });
         });
         handles.push(loaded);
         if (pausedRef.current) await feed.pause();
@@ -139,9 +155,13 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
         const failedFeed = feedRef.current;
         feedRef.current = null;
         if (failedFeed) await failedFeed.destroy().catch(console.warn);
-        console.warn("[SuperNotes AdMob] Initialization failed; preserving placeholder", error);
-        updateAdDiagnostic("failed", "Ошибка запуска AdMob", { error: String(error) });
-        if (!disposed) scheduleRetry();
+        console.warn("[Wave Notes AdMob] Failed at stage", stage, error);
+        const failure = classifyAdMobFailure(error, stage);
+        const rawError = error instanceof Error ? error.message : String(error);
+        updateAdDiagnostic("failed", failure.label, {
+          error: rawError, code: failure.code, advice: failure.advice,
+        });
+        if (!disposed && failure.retryable) scheduleRetry();
       } finally {
         starting = false;
       }
@@ -149,7 +169,9 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
 
     const scheduleRetry = () => {
       if (disposed || retryTimer !== null || attempts >= 8) return;
-      retryTimer = setTimeout(() => { retryTimer = null; void initialize(); }, Math.min(2000 * (attempts + 1), 15000));
+      // Avoid hammering UMP/AdMob on failures or no-fill; retry limited,
+      // network-related errors with a quiet backoff instead.
+      retryTimer = setTimeout(() => { retryTimer = null; void initialize(); }, Math.min(15_000 * Math.max(attempts, 1), 90_000));
     };
     const onOnline = () => { updateAdDiagnostic("waiting", "Интернет доступен, повторяем запрос"); void initialize(); };
     const onRetry = () => {

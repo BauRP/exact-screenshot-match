@@ -64,6 +64,9 @@ jobs:
       - name: TypeScript static checks
         run: bunx tsc --noEmit
 
+      - name: Verify Google UMP and native ad error diagnostics
+        run: bun scripts/test-admob-error-guide.ts
+
       - name: Verify backup triggers only on committed edits
         run: bun scripts/test-backup-save-triggers.ts
 

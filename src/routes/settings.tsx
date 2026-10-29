@@ -459,9 +459,19 @@ function SettingsPage() {
             >
               <Btn onClick={() => { requestAdRetry(); navigate({ to: "/" }); }}><RefreshCw className="mr-1 inline h-3 w-3" />Повторить</Btn>
             </Row>
+            {adDiagnostic.issueCode ? (
+              <p className="break-words px-3 pb-1 text-xs text-muted-foreground">
+                Причина: {adDiagnostic.issueCode}
+              </p>
+            ) : null}
+            {adDiagnostic.advice ? (
+              <p className="break-words px-3 pb-2 text-xs text-muted-foreground">
+                Что делать: {adDiagnostic.advice}
+              </p>
+            ) : null}
             {adDiagnostic.lastError ? (
               <p className="break-words px-3 pb-2 text-xs text-destructive">
-                Последняя ошибка: {adDiagnostic.lastError}
+                Технические сведения: {adDiagnostic.lastError}
               </p>
             ) : null}
             {adDiagnostic.lastSlot ? (
