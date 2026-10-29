@@ -88,6 +88,9 @@ jobs:
       - name: Verify failed editor navigation does not lose saved notes
         run: bun scripts/test-ocr-navigation-failure.ts
 
+      - name: Verify camera/gallery OCR and manual PDF workflows remain separate
+        run: bun scripts/test-feature-boundaries.ts
+
       - name: Verify complete OCR-to-note handoff
         run: bun scripts/test-ocr-pipeline.ts
 
