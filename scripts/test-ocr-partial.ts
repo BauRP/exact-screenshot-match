@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrAmbiguousHanError, OcrMixedLayoutReviewError, OcrLargeLayoutReviewError, OcrOmittedScriptReviewError, OcrCombinedReviewError, resumeOcrReviewDraft, recoverFromReviewedText, previewHanAlternatives } from "../src/lib/ocr-partial";
+import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrAmbiguousHanError, OcrMixedLayoutReviewError, OcrLargeLayoutReviewError, OcrOmittedScriptReviewError, OcrCombinedReviewError, mergeNativeReviewAlternatives, resumeOcrReviewDraft, recoverFromReviewedText, previewHanAlternatives } from "../src/lib/ocr-partial";
 import { saveOcrNoteAndOpenEditor } from "../src/lib/ocr-save-flow";
 import { readPendingOcrDraft, savePendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "../src/lib/ocr-draft";
 const storage=new Map<string,string>();
@@ -343,3 +343,36 @@ assert.equal(restoredIncomplete?.hanAlternatives?.chinese,"日本語学枚");
 assert.equal(restoredIncomplete?.text,partialWithDisagreement.partialText);
 clearPendingOcrDraft(draftStore);
 console.log("Partial OCR preserves both native and Han evidence and missing scripts across restart: passed.");
+
+
+// Multiple OCR retries on the same saved photo must not wipe the original
+// comparisons. A later reading of the same script supersedes the earlier
+// one, while other languages remain available and the limit stays bounded.
+const beforeRetry = [
+  {script:"japanese" as const,complete:"日本語学校",lines:"日本語学枚"},
+  {script:"korean" as const,complete:"한국어",lines:"한국이"},
+];
+const afterRetry = [
+  {script:"japanese" as const,complete:"日本語学校",lines:"日本語学校"},
+  {script:"latin" as const,complete:"HELLO",lines:"HEILO"},
+];
+assert.deepEqual(mergeNativeReviewAlternatives(beforeRetry,afterRetry),[
+  afterRetry[0],beforeRetry[1],afterRetry[1],
+]);
+assert.deepEqual(mergeNativeReviewAlternatives(beforeRetry,[]),beforeRetry);
+const sixEvidence = mergeNativeReviewAlternatives(beforeRetry,[
+  ...afterRetry,{script:"cyrillic",complete:"Қазақ",lines:"Казак"},
+  {script:"chinese",complete:"中文",lines:"中国"},
+  {script:"devanagari",complete:"नमस्ते",lines:"नमस्त"},
+]);
+assert.equal(sixEvidence.length,6);
+assert.equal(new Set(sixEvidence.map(item=>item.script)).size,6);
+assert.equal(savePendingOcrDraft({
+  ...draft,reason:"recovery",edited:true,
+  nativeAlternatives:sixEvidence,
+  hanAlternatives:{japanese:"学校",chinese:"学枚"},
+},65000,draftStore),true);
+assert.equal(readPendingOcrDraft(65001,draftStore)?.nativeAlternatives?.length,6);
+assert.equal(readPendingOcrDraft(65001,draftStore)?.hanAlternatives?.chinese,"学枚");
+clearPendingOcrDraft(draftStore);
+console.log("Same-image OCR retries retain all earlier review evidence without duplication: passed.");

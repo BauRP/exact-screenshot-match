@@ -313,3 +313,17 @@ export class OcrCombinedReviewError extends Error {
     this.nativeAlternatives = nativeAlternatives.slice(0,6);
   }
 }
+
+
+/** Preserve human-review comparisons across repeated passes of the SAME
+ * photo. Prefer a more recent reading of the same script; never store more
+ * than six (the supported independent writing-system recognizers).
+ */
+export function mergeNativeReviewAlternatives(
+  earlier: readonly OcrNativeTextAlternative[],
+  later: readonly OcrNativeTextAlternative[],
+): OcrNativeTextAlternative[] {
+  const byScript = new Map<OcrScript,OcrNativeTextAlternative>();
+  for (const item of [...earlier,...later]) byScript.set(item.script,item);
+  return [...byScript.values()].slice(-6);
+}
