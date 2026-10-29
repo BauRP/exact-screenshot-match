@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Moon,
   Sun,
@@ -180,6 +180,42 @@ function SettingsPage() {
   const [fbSending, setFbSending] = useState(false);
   const [backupBusy, setBackupBusy] = useState(false);
   const adDiagnostic = useAdDiagnostic();
+  const [adPrivacyAvailable, setAdPrivacyAvailable] = useState(false);
+  const [adPrivacyLoading, setAdPrivacyLoading] = useState(false);
+
+  // UMP determines whether a privacy-options entry is required in this region.
+  // Do not expose a dead button before the publisher has configured the form.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { Capacitor } = await import("@capacitor/core");
+        if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "android") return;
+        const { AdMob, PrivacyOptionsRequirementStatus } = await import("@capacitor-community/admob");
+        const info = await AdMob.requestConsentInfo();
+        if (!cancelled) setAdPrivacyAvailable(info.privacyOptionsRequirementStatus === PrivacyOptionsRequirementStatus.REQUIRED);
+      } catch (error) {
+        console.info("AdMob privacy options unavailable", error);
+        if (!cancelled) setAdPrivacyAvailable(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const openAdPrivacyOptions = async () => {
+    if (adPrivacyLoading) return;
+    setAdPrivacyLoading(true);
+    try {
+      const { AdMob } = await import("@capacitor-community/admob");
+      await AdMob.showPrivacyOptionsForm();
+      toast.info("Настройки рекламной конфиденциальности открыты");
+    } catch (error) {
+      console.warn("Google UMP privacy options unavailable", error);
+      toast.error("Google пока не предоставил форму рекламных настроек. Проверьте публикацию сообщения в AdMob.");
+    } finally {
+      setAdPrivacyLoading(false);
+    }
+  };
   const backupPickerRef = useRef<HTMLInputElement>(null);
 
   const makeBackup = async () => {
@@ -421,6 +457,16 @@ function SettingsPage() {
               }
             }}>Перейти на сайт</Btn>
           </Row>
+          {adPrivacyAvailable ? (
+            <>
+              <div className="h-px bg-border" />
+              <Row icon={<Shield className="h-4 w-4" />} title="Настройки рекламной конфиденциальности" hint="Изменить выбор согласия Google">
+                <Btn disabled={adPrivacyLoading} onClick={() => void openAdPrivacyOptions()}>
+                  {adPrivacyLoading ? "Открытие…" : "Управлять"}
+                </Btn>
+              </Row>
+            </>
+          ) : null}
           <div className="h-px bg-border" />
           <Row icon={<MessageSquarePlus className="h-4 w-4" />} title={t("ideas_wishes")}>
             <Btn onClick={() => setFeedbackOpen(true)}>{t("fb_send")}</Btn>
