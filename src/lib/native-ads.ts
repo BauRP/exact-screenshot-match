@@ -3,6 +3,7 @@ import type { ViewMode } from "@/lib/notes-store";
 import { waitForPlugin } from "@/lib/native-ready";
 import { updateAdDiagnostic } from "@/lib/ad-diagnostics";
 import { classifyAdMobFailure, type AdFailureStage } from "@/lib/admob-error-guide";
+import { requestConsentForSession, initializeMobileAdsForSession } from "@/lib/admob-session";
 
 export const HOME_AD_FEED_ID = "super-notes-home";
 const NATIVE_AD_UNIT_ID = "ca-app-pub-9902253594429663/7940562510";
@@ -65,20 +66,13 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
       starting = true;
       attempts += 1;
       try {
-        const {
-          AdMob, AdmobConsentStatus, NativeAdFeed, NativeAdTemplate, NativeAdPluginEvents,
-        } = await import("@capacitor-community/admob");
+        const { NativeAdFeed, NativeAdTemplate, NativeAdPluginEvents } =
+          await import("@capacitor-community/admob");
 
-        // Google's UMP consent must be checked before any ad request.
+        // New PDF/note slots reuse the current session's one Google UMP check.
         stage = "consent";
-        updateAdDiagnostic("consent", "Проверка опубликованной GDPR-формы Google");
-        let consent = await AdMob.requestConsentInfo();
-        if (disposed) return;
-        if (consent.isConsentFormAvailable && consent.status === AdmobConsentStatus.REQUIRED) {
-          stage = "form";
-          updateAdDiagnostic("consent", "Открывается форма согласия Google");
-          consent = await AdMob.showConsentForm();
-        }
+        updateAdDiagnostic("consent", "Проверка сохранённого согласия Google");
+        const consent = await requestConsentForSession();
         if (disposed || !consent.canRequestAds) {
           updateAdDiagnostic("blocked", "Google пока не разрешил запрос рекламы", {
             code: "CONSENT_NOT_READY",
@@ -89,7 +83,7 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
 
         stage = "sdk";
         updateAdDiagnostic("initializing", "Запуск Google Mobile Ads");
-        await AdMob.initialize();
+        await initializeMobileAdsForSession();
         if (disposed) return;
 
         // Debug builds use Google test inventory. Set VITE_ADMOB_LIVE_ADS=true

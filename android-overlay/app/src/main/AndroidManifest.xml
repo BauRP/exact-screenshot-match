@@ -63,6 +63,9 @@
 
         <!-- Google Mobile Ads application ID; native ad unit ID is separate. -->
         <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="@string/admob_app_id" />
+        <!-- Suppress repeated test-only Google Native Ad Validator success popups.
+             Continue using TEST inventory; the placement was already validated. -->
+        <meta-data android:name="com.google.android.gms.ads.flag.NATIVE_AD_DEBUGGER_ENABLED" android:value="false" />
 
         <!-- Главная активность приложения -->
         <activity

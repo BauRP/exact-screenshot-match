@@ -20,6 +20,7 @@ import {
 import { sendFeedback } from "@/lib/feedback.functions";
 import { useAdDiagnostic, requestAdRetry } from "@/lib/ad-diagnostics";
 import { saveLocalBackup, restoreLocalBackup } from "@/lib/local-backup";
+import { invalidateConsentForSession, requestConsentForSession } from "@/lib/admob-session";
 import { AppHeader } from "@/components/AppHeader";
 import { LanguagePickerSheet } from "@/components/LanguagePickerSheet";
 import { BottomNav } from "@/components/BottomNav";
@@ -185,8 +186,7 @@ function SettingsPage() {
       try {
         const { Capacitor } = await import("@capacitor/core");
         if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "android") return;
-        const { AdMob } = await import("@capacitor-community/admob");
-        const info = await AdMob.requestConsentInfo();
+        const info = await requestConsentForSession();
         if (!cancelled) setAdPrivacyAvailable(info.privacyOptionsRequirementStatus === "REQUIRED");
       } catch (error) {
         console.info("AdMob privacy options unavailable", error);
@@ -202,6 +202,7 @@ function SettingsPage() {
     try {
       const { AdMob } = await import("@capacitor-community/admob");
       await AdMob.showPrivacyOptionsForm();
+      invalidateConsentForSession();
       toast.info("Настройки рекламной конфиденциальности открыты");
     } catch (error) {
       console.warn("Google UMP privacy options unavailable", error);

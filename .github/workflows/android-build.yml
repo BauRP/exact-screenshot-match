@@ -64,6 +64,9 @@ jobs:
       - name: TypeScript static checks
         run: bunx tsc --noEmit
 
+      - name: Verify consent reuse and clipping for every native ad slot
+        run: bun scripts/test-admob-session-layout.ts
+
       - name: Verify Google UMP and native ad error diagnostics
         run: bun scripts/test-admob-error-guide.ts
 

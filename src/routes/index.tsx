@@ -106,7 +106,8 @@ function Index() {
   const [renameValue, setRenameValue] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [folderDialog, setFolderDialog] = useState<FolderDialogState>(null);
-  useNativeAdFeed(view, menuOpen || selected.size > 0 || Boolean(renameValue) || confirmDelete || Boolean(folderDialog));
+  // Selecting notes/PDFs is not a modal; native ads remain visible.
+  useNativeAdFeed(view, menuOpen || Boolean(renameValue) || confirmDelete || Boolean(folderDialog));
 
   // Selection is scoped to the folder being viewed and to notes that still exist.
   useEffect(() => setSelected(new Set()), [activeFolder]);
@@ -275,9 +276,9 @@ function Index() {
       </div>
 
       {hydrated && status !== "error" && filteredNotes.length === 0 ? (
-        <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-[130px] pt-4"><NativeAdCard slotKey="home-first" /></main>
+        <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-4"><NativeAdCard slotKey="home-first" /></main>
       ) : (
-        <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-[130px] pt-4 [-webkit-overflow-scrolling:touch]">
+        <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-4 [-webkit-overflow-scrolling:touch]">
           {!hydrated ? (
             <LoadingState />
           ) : status === "error" ? (
