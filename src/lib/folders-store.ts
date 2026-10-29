@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { markBackupDirty } from "./backup-signals";
 
 export type Folder = {
   id: string;
@@ -26,12 +27,10 @@ function persist() {
   try {
     localStorage.setItem(FOLDERS_KEY, JSON.stringify(customFolders));
     localStorage.setItem(HIDDEN_KEY, JSON.stringify(hiddenSystem));
+    markBackupDirty();
   } catch {}
 }
-function emit() {
-  listeners.forEach((l) => l());
-  if (typeof window !== "undefined") window.dispatchEvent(new Event("wave-notes-data-changed"));
-}
+function emit() { listeners.forEach((l) => l()); }
 
 function hydrate() {
   if (hydrated || typeof window === "undefined") return;
@@ -171,5 +170,6 @@ export function restoreFolderBackup(folders: Folder[], restoredHidden: string[])
   }
   customFolders = next;
   hiddenSystem = nextHidden;
+  markBackupDirty();
   emit();
 }

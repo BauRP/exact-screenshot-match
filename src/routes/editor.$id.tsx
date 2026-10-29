@@ -249,6 +249,14 @@ function EditorPage() {
 
   const handleCanvasBg = (c: string) => setCanvasBg(c);
 
+  // Keep archive work out of the editor completely, even if a previous
+  // committed edit was waiting to be archived. A checkmark navigates away
+  // after saving; the backup runs only once the editor is closed.
+  useEffect(() => {
+    window.dispatchEvent(new Event("wave-notes-editor-opened"));
+    return () => window.dispatchEvent(new Event("wave-notes-editor-closed"));
+  }, []);
+
   /** Back = discard: nothing typed in this session reaches the notes list. */
   const handleDiscard = () => navigate({ to: "/" });
 

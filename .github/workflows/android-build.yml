@@ -64,6 +64,9 @@ jobs:
       - name: TypeScript static checks
         run: bunx tsc --noEmit
 
+      - name: Verify backup triggers only on committed edits
+        run: bun scripts/test-backup-save-triggers.ts
+
       - name: Verify local backup auto-update and 24-hour deletion protection
         run: bun scripts/test-internal-backup.ts
 

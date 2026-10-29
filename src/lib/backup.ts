@@ -3,7 +3,7 @@
  * Includes note metadata, original PDF bytes, recorded audio, and folders.
  * No network or account is required. Large archives deliberately fail early.
  */
-import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import { strFromU8, strToU8, unzip, zip } from "fflate";
 import { audioIdsInHtml, loadAudioFile, saveNewAudioFile, deleteAudioFile } from "./audio-files";
 import { loadPdfFile, saveNewPdfFile, deletePdfFile } from "./pdf-files";
 import { exportNotes, importBackupNotes, type Note } from "./notes-store";
@@ -13,6 +13,32 @@ const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
 const MAX_ENTRY_BYTES = 100 * 1024 * 1024;
 const FORMAT = "super-notes-backup";
 const VERSION = 1;
+
+/** Asynchronous unzip with a hard limit on the expanded archive.
+ * Reject a malicious zip bomb before applying restored data.
+ */
+async function unpackArchive(bytes: Uint8Array): Promise<Record<string, Uint8Array>> {
+  let total = 0;
+  return new Promise((resolve, reject) => {
+    let invalid = false;
+    unzip(bytes, {
+      filter: (entry) => {
+        if (invalid) return false;
+        total += entry.originalSize;
+        if (entry.originalSize > MAX_ENTRY_BYTES || total > MAX_ARCHIVE_BYTES) {
+          invalid = true;
+          return false;
+        }
+        return true;
+      },
+    }, (error, files) => {
+      if (invalid) reject(new Error("Размер распакованной резервной копии превышает 100 МБ"));
+      else if (error) reject(error);
+      else resolve(files);
+    });
+  });
+}
+
 
 type BackupManifest = {
   format: string;
@@ -63,12 +89,7 @@ export async function createFullBackup(previous?: Blob): Promise<Blob> {
   let previousEntries: Record<string, Uint8Array> = {};
   if (previous) {
     if (previous.size > MAX_ARCHIVE_BYTES) throw new Error("Предыдущая копия превышает 100 МБ");
-    previousEntries = unzipSync(new Uint8Array(await previous.arrayBuffer()), {
-      filter: (entry) => {
-        if (entry.originalSize > MAX_ENTRY_BYTES) throw new Error("Повреждена старая резервная копия");
-        return true;
-      },
-    });
+    previousEntries = await unpackArchive(new Uint8Array(await previous.arrayBuffer()));
     if (!previousEntries["manifest.json"]) throw new Error("В прежней копии отсутствуют данные");
     const old = parseManifest(previousEntries["manifest.json"]);
     const oldDeletions = old.deletedAt ?? {};
@@ -108,7 +129,12 @@ export async function createFullBackup(previous?: Blob): Promise<Blob> {
     if (!raw) throw new Error("Не найдено аудио. Сохранение копии отменено: " + id);
     add("audio/" + id + ".blob", raw);
   }
-  return new Blob([zipSync(entries, { level: 0 }).slice().buffer], { type: "application/zip" });
+  // fflate's asynchronous ZIP API avoids blocking the WebView while packaging
+  // large text, PDF and audio data.
+  const zipped = await new Promise<Uint8Array>((resolve, reject) => {
+    zip(entries, { level: 0 }, (error, data) => error ? reject(error) : resolve(data));
+  });
+  return new Blob([zipped.slice().buffer], { type: "application/zip" });
 }
 
 export async function shareFullBackup(blob: Blob): Promise<void> {
@@ -147,19 +173,7 @@ export async function shareFullBackup(blob: Blob): Promise<void> {
 export async function restoreFullBackup(file: File): Promise<number> {
   if (file.size > MAX_ARCHIVE_BYTES) throw new Error("Архив превышает безопасный лимит 100 МБ");
   const bytes = new Uint8Array(await file.arrayBuffer());
-  let declaredBytes = 0;
-  const entries = unzipSync(bytes, {
-    filter: (entry) => {
-      if (entry.originalSize > MAX_ENTRY_BYTES) {
-        throw new Error("Один из файлов архива превышает ограничение");
-      }
-      declaredBytes += entry.originalSize;
-      if (declaredBytes > MAX_ARCHIVE_BYTES) {
-        throw new Error("Распакованный архив превышает 100 МБ");
-      }
-      return true;
-    },
-  });
+  const entries = await unpackArchive(bytes);
   const metadata = entries["manifest.json"];
   if (!metadata) throw new Error("В архиве отсутствует manifest.json");
   const manifest = parseManifest(metadata);

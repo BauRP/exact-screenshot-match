@@ -1,115 +1,196 @@
 /**
- * One app-private auto-updated backup. Stored in Android Directory.Data.
- * Only a temporary staging file is used during writes, never an accumulating
- * series of backups. User consent is implicit in first pressing Save.
- * App uninstall/clear-data removes both notes AND this internal backup.
+ * Single private, auto-updated backup for Wave Notes on Android.
+ * - First "Save" creates it; subsequent committed edits update the SAME file.
+ * - Editor keystrokes do not write the archive; back arrow cancels drafts.
+ * - Work is serialized and coalesced; the archive is packed asynchronously.
+ * - A staged file protects recovery when an update is interrupted.
+ * - Uninstalling/clearing app data also deletes this internal backup.
  */
 import { createFullBackup, restoreFullBackup } from "./backup";
+import { clearBackupDirtyRevision, getBackupDirtyRevision } from "./backup-signals";
 
 const BACKUP_FILE = "WaveNotes.backup";
-const PENDING_FILE = "WaveNotes.backup.pending";
+const STAGING_FILE = "WaveNotes.backup.pending";
 let queue: Promise<unknown> = Promise.resolve();
 
-function serialized<T>(job: () => Promise<T>): Promise<T> {
-  const next = queue.then(job, job);
+function serialized<T>(task: () => Promise<T>): Promise<T> {
+  const next = queue.then(task, task);
   queue = next.catch(() => undefined);
   return next;
 }
 
-async function plugin() {
+async function nativeFilesystem() {
   const { Capacitor } = await import("@capacitor/core");
   if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "android") {
-    throw new Error("Внутреннее резервное копирование доступно в Android-приложении");
+    throw new Error("Внутренняя резервная копия доступна в Android-приложении");
   }
   return import("@capacitor/filesystem");
 }
 
+/** Avoid a single enormous synchronous atob call on older Android WebViews. */
+async function decodeArchive(base64: string): Promise<Blob> {
+  const parts: Uint8Array<ArrayBuffer>[] = [];
+  const chunkSize = 64 * 1024; // Must be divisible by four.
+  for (let pos = 0; pos < base64.length; pos += chunkSize) {
+    const block = atob(base64.slice(pos, pos + chunkSize));
+    const bytes = new Uint8Array(block.length);
+    for (let index = 0; index < block.length; index++) bytes[index] = block.charCodeAt(index);
+    parts.push(bytes);
+    if (pos > 0 && pos % (chunkSize * 16) === 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+  }
+  return new Blob(parts, { type: "application/zip" });
+}
+
+async function readStored(path: string): Promise<Blob> {
+  const { Filesystem, Directory } = await nativeFilesystem();
+  const result = await Filesystem.readFile({ path, directory: Directory.Data });
+  if (typeof result.data !== "string") throw new Error("Неподдерживаемый формат резервной копии");
+  return decodeArchive(result.data);
+}
+
+/** Prefer the complete staging file after an interrupted replacement.
+ * Ignore incomplete staging data and keep the last good active file.
+ */
 async function readBackupOrNull(): Promise<Blob | null> {
-  const { Filesystem, Directory } = await plugin();
-  // A staged file from an interrupted update is a complete, verified ZIP.
-  for (const path of [PENDING_FILE, BACKUP_FILE]) {
-    let exists: boolean;
+  const { Filesystem, Directory } = await nativeFilesystem();
+  let found = false;
+  let failure: unknown = null;
+  for (const path of [STAGING_FILE, BACKUP_FILE]) {
     try {
       await Filesystem.stat({ path, directory: Directory.Data });
-      exists = true;
-    } catch { exists = false; }
-    if (!exists) continue;
-    const { data } = await Filesystem.readFile({ path, directory: Directory.Data });
-    if (typeof data !== "string") throw new Error("Неверный формат внутренней резервной копии");
-    const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
-    return new Blob([bytes], { type: "application/zip" });
+    } catch {
+      continue;
+    }
+    found = true;
+    try {
+      const blob = await readStored(path);
+      // Validate that the backup is readable before accepting it as a base
+      // for the next update. A partial stage must never hide the good copy.
+      await validateBackup(blob);
+      return blob;
+    } catch (error) {
+      failure = error;
+      console.warn("[Wave Notes] Invalid backup at", path, error);
+    }
   }
+  if (found) throw new Error("Резервная копия повреждена. Последнее сохранение не удалось.");
+  if (failure) throw failure;
   return null;
 }
 
-async function writeBackup(blob: Blob): Promise<void> {
-  const { Filesystem, Directory } = await plugin();
-  const base64 = await new Promise<string>((resolve, reject) => {
+async function validateBackup(blob: Blob): Promise<void> {
+  if (blob.size > 100 * 1024 * 1024) throw new Error("Превышен лимит резервной копии 100 МБ");
+  // Format and CRC are validated by the fflate async decompressor, without
+  // writing any restored note. Only look for the format marker in the manifest.
+  const { unzip, strFromU8 } = await import("fflate");
+  const encoded = new Uint8Array(await blob.arrayBuffer());
+  const contents = await new Promise<Record<string, Uint8Array>>((resolve, reject) => {
+    unzip(encoded, (error, files) => error ? reject(error) : resolve(files));
+  });
+  const raw = contents["manifest.json"];
+  if (!raw) throw new Error("В резервной копии отсутствует описание данных");
+  const manifest: unknown = JSON.parse(strFromU8(raw));
+  if (!manifest || typeof manifest !== "object" ||
+      (manifest as {format?: unknown}).format !== "super-notes-backup") {
+    throw new Error("Неверный формат резервной копии");
+  }
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(reader.error ?? new Error("Ошибка чтения резервной копии"));
+    reader.onerror = () => reject(reader.error ?? new Error("Не удалось прочитать резервную копию"));
     reader.onload = () => resolve(String(reader.result).split(",")[1] ?? "");
     reader.readAsDataURL(blob);
   });
-  await Filesystem.writeFile({ path: PENDING_FILE, directory: Directory.Data, data: base64 });
-  // Validate the length before replacing the active backup; a failed write
-  // must leave the old backup untouched.
-  const check = await Filesystem.stat({ path: PENDING_FILE, directory: Directory.Data });
-  if (check.size !== blob.size) throw new Error("Не удалось проверить сохранённую резервную копию");
-  await Filesystem.writeFile({ path: BACKUP_FILE, directory: Directory.Data, data: base64 });
-  await Filesystem.deleteFile({ path: PENDING_FILE, directory: Directory.Data });
 }
 
-/** First manual save creates the file; later saves update the same location. */
+async function writeBackup(blob: Blob): Promise<void> {
+  const { Filesystem, Directory } = await nativeFilesystem();
+  const data = await blobToBase64(blob);
+  await Filesystem.writeFile({ path: STAGING_FILE, directory: Directory.Data, data });
+  const stage = await Filesystem.stat({ path: STAGING_FILE, directory: Directory.Data });
+  if (stage.size !== blob.size) throw new Error("Ошибка проверки размера резервной копии");
+  // Pending is known complete and recoverable even if Android closes the app
+  // between the write of active and cleanup of staging.
+  await Filesystem.writeFile({ path: BACKUP_FILE, directory: Directory.Data, data });
+  await Filesystem.deleteFile({ path: STAGING_FILE, directory: Directory.Data });
+}
+
 export function saveLocalBackup(): Promise<void> {
   return serialized(async () => {
+    const revision = getBackupDirtyRevision();
     const previous = await readBackupOrNull();
     const current = await createFullBackup(previous ?? undefined);
     await writeBackup(current);
+    clearBackupDirtyRevision(revision);
   });
 }
 
-/** Restore directly from app-private files, without an Android picker. */
 export function restoreLocalBackup(): Promise<number> {
   return serialized(async () => {
-    const current = await readBackupOrNull();
-    if (!current) throw new Error("Резервная копия ещё не создана. Сначала нажмите «Сохранить».");
-    return restoreFullBackup(new File([current], BACKUP_FILE, { type: "application/zip" }));
+    const copy = await readBackupOrNull();
+    if (!copy) throw new Error("Резервная копия ещё не создана. Сначала нажмите «Сохранить».");
+    return restoreFullBackup(new File([copy], BACKUP_FILE, { type: "application/zip" }));
   });
 }
 
+/** Synchronize after a confirmed save, never during editing. Coalesce bursts
+ * and remember unsuccessful writes until the next app start/focus/change.
+ */
 export function startLocalBackupAutoSync(): () => void {
   if (typeof window === "undefined") return () => {};
+  const cap = (window as Window & {Capacitor?: {getPlatform?: () => string}}).Capacitor;
+  if (cap?.getPlatform?.() !== "android") return () => {};
+
+  let editing = /\/editor(?:\/|$)/.test(window.location.pathname);
   let timer: ReturnType<typeof setTimeout> | null = null;
-  let stopped = false;
+  let disposed = false;
+
   const flush = () => {
-    if (stopped) return;
+    if (disposed || editing || !getBackupDirtyRevision()) return;
+    void serialized(async () => {
+      if (editing || disposed) return;
+      const rev = getBackupDirtyRevision();
+      if (!rev) return;
+      const old = await readBackupOrNull();
+      if (!old) return; // User has not enabled private backup.
+      const next = await createFullBackup(old);
+      await writeBackup(next);
+      clearBackupDirtyRevision(rev);
+    }).catch((error) => console.warn("[Wave Notes] Automatic backup postponed", error));
+  };
+
+  const schedule = () => {
+    if (disposed || editing || !getBackupDirtyRevision()) return;
+    if (timer !== null) clearTimeout(timer);
+    timer = setTimeout(() => { timer = null; flush(); }, 1800);
+  };
+  const onDataChanged = () => schedule();
+  const onOpened = () => {
+    editing = true;
     if (timer !== null) clearTimeout(timer);
     timer = null;
-    void serialized(async () => {
-      // Do not turn on auto-backup until user has explicitly pressed Save.
-      if (!(await readBackupOrNull())) return;
-      const previous = await readBackupOrNull();
-      const snapshot = await createFullBackup(previous ?? undefined);
-      await writeBackup(snapshot);
-    }).catch((error) => console.error("[Wave Notes] Automatic backup failed", error));
   };
-  const schedule = () => {
-    if (stopped) return;
-    if (timer !== null) clearTimeout(timer);
-    timer = setTimeout(flush, 2500);
+  const onClosed = () => { editing = false; schedule(); };
+  const onVisible = () => {
+    // Revisit a pending committed save after return; never rearchive drafts.
+    if (document.visibilityState === "visible") schedule();
   };
-  const visibility = () => {
-    if (document.visibilityState === "hidden") flush();
-    else schedule();
-  };
-  window.addEventListener("wave-notes-data-changed", schedule);
-  document.addEventListener("visibilitychange", visibility);
-  // Reconcile edits and expire deleted records after app restart.
-  timer = setTimeout(flush, 7000);
+
+  window.addEventListener("wave-notes-data-changed", onDataChanged);
+  window.addEventListener("wave-notes-editor-opened", onOpened);
+  window.addEventListener("wave-notes-editor-closed", onClosed);
+  document.addEventListener("visibilitychange", onVisible);
+  schedule(); // Only if a prior committed save was interrupted.
   return () => {
-    stopped = true;
+    disposed = true;
     if (timer !== null) clearTimeout(timer);
-    window.removeEventListener("wave-notes-data-changed", schedule);
-    document.removeEventListener("visibilitychange", visibility);
+    window.removeEventListener("wave-notes-data-changed", onDataChanged);
+    window.removeEventListener("wave-notes-editor-opened", onOpened);
+    window.removeEventListener("wave-notes-editor-closed", onClosed);
+    document.removeEventListener("visibilitychange", onVisible);
   };
 }

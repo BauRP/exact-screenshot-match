@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { markBackupDirty } from "./backup-signals";
 
 export type NoteKind = "note" | "pdf";
 
@@ -208,7 +209,8 @@ function persistNotes(nextNotes: Note[]) {
   try {
     if (!isBrowserStorageAvailable()) throw new Error("Local notes storage is unavailable");
     window.localStorage.setItem(NOTES_KEY, JSON.stringify(nextNotes));
-    window.dispatchEvent(new Event("wave-notes-data-changed"));
+    // This occurs only after a committed save, never on editor onUpdate.
+    markBackupDirty();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Storage write failed";
     commit({ status: "error", error: message });
