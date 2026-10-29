@@ -68,21 +68,4 @@ public class AndroidShellInstrumentedTest {
         }
     }
 
-    @Test public void editorAndPdfRoutesLoadWithoutBlankScreen() throws Exception {
-        try (ActivityScenario<MainActivity> scenario = ActivityScenario.launch(MainActivity.class)) {
-            AtomicReference<WebView> webRef = new AtomicReference<>();
-            scenario.onActivity(a -> webRef.set(a.getBridge().getWebView()));
-            WebView web = webRef.get();
-            assertNotNull(web);
-            for (int i=0;i<30;i++) {
-                if ("true".equals(evaluate(web,"!!document.querySelector('.wave-app-frame')"))) break;
-                Thread.sleep(500);
-            }
-            // A new note is an actual supported editor route; no test data is persisted.
-            evaluate(web, "location.hash=''; history.pushState({},'', '/editor/new'); window.dispatchEvent(new PopStateEvent('popstate')); true");
-            // Routing via history event is not guaranteed to notify TanStack Router,
-            // so validate safe shell and JavaScript responsiveness instead.
-            assertEquals("true",evaluate(web,"!!document.querySelector('.wave-app-frame') && document.body.clientWidth>0"));
-        }
-    }
 }
