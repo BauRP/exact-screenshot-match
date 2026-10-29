@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api-level: [26, 29, 34, 36, 37]
+        api-level: [26, 29, 34, 36, '37.0']
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -139,6 +139,8 @@ jobs:
       - name: Android instrumented OCR tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
+          # Android 17 requires android-37.0 platform AND system image.
+          # The '37' package id fails before booting an emulator.
           api-level: ${{ matrix.api-level }}
           arch: x86_64
           target: google_apis

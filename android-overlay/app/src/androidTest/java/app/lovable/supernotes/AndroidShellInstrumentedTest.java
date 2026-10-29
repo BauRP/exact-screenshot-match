@@ -16,6 +16,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.Assert.*;
+import org.json.JSONObject;
+import org.json.JSONTokener;
 
 /** Real Activity/WebView layout smoke tests, not just inset math tests. */
 @RunWith(AndroidJUnit4.class)
@@ -82,8 +84,24 @@ public class AndroidShellInstrumentedTest {
                     + " padding=" + web.getPaddingBottom(),
                     contentBottom <= screen.y - safeBottom + 1);
             });
-            assertEquals("true", evaluate(web,
-                "(function(){var n=document.querySelector('.wave-bottom-nav');var r=n.getBoundingClientRect();return r.height>0 && r.bottom<=innerHeight+2 && r.top>=0 && document.documentElement.scrollWidth<=innerWidth+2})()"));
+            // Report independent measurements instead of a single opaque
+            // boolean. This distinguishes an actual overlap from CSS width
+            // overflow or an old WebView viewport-coordinate discrepancy.
+            String raw = evaluate(web, "(function(){var n=document.querySelector('.wave-bottom-nav');var r=n.getBoundingClientRect();var f=document.querySelector('.wave-app-frame').getBoundingClientRect();return JSON.stringify({top:r.top,bottom:r.bottom,left:r.left,right:r.right,height:r.height,viewportWidth:innerWidth,viewportHeight:innerHeight,documentWidth:document.documentElement.scrollWidth,frameTop:f.top,frameBottom:f.bottom,frameHeight:f.height})})()");
+            JSONObject geometry = new JSONObject((String) new JSONTokener(raw).nextValue());
+            String details = geometry.toString();
+            System.out.println("WAVE_LAYOUT_METRICS " + details);
+            assertTrue("Bottom navigation has no height: " + details,
+                geometry.getDouble("height") > 0);
+            assertTrue("Bottom navigation is above the visible viewport: " + details,
+                geometry.getDouble("top") >= -2);
+            assertTrue("Bottom navigation extends below viewport: " + details,
+                geometry.getDouble("bottom") <= geometry.getDouble("viewportHeight") + 2);
+            assertTrue("Bottom navigation extends beyond screen width: " + details,
+                geometry.getDouble("left") >= -2 &&
+                geometry.getDouble("right") <= geometry.getDouble("viewportWidth") + 2);
+            assertTrue("Document content overflows horizontally: " + details,
+                geometry.getDouble("documentWidth") <= geometry.getDouble("viewportWidth") + 2);
         }
     }
 

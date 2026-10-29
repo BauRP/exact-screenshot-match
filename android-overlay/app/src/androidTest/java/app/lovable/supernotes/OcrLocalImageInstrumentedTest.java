@@ -90,6 +90,31 @@ public class OcrLocalImageInstrumentedTest {
         // Create an app-owned gallery image and verify OUR native decoder
         // reads it through ContentResolver, not just a file:// shortcut.
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        // Android 8/9 cannot insert into public MediaStore without the
+        // broad WRITE_EXTERNAL_STORAGE permission. Wave Notes deliberately
+        // does not request that permission. Use an app-owned FileProvider
+        // content:// URI on legacy Android, which exercises the same real
+        // ContentResolver/decoder path without weakening privacy.
+        if (android.os.Build.VERSION.SDK_INT < 29) {
+            File photo = makePhoto(640, 320);
+            Bitmap decoded = null;
+            try {
+                Uri uri = androidx.core.content.FileProvider.getUriForFile(
+                    context, context.getPackageName() + ".fileprovider", photo);
+                assertEquals("content", uri.getScheme());
+                try (InputStream stream = context.getContentResolver().openInputStream(uri)) {
+                    assertNotNull("App-owned provider URI cannot be opened", stream);
+                    assertTrue("App-owned image is empty", stream.read() >= 0);
+                }
+                decoded = OfflineCyrillicOcrPlugin.loadBitmap(context, uri.toString());
+                assertEquals(640, decoded.getWidth());
+                assertEquals(320, decoded.getHeight());
+            } finally {
+                if (decoded != null) decoded.recycle();
+                assertTrue(photo.delete());
+            }
+            return;
+        }
         ContentResolver resolver = context.getContentResolver();
         ContentValues metadata = new ContentValues();
         metadata.put(MediaStore.Images.Media.DISPLAY_NAME, "wave-notes-ocr-integration.jpg");
@@ -214,6 +239,42 @@ public class OcrLocalImageInstrumentedTest {
     }
 
 
+    /** Insert a valid JPEG EXIF APP1/TIFF orientation segment immediately
+     * after SOI, avoiding the buggy Android 8 ExifInterface.saveAttributes
+     * writer. The production image reader is unchanged.
+     */
+    private static void addExifRotate90(File jpegFile) throws Exception {
+        byte[] input = new byte[(int) jpegFile.length()];
+        try (InputStream in = new java.io.FileInputStream(jpegFile)) {
+            int read = 0;
+            while (read < input.length) {
+                int count = in.read(input, read, input.length - read);
+                if (count == -1) break;
+                read += count;
+            }
+            assertEquals("JPEG was truncated", input.length, read);
+        }
+        assertTrue("JPEG has no SOI", input.length > 4 &&
+            (input[0] & 255) == 255 && (input[1] & 255) == 216);
+        byte[] exif = new byte[]{
+            (byte)255, (byte)225, 0, 34,
+            'E', 'x', 'i', 'f', 0, 0,
+            'I', 'I', 42, 0, 8, 0, 0, 0,
+            1, 0,
+            0x12, 0x01, 3, 0, 1, 0, 0, 0, 6, 0, 0, 0,
+            0, 0, 0, 0
+        };
+        try (FileOutputStream output = new FileOutputStream(jpegFile, false)) {
+            output.write(input, 0, 2);
+            output.write(exif);
+            output.write(input, 2, input.length - 2);
+        }
+        assertEquals("EXIF orientation fixture malformed",
+            ExifInterface.ORIENTATION_ROTATE_90,
+            new ExifInterface(jpegFile.getAbsolutePath()).getAttributeInt(
+                ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_UNDEFINED));
+    }
+
     /** Orientation must transform actual pixels, not only bitmap dimensions.
      * OCR rectangles must use this same corrected coordinate frame.
      */
@@ -232,10 +293,7 @@ public class OcrLocalImageInstrumentedTest {
             try (FileOutputStream out=new FileOutputStream(photo)) {
                 assertTrue(original.compress(Bitmap.CompressFormat.JPEG,97,out));
             }
-            ExifInterface exif=new ExifInterface(photo.getAbsolutePath());
-            exif.setAttribute(ExifInterface.TAG_ORIENTATION,
-                String.valueOf(ExifInterface.ORIENTATION_ROTATE_90));
-            exif.saveAttributes();
+            addExifRotate90(photo);
             decoded=loadWithActualPlugin(photo.getAbsolutePath());
             assertEquals(300,decoded.getWidth());
             assertEquals(400,decoded.getHeight());
