@@ -101,6 +101,8 @@ jobs:
         run: |
           set -euo pipefail
           bun install
+          node scripts/patch-admob-native-layout.mjs
+          node scripts/verify-admob-native-layout.mjs
           bun run build
           bash scripts/prepare-ocr-models.sh
           npx cap add android

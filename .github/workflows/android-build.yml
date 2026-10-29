@@ -53,6 +53,11 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Verify compact native ad icon and clipping on Android
+        run: |
+          node scripts/patch-admob-native-layout.mjs
+          node scripts/verify-admob-native-layout.mjs
+
       - name: Build app
         run: |
           set -euo pipefail

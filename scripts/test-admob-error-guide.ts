@@ -19,8 +19,10 @@ assert.equal(classifyAdMobFailure(new Error("Unexpected native crash"), "sdk").c
 // Ensure the published-form scenario still gates on Google's own consent result,
 // and Google test ads stay enabled by default during Android debug builds.
 const source = await Bun.file("src/lib/native-ads.ts").text();
-assert.match(source, /AdMob\.requestConsentInfo\(\)/);
-assert.match(source, /AdMob\.showConsentForm\(\)/);
+const session = await Bun.file("src/lib/admob-session.ts").text();
+assert.match(source, /requestConsentForSession\(\)/);
+assert.match(session, /AdMob\.requestConsentInfo\(\)/);
+assert.match(session, /AdMob\.showConsentForm\(\)/);
 assert.match(source, /!consent\.canRequestAds/);
 assert.match(source, /VITE_ADMOB_LIVE_ADS !== "true"/);
 assert.match(source, /NativeAdFeed\.create/);
