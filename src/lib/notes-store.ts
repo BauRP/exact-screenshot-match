@@ -25,6 +25,11 @@ export type PdfTextOverlay = {
   text: string;
   /** True when the box masks existing PDF text that was replaced. */
   cover: boolean;
+  /** Exact source text rectangle to erase after a genuine edit. Keep independent of ruler changes. */
+  eraseXPct?: number;
+  eraseYPct?: number;
+  eraseWidthPct?: number;
+  eraseHeightPct?: number;
   /** Inline text formatting (PDF points for the size). */
   fontSize?: number;
   fontFamily?: string;

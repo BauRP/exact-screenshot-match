@@ -27,6 +27,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { hasPdfDraftChanges, hasSaveablePdfContent } from "@/lib/pdf-edit-guard";
+import { PdfMarginRuler, type PdfMargins } from "@/components/pdf/PdfMarginRuler";
+import { normalizePdfMargins, wrapPdfGlyphs } from "@/lib/pdf-text-layout";
 import { displayToSourceRect, pdfTextBounds, sourceOverlayTransform } from "@/lib/pdf-page-geometry";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ColorGrid, PALETTE } from "@/components/ColorGrid";
@@ -160,6 +162,10 @@ function PdfViewerScreen() {
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [textTool, setTextTool] = useState(false);
+  // Ruler is page-relative, independent of zoom, scroll position and viewport pixels.
+  const [margins, setMargins] = useState<PdfMargins>({ left: 8, right: 92 });
+  // Original source text is kept separately from the mutable editing draft.
+  const draftStartRef = useRef<PdfTextOverlay | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
   const [textBoxes, setTextBoxes] = useState<TextItemBox[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -409,13 +415,9 @@ function PdfViewerScreen() {
     (overlayId: string, patch: Partial<PdfTextOverlay>) => {
       const draft = draftOverlayRef.current;
       if (draft?.id === overlayId) {
-        const updated = { ...draft, ...patch };
-        if (!hasPdfDraftChanges(draft, updated) || !hasSaveablePdfContent(updated)) {
-          setDraftOverlay(updated);
-          return;
-        }
-        setDraftOverlay(null);
-        persistOverlays([...overlays.filter((item) => item.id !== overlayId), updated]);
+        // Do not bake the first typed character into the PDF immediately.
+        // Keep the draft reversible until the user explicitly finishes editing.
+        setDraftOverlay({ ...draft, ...patch });
         return;
       }
       if (overlays.some((item) => item.id === overlayId)) {
@@ -428,8 +430,14 @@ function PdfViewerScreen() {
   );
 
   const commitEditing = useCallback(() => {
-    // An untouched source PDF line is never saved as an annotation.
-    if (draftOverlayRef.current) setDraftOverlay(null);
+    // Touching a PDF line never modifies it. Explicit finish commits only real edits.
+    const draft = draftOverlayRef.current;
+    const original = draftStartRef.current;
+    if (draft && original && hasPdfDraftChanges(original, draft) && hasSaveablePdfContent(draft)) {
+      persistOverlays([...overlays.filter((item) => item.id !== draft.id), draft]);
+    }
+    if (draft) setDraftOverlay(null);
+    draftStartRef.current = null;
     const current = editingId ? overlays.find((item) => item.id === editingId) : null;
     if (current && !current.text.trim() && !current.cover) {
       persistOverlays(overlays.filter((item) => item.id !== current.id));
@@ -447,9 +455,11 @@ function PdfViewerScreen() {
     if (lastPageRotationRef.current === next) return;
     lastPageRotationRef.current = next;
     setDraftOverlay(null);
+    draftStartRef.current = null;
     setEditingId(null);
     editingNodeRef.current = null;
     setTextBoxes([]);
+    setMargins({ left: 8, right: 92 });
   }, [page, rotation, setDraftOverlay]);
 
   /* ---------------- Scoped rich-text formatting for the active box -------- */
@@ -681,6 +691,18 @@ function PdfViewerScreen() {
 
   const ui = editingOverlay ? (activeStyle ?? baseStyle(editingOverlay)) : textTool ? draftStyle : null;
 
+  const changeMargins = (value: PdfMargins) => {
+    const next = normalizePdfMargins(value.left, value.right);
+    setMargins(next);
+    // Setting bounds on a selected text box changes real page coordinates.
+    if (editingId) {
+      patchOverlay(editingId, {
+        xPct: next.left,
+        widthPct: next.right - next.left,
+      });
+    }
+  };
+
   const onCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!textTool) {
       if (editingId) commitEditing();
@@ -704,6 +726,7 @@ function PdfViewerScreen() {
       if (draftOverlayRef.current?.id !== existing.id) setDraftOverlay(null);
       pendingTapRef.current = { x: event.clientX, y: event.clientY };
       editingNodeRef.current = null;
+      setMargins(normalizePdfMargins(existing.xPct, existing.xPct + existing.widthPct));
       setEditingId(existing.id);
       return;
     }
@@ -724,13 +747,21 @@ function PdfViewerScreen() {
         x:hit.leftPct,y:hit.topPct,width:hit.widthPct,height:hit.heightPct,
       },rotation);
       const heightPx = (sourceBox.height / 100) * unrotatedPageSize.height;
+      const startX = clamp(sourceBox.x, 0, 96);
+      const suggested = normalizePdfMargins(startX, Math.min(100, startX + Math.max(34, sourceBox.width + 4)));
       const overlay: PdfTextOverlay = {
         id: createOverlayId(),
         page,
-        xPct: sourceBox.x,
+        xPct: suggested.left,
         yPct: sourceBox.y,
-        widthPct: Math.max(sourceBox.width, 3),
+        widthPct: suggested.right - suggested.left,
         heightPct: sourceBox.height,
+        // The old glyphs are erased at their ORIGINAL location and size,
+        // regardless of where the new editable paragraph boundaries are moved.
+        eraseXPct: sourceBox.x,
+        eraseYPct: sourceBox.y,
+        eraseWidthPct: sourceBox.width,
+        eraseHeightPct: sourceBox.height,
         text: hit.text,
         cover: true,
         // Inspect the tapped text's own size; the toolbar value is never applied here.
@@ -741,7 +772,9 @@ function PdfViewerScreen() {
         color: DEFAULT_PDF_TEXT_COLOR,
       };
       // Temporarily place a caret without changing the source PDF.
+      draftStartRef.current = overlay;
       setDraftOverlay(overlay);
+      setMargins(suggested);
       editingNodeRef.current = null;
       setEditingId(overlay.id);
       return;
@@ -751,9 +784,9 @@ function PdfViewerScreen() {
     const overlay: PdfTextOverlay = {
       id: createOverlayId(),
       page,
-      xPct: clamp(sourcePoint.x, 0, 90),
+      xPct: clamp(sourcePoint.x, margins.left, margins.right - 4),
       yPct: clamp(sourcePoint.y, 0, 96),
-      widthPct: 40,
+      widthPct: margins.right - clamp(sourcePoint.x, margins.left, margins.right - 4),
       heightPct: Math.max(((draftStyle.fontSize * viewScale * 1.35) / Math.max(unrotatedPageSize.height, 1)) * 100, 2),
       text: "",
       cover: false,
@@ -764,7 +797,9 @@ function PdfViewerScreen() {
       italic: draftStyle.italic,
       underline: draftStyle.underline,
     };
+    draftStartRef.current = overlay;
     setDraftOverlay(overlay);
+    setMargins(normalizePdfMargins(overlay.xPct, overlay.xPct + overlay.widthPct));
     editingNodeRef.current = null;
     setEditingId(overlay.id);
   };
@@ -1407,7 +1442,7 @@ function PdfViewerScreen() {
               <Check className="h-4 w-4" />
             </button>
           </div>
-
+          <PdfMarginRuler value={margins} onChange={changeMargins} />
         </div>
       )}
 
@@ -1455,6 +1490,10 @@ function PdfViewerScreen() {
             {pageOverlays.map((overlay) => {
               const isEditing = overlay.id === editingId;
               const sizePx = Math.max((overlay.fontSize ?? DEFAULT_PDF_FONT_SIZE) * viewScale, 6);
+              const untouchedSource = overlay.cover && draftOverlay?.id === overlay.id &&
+                !!draftStartRef.current && !hasPdfDraftChanges(draftStartRef.current, overlay);
+              const coverX = (overlay.eraseXPct ?? overlay.xPct) - overlay.xPct;
+              const coverY = (overlay.eraseYPct ?? overlay.yPct) - overlay.yPct;
               return (
                 <div
                   key={overlay.id}
@@ -1465,12 +1504,11 @@ function PdfViewerScreen() {
                     if (!isEditing && textTool) {
                       pendingTapRef.current = { x: event.clientX, y: event.clientY };
                       editingNodeRef.current = null;
+                      setMargins(normalizePdfMargins(overlay.xPct, overlay.xPct + overlay.widthPct));
                       setEditingId(overlay.id);
                     }
                   }}
-                  className={`absolute flex items-center overflow-visible whitespace-pre text-left leading-tight ${
-                    overlay.cover && draftOverlay?.id !== overlay.id ? "bg-white" : ""
-                  }`}
+                  className="absolute overflow-visible whitespace-pre-wrap break-words text-left"
                   style={{
                     left: `${overlay.xPct}%`,
                     top: `${overlay.yPct}%`,
@@ -1478,7 +1516,7 @@ function PdfViewerScreen() {
                     minHeight: `${overlay.heightPct}%`,
                     pointerEvents: "auto",
                     fontSize: `${sizePx}px`,
-                    lineHeight: 1,
+                    lineHeight: 1.2,
                     fontFamily: fontCss(overlay.fontFamily),
                     fontWeight: overlay.bold ? 700 : 400,
                     fontStyle: overlay.italic ? "italic" : "normal",
@@ -1486,18 +1524,27 @@ function PdfViewerScreen() {
                     color: overlay.color ?? DEFAULT_PDF_TEXT_COLOR,
                   }}
                 >
+                  {overlay.cover && !untouchedSource && (
+                    <span aria-hidden="true" className="pointer-events-none absolute bg-white" style={{
+                      left: `${coverX / 100 * unrotatedPageSize.width - 1}px`,
+                      top: `${coverY / 100 * unrotatedPageSize.height - 1}px`,
+                      width: `${(overlay.eraseWidthPct ?? overlay.widthPct) / 100 * unrotatedPageSize.width + 2}px`,
+                      height: `${(overlay.eraseHeightPct ?? overlay.heightPct) / 100 * unrotatedPageSize.height + 2}px`,
+                    }} />
+                  )}
                   {isEditing ? (
                     <span
                       ref={(node) => mountEditor(node, overlay)}
                       contentEditable
                       suppressContentEditableWarning
                       spellCheck={false}
-                      className="block w-full bg-transparent outline-none"
+                      className="relative block w-full min-h-[1em] whitespace-pre-wrap break-words bg-transparent outline-none"
                       style={{
+                        paddingTop: overlay.cover ? `${sizePx * 0.08}px` : undefined,
                         caretColor: overlay.color ?? DEFAULT_PDF_TEXT_COLOR,
                         // Preserve the exact glyphs from the original PDF on tap;
                         // only the caret is drawn until real text edits are made.
-                        WebkitTextFillColor: draftOverlay?.id === overlay.id && overlay.cover ? "transparent" : undefined,
+                        WebkitTextFillColor: untouchedSource ? "transparent" : undefined,
                       }}
                       onInput={(event) => {
                         const runs = readRunsFromDom(event.currentTarget, renderedRunsRef.current, baseStyle(overlay));
@@ -1513,7 +1560,8 @@ function PdfViewerScreen() {
                       }}
                     />
                   ) : (
-                    <span className="block w-full truncate">
+                    <span className="relative block w-full whitespace-pre-wrap break-words"
+                      style={{ paddingTop: overlay.cover ? `${sizePx * 0.08}px` : undefined }}>
                       {getRuns(overlay).map((run, index) => (
                         <span key={index} style={cssToReact(runCss(run, viewScale))}>
                           {run.text}
