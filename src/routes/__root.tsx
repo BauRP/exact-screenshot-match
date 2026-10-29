@@ -165,7 +165,7 @@ function RootComponent() {
       <NativeBackHandler />
       <AppLockGate>
         <SafeFrame>
-          <div className="relative mx-auto flex min-h-0 w-full max-w-[450px] flex-1 flex-col overflow-hidden border-x border-slate-800 bg-background shadow-2xl md:max-w-3xl lg:max-w-5xl">
+          <div className="relative mx-auto flex min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden bg-background shadow-2xl lg:max-w-5xl lg:border-x lg:border-slate-800">
             <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
               <Outlet />
             </div>
@@ -186,7 +186,7 @@ function SafeFrame({ children }: { children: ReactNode }) {
   return (
     <div
       style={{ paddingTop: top, paddingBottom: nativeAndroid ? "0px" : "env(safe-area-inset-bottom)" }}
-      className="flex h-[100dvh] w-full max-w-[100vw] flex-col overflow-x-hidden bg-background"
+      className="wave-app-frame flex w-full min-w-0 max-w-full flex-col overflow-x-hidden bg-background"
     >
       {children}
     </div>

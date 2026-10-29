@@ -5,10 +5,12 @@
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
         <item name="android:windowBackground">@color/splash_background</item>
-        <!-- Transparent, non-obscured system status bar (edge-to-edge) -->
-        <item name="android:statusBarColor">@android:color/transparent</item>
+        <!-- All versions use native WindowInsetsCompat; old Android keeps a
+             dark contrast surface, Android 15+ enforces transparent bars. -->
+        <item name="android:statusBarColor">#0B0E13</item>
         <item name="android:windowTranslucentStatus">false</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">#0B0E13</item>
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
@@ -17,6 +19,6 @@
         <item name="postSplashScreenTheme">@style/AppTheme</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowFullscreen">false</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:statusBarColor">#0B0E13</item>
     </style>
 </resources>

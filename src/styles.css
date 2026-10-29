@@ -175,3 +175,22 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+
+
+/* Web fallback: stable viewport on older Android WebViews that do not
+   implement dvh. Native WebView itself is already inset by MainActivity. */
+.wave-app-frame { height:100vh; min-height:0; }
+@supports (height:100dvh) {
+  .wave-app-frame { height:100dvh; }
+}
+.wave-native-android {
+  --wave-safe-bottom:0px;
+  --wave-safe-top:0px;
+}
+/* The Android IME has priority while editing. Never pin bottom tabs above
+   the keyboard where they cover an editable note or a PDF text tool. */
+.wave-ime-open .wave-bottom-nav { display:none; }
+@media (max-width:360px) {
+  .wave-bottom-nav nav, .wave-bottom-nav a { min-width:0; }
+  .wave-bottom-nav a { font-size:10px; }
+}

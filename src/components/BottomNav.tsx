@@ -9,7 +9,8 @@ export function BottomNav() {
   const t = useT();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[450px] overflow-visible border-t border-border bg-background pb-[env(safe-area-inset-bottom)] md:max-w-3xl lg:max-w-5xl">
+    <nav className="wave-bottom-nav fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-full overflow-visible border-t border-border bg-background lg:max-w-5xl"
+      style={{paddingBottom:"var(--wave-safe-bottom, env(safe-area-inset-bottom, 0px))"}}>
       <div className="mx-auto w-full max-w-xl overflow-visible px-3 pb-2 pt-1.5">
         <div className="relative flex items-center justify-between gap-2 overflow-visible rounded-full border border-border bg-surface px-3 py-1.5 shadow-[0_10px_40px_-15px_rgba(0,0,0,0.6)]">
 
