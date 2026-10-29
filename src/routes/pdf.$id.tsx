@@ -102,7 +102,7 @@ type TextItemBox = {
 
 /** Only actual PDF core fonts have a reproducible standard-font export path. */
 function isCorePdfFont(name: string): boolean {
-  const clean = name.replace(/^[A-Z]{6}\\+/, "");
+  const clean = name.replace(/^[A-Z]{6}\+/, "");
   return /^(?:Helvetica|Times(?:-Roman|-Bold|-Italic|-BoldItalic)?|Courier(?:-Bold|-Oblique|-BoldOblique)?)$/i.test(clean);
 }
 
@@ -341,7 +341,7 @@ function PdfViewerScreen() {
           const unrotatedTx = pdfjs.Util.transform(sourceViewport.transform, item.transform);
           return {
             // Real rendered size = on-page glyph height / page scale (includes page CTM).
-            fontSize: roundSize(height / (viewport.scale || 1)),
+            fontSize: height / (viewport.scale || 1),
             ...detected,
             sourceFontId: String(item.fontName ?? ""),
             sourceFontName: realName,
@@ -930,7 +930,7 @@ function PdfViewerScreen() {
 
       // Validate and select an embeddable font for every character BEFORE
       // masking the original text. Unsupported scripts abort safely.
-      const exactFont = overlay.sourceFontId ? await getPdfOriginalFont(overlay) : null;
+      const exactFont = overlay.sourceFontId && runs.length ? await getPdfOriginalFont(overlay) : null;
       const prepared = [];
       for (const run of runs) {
         const original = exactFont && run.fontFamily === overlay.fontFamily &&
@@ -1002,20 +1002,32 @@ function PdfViewerScreen() {
       for (let lineNo = 0; lineNo < lines.length; lineNo++) {
         const baseline = firstBaseline - lineNo * lineAdvance;
         let cursor = x;
-        for (const glyph of lines[lineNo]) {
-          const {r,g,b} = hexToRgb(glyph.run.color);
-          target.drawText(glyph.text, {
-            x: cursor, y: baseline, font: glyph.font,
-            size: glyph.run.fontSize, color: rgb(r,g,b),
+        const line = lines[lineNo];
+        // Draw full font runs to preserve kerning and glyph spacing.
+        for (let i = 0; i < line.length;) {
+          const first = line[i];
+          let j = i + 1;
+          while (j < line.length && line[j].font === first.font &&
+            line[j].run === first.run) j++;
+          const word = line.slice(i, j).map(item => item.text).join("");
+          const widthOfRun = first.font.widthOfTextAtSize(word, first.run.fontSize);
+          if (cursor + widthOfRun > x + maxWidth + 0.5) {
+            throw new Error("Текст выходит за правую границу. Увеличьте область или уменьшите шрифт.");
+          }
+          const {r,g,b} = hexToRgb(first.run.color);
+          target.drawText(word, {
+            x: cursor, y: baseline, font: first.font,
+            size: first.run.fontSize, color: rgb(r,g,b),
           });
-          if (glyph.run.underline && glyph.text.trim()) {
+          if (first.run.underline && word.trim()) {
             target.drawRectangle({
-              x: cursor, y: baseline - glyph.run.fontSize * 0.12,
-              width: glyph.width, height: Math.max(glyph.run.fontSize * 0.06, 0.6),
+              x: cursor, y: baseline - first.run.fontSize * 0.12,
+              width: widthOfRun, height: Math.max(first.run.fontSize * 0.06, 0.6),
               color: rgb(r,g,b),
             });
           }
-          cursor += glyph.width;
+          cursor += widthOfRun;
+          i = j;
         }
       }
     }
@@ -1591,7 +1603,7 @@ function PdfViewerScreen() {
             }}>
             {pageOverlays.map((overlay) => {
               const isEditing = overlay.id === editingId;
-              const sizePx = Math.max((overlay.fontSize ?? DEFAULT_PDF_FONT_SIZE) * viewScale, 6);
+              const sizePx = (overlay.fontSize ?? DEFAULT_PDF_FONT_SIZE) * viewScale;
               const untouchedSource = overlay.cover && draftOverlay?.id === overlay.id &&
                 !!draftStartRef.current && !hasPdfDraftChanges(draftStartRef.current, overlay);
               const baselineTop = overlay.sourceBaselinePct === undefined ? null : pdfBaselineTopPx(

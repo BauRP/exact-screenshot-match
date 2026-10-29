@@ -50,4 +50,8 @@ assert.ok(src.includes("contentEditable={overlay.sourceFontExact !== false}"));
 assert.ok(src.includes("await getPdfOriginalFont(overlay)"));
 assert.ok(src.includes("firstBaseline - lineNo * lineAdvance"));
 assert.ok(!src.includes("boxHeight - maxSize * 0.8 - lineNo"));
+assert.ok(src.includes("fontSize: height / (viewport.scale || 1)"), "PDF text size is never rounded");
+assert.ok(!src.includes("Math.max((overlay.fontSize ?? DEFAULT_PDF_FONT_SIZE) * viewScale, 6)"), "zoom does not alter font size");
+assert.ok(!runSource.includes("Math.max(run.fontSize * viewScale, 6)"), "runs keep exact font size");
+assert.ok(src.includes("const word = line.slice(i, j).map(item => item.text).join"), "group characters when exporting");
 console.log("PDF tap no-op, 4 rotations, rotated text hitboxes and page-switch cleanup: PASS");

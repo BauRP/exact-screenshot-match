@@ -144,7 +144,7 @@ export function runCss(run: RunStyle, viewScale: number, source?: PdfSourceFace)
   const usesSource = !!source?.cssFamily && source.fontFamily === run.fontFamily &&
     !!source.bold === run.bold && !!source.italic === run.italic;
   return {
-    "font-size": `${Math.max(run.fontSize * viewScale, 6)}px`,
+    "font-size": `${run.fontSize * viewScale}px`,
     "font-family": usesSource ? source!.cssFamily! : fontCss(run.fontFamily),
     "font-weight": usesSource ? "400" : run.bold ? "700" : "400",
     "font-style": usesSource ? "normal" : run.italic ? "italic" : "normal",
