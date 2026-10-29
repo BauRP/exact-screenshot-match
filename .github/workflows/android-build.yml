@@ -171,12 +171,16 @@ jobs:
             TITLE="Wave Notes - test APK"
           fi
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TITLE" --notes "Android test APK, built automatically from GitHub. Back up local notes before replacing the app." --prerelease
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TITLE" --notes "Wave Notes test APK. Back up your notes before installation." --prerelease
           fi
-          # The legacy asset filename remains stable so existing download links do not break.
-          gh release upload "$TAG" output/SuperNotes-debug.apk --clobber
-
+          # Preserve the legacy APK URL. Publish the checksum of the SAME
+          # successfully verified binary; allow comparison after download.
+          gh release upload "$TAG" output/SuperNotes-debug.apk output/SuperNotes-debug.apk.sha256 --clobber
+          CHECKSUM="$(cut -d' ' -f1 output/SuperNotes-debug.apk.sha256)"
+          gh release edit "$TAG" --title "$TITLE" --prerelease --notes "Wave Notes TEST/debug APK. Source commit: $GITHUB_SHA. SHA-256: $CHECKSUM. The APK and checksum are from the same verified build. Back up local notes before installation; debug signatures may differ. Android emulator and physical-device OCR acceptance require separate checks."
           DOWNLOAD="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/SuperNotes-debug.apk"
+          CHECKSUM_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/SuperNotes-debug.apk.sha256"
           echo "## Скачать APK" >> "$GITHUB_STEP_SUMMARY"
           echo "[Скачать Wave Notes APK]($DOWNLOAD)" >> "$GITHUB_STEP_SUMMARY"
+          echo "[SHA-256 контрольная сумма]($CHECKSUM_URL)" >> "$GITHUB_STEP_SUMMARY"
           echo "APK download: $DOWNLOAD"

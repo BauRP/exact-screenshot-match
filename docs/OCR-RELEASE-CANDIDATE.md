@@ -86,3 +86,9 @@ The APK contains pinned `rus` and `kaz` assets. On Android the first copy to app
 - Recheck only failed models on the same photo; if a retry succeeds with zero characters, mark that model completed without deleting earlier text. After all models complete, still request manual confirmation.
 - Delete an unfinished OCR draft only on explicit discard or confirmed note save. If local storage is full, warn the user that a draft may not survive app termination.
 - The above are implementation acceptance scenarios and unit tests, **not yet physically tested** on a user's phone. Keep Play/public release approval separate from a successfully compiled debug APK.
+
+## APK integrity and real-device gate (2026-10-29)
+
+The test APK publication now includes a downloadable SHA-256 checksum alongside the unchanged legacy asset filename. The GitHub Release description states the source commit and checksum for the exact verified build. The existing release tag may point to an older historical commit, so read the **explicit source SHA in the updated description** rather than treating the tag target as proof. Passing a build workflow does not prove emulator or physical-device OCR correctness.
+
+See [OCR-DEVICE-TEST-CHECKLIST.md](OCR-DEVICE-TEST-CHECKLIST.md) for a plain-language physical-device acceptance protocol. Every physical result begins as **not tested**; only observed evidence can close it.

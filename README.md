@@ -40,3 +40,9 @@ npx cap sync android
 Существующие данные заметок хранятся локально, резервное копирование полноценного PDF-архива ещё требует отдельной проверки. Не заявлять о шифровании заметок: PIN сейчас только ограничивает доступ к интерфейсу.
 
 Название приложения и workflow теперь Wave Notes. Имя существующего скачиваемого APK `SuperNotes-debug.apk` оставлено прежним для совместимости со ссылками. Это тестовый APK с debug-подписью, не готовый подписанный релиз. Проверять успех сборки следует только по завершённому GitHub Actions workflow, а не по наличию коммита.
+
+## Тестовый APK и приёмка
+
+- [Скачать APK Wave Notes](https://github.com/BauRP/exact-screenshot-match/releases/download/super-notes-stability-test/SuperNotes-debug.apk).
+- [Контрольная сумма SHA-256](https://github.com/BauRP/exact-screenshot-match/releases/download/super-notes-stability-test/SuperNotes-debug.apk.sha256) публикуется с новой успешной сборкой.
+- [Порядок проверки на реальном Android](docs/OCR-DEVICE-TEST-CHECKLIST.md). Не публикуйте общедоступный релиз без реальных результатов испытаний.
