@@ -149,7 +149,10 @@ jobs:
           # Emulator itself has no Wi-Fi/mobile data. Gradle on the CI HOST may
           # download Android Unified Test Platform tooling as needed.
           # Only run tests for our app, never unrelated Capacitor subprojects.
-          script: adb shell svc wifi disable && adb shell svc data disable && cd android && test -x ./gradlew && ./gradlew :app:connectedDebugAndroidTest --no-daemon --stacktrace
+          # The normal Gradle configuration permits a 4 GiB heap; running that
+          # alongside an emulator can exhaust a GitHub runner (exit 137).
+          # Constrain only the test invocation; keep APK compilation unchanged.
+          script: adb shell svc wifi disable && adb shell svc data disable && cd android && test -x ./gradlew && ./gradlew :app:connectedDebugAndroidTest --no-daemon --no-parallel --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8" --stacktrace
 
       - name: Record actual Android OCR instrumentation results
         if: always()
