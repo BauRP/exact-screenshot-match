@@ -152,19 +152,29 @@ jobs:
           # The normal Gradle configuration permits a 4 GiB heap; running that
           # alongside an emulator can exhaust a GitHub runner (exit 137).
           # Constrain only the test invocation; keep APK compilation unchanged.
-          # Clearly identify the command that fails on API 26 (previously 137
-          # before Gradle printed anything). Do NOT interpret zero test reports
-          # as successful tests. Keep offline verification for each Android API.
+          # Android 8 emulator exits with 137 on "adb shell svc wifi disable"
+          # BEFORE Gradle runs (confirmed by explicit command checkpoints).
+          # Use platform airplane-mode controls on API 26 instead of the
+          # crashing svc command, retaining offline device-side OCR checks.
+          # Other emulator versions retain the previously passing path.
           script: >-
-            set -ex;
-            echo WAVE_CHECKPOINT_ANDROID_API_${{ matrix.api-level }}_ADB;
+            set -eux;
+            echo WAVE_ANDROID_API_${{ matrix.api-level }}_START;
             adb shell getprop ro.build.version.sdk;
-            echo WAVE_CHECKPOINT_WIFI_DISABLE;
-            adb shell svc wifi disable;
-            echo WAVE_CHECKPOINT_DATA_DISABLE;
-            adb shell svc data disable;
-            echo WAVE_CHECKPOINT_GRADLE_START;
-            cd android && test -x ./gradlew && ./gradlew :app:connectedDebugAndroidTest --no-daemon --no-parallel --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8" --stacktrace
+            if [ "${{ matrix.api-level }}" = "26" ]; then
+              echo WAVE_API26_AIRPLANE_MODE;
+              adb shell settings put global airplane_mode_on 1;
+              adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true;
+              test "$(adb shell settings get global airplane_mode_on | tr -d '\r')" = "1";
+            else
+              adb shell svc wifi disable;
+              adb shell svc data disable;
+            fi;
+            echo WAVE_OFFLINE_TEST_START;
+            cd android && test -x ./gradlew &&
+            ./gradlew :app:connectedDebugAndroidTest --no-daemon --no-parallel
+            --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8"
+            --stacktrace
 
       - name: Record actual Android OCR instrumentation results
         if: always()
