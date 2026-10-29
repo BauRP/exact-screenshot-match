@@ -123,3 +123,46 @@ export function saveOcrScanPreferences(
     return true;
   } catch { return false; }
 }
+
+
+/** Conservative fast path after already-loaded offline recognizers. A
+ * single-language page with strong script evidence stops additional models;
+ * unclear/mixed pages still use more recognizers, without downloads.
+ * Recognizer-produced letters are evidence, NOT a standalone language model.
+ */
+export function confidentOcrPrimaryScript(
+  readings: readonly {script:OcrScript;text:string;confidence?:number}[],
+): OcrScript | null {
+  if (!readings.length) return null;
+  const count=(text:string,regex:RegExp)=> (text.match(regex)??[]).length;
+  const total=readings.map(r=>r.text.slice(0,8000));
+  const all=total.join("\n");
+  const latin=count(all,/\p{Script=Latin}/gu);
+  const cyrillic=count(all,/\p{Script=Cyrillic}/gu);
+  const kana=count(all,/[\p{Script=Hiragana}\p{Script=Katakana}]/gu);
+  const han=count(all,/\p{Script=Han}/gu);
+  const hangul=count(all,/\p{Script=Hangul}/gu);
+  const deva=count(all,/\p{Script=Devanagari}/gu);
+  const letters=latin+cyrillic+kana+han+hangul+deva;
+  if(letters<16)return null;
+  const scriptCounts:Record<OcrScript,number>={
+    latin,cyrillic,japanese:kana,chinese:han,korean:hangul,devanagari:deva,
+  };
+  // Non-Latin recognizers sometimes produce false ASCII-looking strings.
+  // Never trust Latin until the Cyrillic scan has had its chance.
+  const haveCyrillic=readings.some(r=>r.script==="cyrillic");
+  if(!haveCyrillic)return null;
+  const best=readings
+    .filter(r=> (r.confidence??100)>=45)
+    .map(r=>r.script)
+    .filter((v,i,arr)=>arr.indexOf(v)===i)
+    .filter(script=>{
+      const own=scriptCounts[script];
+      if(script==="japanese")return kana>=5 && (kana+han)/letters>.8;
+      if(script==="chinese")return han>=12 && kana===0 && han/letters>.85;
+      if(script==="latin")return latin>=40 && latin/letters>.92
+        && (all.match(/\b[\p{Script=Latin}]{3,}\b/gu)??[]).length>=5;
+      return own>=20 && own/letters>.9;
+    });
+  return best.length===1?best[0]:null;
+}

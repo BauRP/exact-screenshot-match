@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { ocrTextToEditorHtml, buildOcrNoteDraft, truncateOcrTitle } from "../src/lib/ocr-note";
 import { composeRecognizedText, hasConflictingNativeOcrText, extractNativeTextAlternative, recoverNativeFullTextForReview } from "../src/lib/ocr-text";
-import { ocrScanPlan, selectedOcrScanPlan, readOcrScanPreferences, saveOcrScanPreferences, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
+import { ocrScanPlan, selectedOcrScanPlan, readOcrScanPreferences, saveOcrScanPreferences, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, confidentOcrPrimaryScript, cyrillicLanguageForScan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
 import { linesFromMlKit, linesFromMlKitBounded, mlKitReportedLanguages } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
 import { OcrScanCoverage } from "../src/lib/ocr-coverage";
@@ -877,3 +877,37 @@ assert.equal(safeLocalOcrPreviewUrl("content://media/external/images/media/7",
 assert.equal(safeLocalOcrPreviewUrl("/data/user/0/wave/photo.jpg",
   () => {throw new Error("Photo unavailable");}),null);
 console.log("Local-only camera/photo review is safe and cannot fetch external images: passed.");
+
+
+const strongRussian="Это достаточно длинный русский текст для проверки языка. ".repeat(4);
+const strongEnglish="This document contains several correctly written English words and sentences. ".repeat(4);
+assert.equal(confidentOcrPrimaryScript([
+  {script:"latin",text:""},
+  {script:"cyrillic",text:strongRussian,confidence:78},
+]),"cyrillic");
+assert.equal(confidentOcrPrimaryScript([
+  {script:"latin",text:strongEnglish},
+]),null); // Cyrillic detection must have run before Latin early stop.
+assert.equal(confidentOcrPrimaryScript([
+  {script:"latin",text:strongEnglish},
+  {script:"cyrillic",text:""},
+]),"latin");
+assert.equal(confidentOcrPrimaryScript([
+  {script:"latin",text:strongEnglish},
+  {script:"cyrillic",text:strongRussian},
+]),null);
+assert.equal(confidentOcrPrimaryScript([
+  {script:"latin",text:""},
+  {script:"cyrillic",text:""},
+  {script:"japanese",text:"こんにちは日本語の文章を読みます。".repeat(3)},
+]),"japanese");
+assert.equal(confidentOcrPrimaryScript([
+  {script:"latin",text:""},
+  {script:"cyrillic",text:""},
+  {script:"japanese",text:"漢字漢字漢字漢字"},
+]),null);
+assert.equal(confidentOcrPrimaryScript([
+  {script:"latin",text:"1434\n14:35"},
+  {script:"cyrillic",text:"Всё"},
+]),null);
+console.log("Automatic OCR fast path stops only with strong single-script evidence: passed.");

@@ -18,7 +18,7 @@ import { chooseLocalOcrImagePath, reusableOcrImagePath, safeLocalOcrPreviewUrl }
 import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText, extractNativeTextAlternative, recoverNativeFullTextForReview, type OcrNativeTextAlternative } from "@/lib/ocr-text";
-import { ocrScanPlan, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, type OcrScanRequest } from "@/lib/ocr-plan";
+import { ocrScanPlan, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, confidentOcrPrimaryScript, cyrillicLanguageForScan, type OcrScanRequest } from "@/lib/ocr-plan";
 
 export const Route = createFileRoute("/camera")({
   head: () => ({ meta: [
@@ -132,6 +132,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       const languageHints: string[] = [];
       let nativeGeometryTruncated = false;
       let timeBudget: OcrTimeBudget | null = null;
+      let fastDetected: OcrScript | null = null;
       const timed = <T,>(start: () => Promise<T>, duration: number): Promise<T> => {
         if (!timeBudget) throw new Error("OCR budget was not initialized");
         return startOcrWithinBudget(timeBudget, duration, start, task => outstanding.push(task));
@@ -211,8 +212,17 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
           const item = scripts.find(item => item.id === script);
           if (item) await recognize(item, index + 1);
         }
-        // First Latin and Cyrillic stay early. Later recognizers can move up
-        // based on unambiguous characters already detected, but none is skipped.
+        // Fast path: stop costly recognizers only on substantial single-script
+        // evidence. Otherwise continue and preserve the mixed-language review.
+        if (mode === "auto" && index >= 1 && coverage.isComplete() === false) {
+          const confident=confidentOcrPrimaryScript(results);
+          if (confident && !nativeGeometryTruncated && !nativeAlternatives.length) {
+            fastDetected=confident;
+            onProgress("Язык определён — завершаем распознавание");
+            break;
+          }
+        }
+        // If evidence is ambiguous, continue the existing cautious scan.
         if (mode === "auto" && index >= 1 && index + 1 < scanPlan.length) {
           const ordered = prioritizeRemainingOcrScripts(
             scanPlan.slice(index + 1), results.map(result => result.text).join("\n"),languageHints);
@@ -222,7 +232,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       }
       // A timeout leaves an incomplete multilingual page. Do not silently
       // save partial results as if every configured recognizer had completed.
-      if (timedOut || !coverage.isComplete()) {
+      if (timedOut || (!coverage.isComplete() && !fastDetected)) {
         const partialMerge = exceedsOcrSpatialBudget(results, nativeGeometryTruncated)
           ? mergeOversizedOcrForReview(results) : mergeOcrCandidates(results);
         // Partial scans can ALSO have full-text/line disagreements. Do not
@@ -264,13 +274,15 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       const uncertainLayout = scanPlan.length > 1 && !!reviewText &&
         hasUncertainMixedScriptLayout(results);
       const restrictedLanguages = Array.isArray(mode) && scanPlan.length < AUTO_SCAN_ORDER.length;
+      // A strong early decision is an optimization, not a formal proof that
+      // a small secondary language is absent. Always show editable review.
       const reason: OcrReviewReason | null =
         tooManyLines ? "large-layout" :
         uncertainHan ? "ambiguous-han" :
         reviewText !== complete ? "script-omission" :
         nativeAlternatives.length > 0 ? "native-text" :
         uncertainLayout ? "mixed-layout" :
-        restrictedLanguages ? "limited-selection" : null;
+        restrictedLanguages || fastDetected ? "limited-selection" : null;
       if (reviewText && reason) {
         throw new OcrCombinedReviewError(
           reviewText,reason,
