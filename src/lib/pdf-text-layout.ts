@@ -5,6 +5,17 @@ export function normalizePdfMargins(left: number, right: number) {
   return { left: Number(l.toFixed(3)), right: Number(r.toFixed(3)) };
 }
 
+/** Exact PDF baseline in page coordinates, adjusted for browser font metrics. */
+export function pdfBaselineTopPx(baselinePct: number, pageHeightPx: number, fontSizePx: number, cssFamily: string): number {
+  if (typeof document === "undefined") return baselinePct / 100 * pageHeightPx - fontSizePx;
+  const ctx = document.createElement("canvas").getContext("2d");
+  if (!ctx) return baselinePct / 100 * pageHeightPx - fontSizePx;
+  ctx.font = `${fontSizePx}px ${cssFamily}`;
+  const m = ctx.measureText("Hgj");
+  const asc = m.fontBoundingBoxAscent || m.actualBoundingBoxAscent || fontSizePx * .8;
+  const desc = m.fontBoundingBoxDescent || m.actualBoundingBoxDescent || fontSizePx * .2;
+  return baselinePct / 100 * pageHeightPx - (fontSizePx * 1.2 - asc - desc) / 2 - asc;
+}
 export type PdfMeasuredGlyph = { text: string; width: number };
 /** Wraps at whitespace first, then safely breaks long words. No text is discarded. */
 export function wrapPdfGlyphs<T extends PdfMeasuredGlyph>(glyphs: T[], maxWidth: number): T[][] {

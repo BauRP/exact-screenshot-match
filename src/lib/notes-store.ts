@@ -30,6 +30,11 @@ export type PdfTextOverlay = {
   eraseYPct?: number;
   eraseWidthPct?: number;
   eraseHeightPct?: number;
+  sourceFontId?: string;
+  sourceFontName?: string;
+  sourceFontCss?: string;
+  sourceFontExact?: boolean;
+  sourceBaselinePct?: number;
   /** Inline text formatting (PDF points for the size). */
   fontSize?: number;
   fontFamily?: string;

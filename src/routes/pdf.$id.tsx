@@ -28,7 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { hasPdfDraftChanges, hasSaveablePdfContent } from "@/lib/pdf-edit-guard";
 import { PdfMarginRuler, type PdfMargins } from "@/components/pdf/PdfMarginRuler";
-import { normalizePdfMargins, wrapPdfGlyphs } from "@/lib/pdf-text-layout";
+import { normalizePdfMargins, wrapPdfGlyphs, pdfBaselineTopPx } from "@/lib/pdf-text-layout";
 import { displayToSourceRect, pdfTextBounds, sourceOverlayTransform } from "@/lib/pdf-page-geometry";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ColorGrid, PALETTE } from "@/components/ColorGrid";
@@ -93,7 +93,18 @@ type TextItemBox = {
   fontFamily: string;
   bold: boolean;
   italic: boolean;
+  sourceFontId: string;
+  sourceFontName: string;
+  sourceFontCss?: string;
+  sourceFontExact: boolean;
+  sourceBaselinePct: number;
 };
+
+/** Only actual PDF core fonts have a reproducible standard-font export path. */
+function isCorePdfFont(name: string): boolean {
+  const clean = name.replace(/^[A-Z]{6}\\+/, "");
+  return /^(?:Helvetica|Times(?:-Roman|-Bold|-Italic|-BoldItalic)?|Courier(?:-Bold|-Oblique|-BoldOblique)?)$/i.test(clean);
+}
 
 /** Maps a PDF font (name + generic family) onto the closest editor font. */
 function detectFont(rawName: string, family: string): { fontFamily: string; bold: boolean; italic: boolean } {
@@ -313,19 +324,30 @@ function PdfViewerScreen() {
           const bounds = pdfTextBounds(tx,width,height,viewport.width,viewport.height);
           const style = (content.styles ?? {})[item.fontName] ?? {};
           let realName = String(item.fontName ?? "");
+          let sourceFontCss: string | undefined;
+          let embedded = false;
           try {
             if (pdfPage.commonObjs.has(item.fontName)) {
               const fontObj = pdfPage.commonObjs.get(item.fontName);
-              realName = String(fontObj?.name ?? fontObj?.loadedName ?? realName);
+              realName = String(fontObj?.name ?? realName);
+              embedded = Boolean(fontObj?.data?.byteLength ?? fontObj?.data?.length);
+              const loaded = String(fontObj?.loadedName ?? "");
+              if (embedded && /^[A-Za-z0-9_-]{1,100}$/.test(loaded)) sourceFontCss = `"${loaded}"`;
             }
           } catch {
-            // Font object not resolved yet — fall back to the style family.
+            // An unavailable source font is never silently treated as an exact match.
           }
           const detected = detectFont(realName, String(style.fontFamily ?? ""));
+          const unrotatedTx = pdfjs.Util.transform(sourceViewport.transform, item.transform);
           return {
             // Real rendered size = on-page glyph height / page scale (includes page CTM).
             fontSize: roundSize(height / (viewport.scale || 1)),
             ...detected,
+            sourceFontId: String(item.fontName ?? ""),
+            sourceFontName: realName,
+            sourceFontCss,
+            sourceFontExact: embedded || isCorePdfFont(realName),
+            sourceBaselinePct: unrotatedTx[5] / sourceViewport.height * 100,
             text: item.str,
             leftPct: bounds.x,
             topPct: bounds.y,
@@ -525,7 +547,11 @@ function PdfViewerScreen() {
   const rerender = useCallback((runs: FullRun[], start: number, end: number) => {
     const node = editingNodeRef.current;
     if (!node) return;
-    renderRunsInto(node, runs, viewScaleRef.current);
+    const active = editingOverlayRef.current;
+    renderRunsInto(node, runs, viewScaleRef.current, {
+      fontFamily: active?.fontFamily, cssFamily: active?.sourceFontCss,
+      bold: active?.bold, italic: active?.italic,
+    });
     renderedRunsRef.current = runs;
     node.focus({ preventScroll: true });
     setSelectionOffsets(node, start, end);
@@ -548,6 +574,14 @@ function PdfViewerScreen() {
       const sel = selRef.current ?? { start: len, end: len };
       const current = activeStyle ?? styleAt(runs, sel.start, baseStyle(overlay));
       const patch = make(current, runs, sel.start, sel.end);
+      if (patch.fontFamily !== undefined && overlay.sourceFontExact === false) {
+        // An explicit choice permits replacing a PDF font that cannot be exported exactly.
+        patchOverlay(overlay.id, {
+          sourceFontId: undefined, sourceFontCss: undefined,
+          sourceFontExact: true, sourceFontName: undefined,
+        });
+        toast.info("Исходный шрифт будет заменён выбранным.");
+      }
       // Persist chosen color/font/size as the active typing style for later boxes too.
       const { bold: _b, italic: _i, underline: _u, ...sticky } = patch;
       if (Object.keys(sticky).length) setDraftStyle((prev) => ({ ...prev, ...sticky }));
@@ -618,7 +652,10 @@ function PdfViewerScreen() {
       if (!node || editingNodeRef.current === node) return;
       editingNodeRef.current = node;
       const runs = getRuns(overlay);
-      renderRunsInto(node, runs, viewScaleRef.current);
+      renderRunsInto(node, runs, viewScaleRef.current, {
+        fontFamily: overlay.fontFamily, cssFamily: overlay.sourceFontCss,
+        bold: overlay.bold, italic: overlay.italic,
+      });
       renderedRunsRef.current = runs;
       // Avoid scrolling/jumping to the top when activating an existing PDF line.
       node.focus({ preventScroll: true });
@@ -677,7 +714,11 @@ function PdfViewerScreen() {
         const next = insertAt(current, offsets.start, event.data, pending.style);
         const caret = offsets.start + event.data.length;
         pendingRef.current = { offset: caret, style: pending.style };
-        renderRunsInto(node, next, viewScaleRef.current);
+        const liveFace = editingOverlayRef.current ?? overlay;
+        renderRunsInto(node, next, viewScaleRef.current, {
+          fontFamily: liveFace.fontFamily, cssFamily: liveFace.sourceFontCss,
+          bold: liveFace.bold, italic: liveFace.italic,
+        });
         renderedRunsRef.current = next;
         setSelectionOffsets(node, caret, caret);
         selRef.current = { start: caret, end: caret };
@@ -762,6 +803,11 @@ function PdfViewerScreen() {
         eraseYPct: sourceBox.y,
         eraseWidthPct: sourceBox.width,
         eraseHeightPct: sourceBox.height,
+        sourceFontId: hit.sourceFontId,
+        sourceFontName: hit.sourceFontName,
+        sourceFontCss: hit.sourceFontCss,
+        sourceFontExact: hit.sourceFontExact,
+        sourceBaselinePct: hit.sourceBaselinePct,
         text: hit.text,
         cover: true,
         // Inspect the tapped text's own size; the toolbar value is never applied here.
@@ -771,6 +817,8 @@ function PdfViewerScreen() {
         italic: hit.italic,
         color: DEFAULT_PDF_TEXT_COLOR,
       };
+      if (!hit.sourceFontExact)
+        toast.info("Исходный PDF-шрифт недоступен. Выберите замену в панели перед вводом.", { duration: 5500 });
       // Temporarily place a caret without changing the source PDF.
       draftStartRef.current = overlay;
       setDraftOverlay(overlay);
@@ -843,6 +891,33 @@ function PdfViewerScreen() {
       return embedded;
     };
 
+    const resolvedFontCache = new Map<string, any>();
+    const getPdfOriginalFont = async (overlay: PdfTextOverlay) => {
+      if (!overlay.sourceFontId) return null;
+      if (!overlay.sourceFontExact || !pdfDoc)
+        throw new Error("Исходный шрифт PDF недоступен. Выберите новый шрифт в панели.");
+      const key = `${overlay.page}:${overlay.sourceFontId}`;
+      if (resolvedFontCache.has(key)) return resolvedFontCache.get(key);
+      const originalPage = await pdfDoc.getPage(overlay.page);
+      await originalPage.getTextContent();
+      const fontObj = originalPage.commonObjs.has(overlay.sourceFontId)
+        ? originalPage.commonObjs.get(overlay.sourceFontId) : null;
+      const data = fontObj?.data;
+      let exactFont;
+      if (data && (data.byteLength || data.length)) {
+        try {
+          exactFont = await document.embedFont(data instanceof Uint8Array ? data : new Uint8Array(data), { subset: true });
+        } catch {
+          throw new Error("Не удалось встроить исходный шрифт PDF. Выберите другой шрифт.");
+        }
+      } else if (isCorePdfFont(overlay.sourceFontName ?? "")) {
+        exactFont = await embedStandard(standardFontKey(overlay.fontFamily, !!overlay.bold, !!overlay.italic));
+      } else {
+        throw new Error("PDF не содержит доступных данных шрифта. Выберите другой шрифт.");
+      }
+      resolvedFontCache.set(key, exactFont);
+      return exactFont;
+    };
     const pages = document.getPages();
     for (const overlay of overlays) {
       const target = pages[overlay.page - 1];
@@ -855,15 +930,20 @@ function PdfViewerScreen() {
 
       // Validate and select an embeddable font for every character BEFORE
       // masking the original text. Unsupported scripts abort safely.
+      const exactFont = overlay.sourceFontId ? await getPdfOriginalFont(overlay) : null;
       const prepared = [];
       for (const run of runs) {
-        const original = await embedStandard(standardFontKey(run.fontFamily, run.bold, run.italic));
+        const original = exactFont && run.fontFamily === overlay.fontFamily &&
+          run.bold === !!overlay.bold && run.italic === !!overlay.italic
+            ? exactFont : await embedStandard(standardFontKey(run.fontFamily, run.bold, run.italic));
         const portions: Array<{ font: any; text: string }> = [];
         for (const character of run.text) {
           let chosen = original;
           try {
             original.encodeText(character);
           } catch {
+            if (exactFont && original === exactFont)
+              throw new Error("Исходный шрифт не содержит введённый символ. Выберите другой шрифт.");
             if (!/[\u0400-\u052f]/u.test(character)) {
               throw new Error("This PDF includes characters unsupported by the embedded export fonts.");
             }
@@ -898,8 +978,11 @@ function PdfViewerScreen() {
       }
       const maxWidth = Math.max(1, (overlay.widthPct / 100) * width);
       const lines = wrapPdfGlyphs(glyphs, maxWidth);
-      const lineAdvance = maxSize * 1.25;
-      const lastBaseline = y + boxHeight - maxSize * 0.8 - (lines.length - 1) * lineAdvance;
+      const lineAdvance = maxSize * 1.2;
+      const firstBaseline = overlay.sourceBaselinePct !== undefined
+        ? height - overlay.sourceBaselinePct / 100 * height
+        : height - overlay.yPct / 100 * height - maxSize * .94;
+      const lastBaseline = firstBaseline - (lines.length - 1) * lineAdvance;
       if (lastBaseline < 0) {
         throw new Error("Текст не помещается на странице PDF. Увеличьте область или уменьшите размер.");
       }
@@ -917,7 +1000,7 @@ function PdfViewerScreen() {
       }
 
       for (let lineNo = 0; lineNo < lines.length; lineNo++) {
-        const baseline = y + boxHeight - maxSize * 0.8 - lineNo * lineAdvance;
+        const baseline = firstBaseline - lineNo * lineAdvance;
         let cursor = x;
         for (const glyph of lines[lineNo]) {
           const {r,g,b} = hexToRgb(glyph.run.color);
@@ -1511,8 +1594,13 @@ function PdfViewerScreen() {
               const sizePx = Math.max((overlay.fontSize ?? DEFAULT_PDF_FONT_SIZE) * viewScale, 6);
               const untouchedSource = overlay.cover && draftOverlay?.id === overlay.id &&
                 !!draftStartRef.current && !hasPdfDraftChanges(draftStartRef.current, overlay);
+              const baselineTop = overlay.sourceBaselinePct === undefined ? null : pdfBaselineTopPx(
+                overlay.sourceBaselinePct, unrotatedPageSize.height, sizePx,
+                overlay.sourceFontCss ?? fontCss(overlay.fontFamily),
+              );
               const coverX = (overlay.eraseXPct ?? overlay.xPct) - overlay.xPct;
               const coverY = (overlay.eraseYPct ?? overlay.yPct) - overlay.yPct;
+              const actualTopPx = baselineTop ?? overlay.yPct / 100 * unrotatedPageSize.height;
               return (
                 <div
                   key={overlay.id}
@@ -1530,15 +1618,15 @@ function PdfViewerScreen() {
                   className="absolute overflow-visible whitespace-pre-wrap break-words text-left"
                   style={{
                     left: `${overlay.xPct}%`,
-                    top: `${overlay.yPct}%`,
+                    top: baselineTop === null ? `${overlay.yPct}%` : `${baselineTop}px`,
                     width: `${overlay.widthPct}%`,
                     minHeight: `${overlay.heightPct}%`,
                     pointerEvents: "auto",
                     fontSize: `${sizePx}px`,
                     lineHeight: 1.2,
-                    fontFamily: fontCss(overlay.fontFamily),
-                    fontWeight: overlay.bold ? 700 : 400,
-                    fontStyle: overlay.italic ? "italic" : "normal",
+                    fontFamily: overlay.sourceFontCss ?? fontCss(overlay.fontFamily),
+                    fontWeight: overlay.sourceFontCss ? 400 : overlay.bold ? 700 : 400,
+                    fontStyle: overlay.sourceFontCss ? "normal" : overlay.italic ? "italic" : "normal",
                     textDecoration: overlay.underline ? "underline" : "none",
                     color: overlay.color ?? DEFAULT_PDF_TEXT_COLOR,
                   }}
@@ -1546,7 +1634,7 @@ function PdfViewerScreen() {
                   {overlay.cover && !untouchedSource && (
                     <span aria-hidden="true" className="pointer-events-none absolute bg-white" style={{
                       left: `${coverX / 100 * unrotatedPageSize.width - 1}px`,
-                      top: `${coverY / 100 * unrotatedPageSize.height - 1}px`,
+                      top: `${(overlay.eraseYPct ?? overlay.yPct) / 100 * unrotatedPageSize.height - actualTopPx - 1}px`,
                       width: `${(overlay.eraseWidthPct ?? overlay.widthPct) / 100 * unrotatedPageSize.width + 2}px`,
                       height: `${(overlay.eraseHeightPct ?? overlay.heightPct) / 100 * unrotatedPageSize.height + 2}px`,
                     }} />
@@ -1554,12 +1642,11 @@ function PdfViewerScreen() {
                   {isEditing ? (
                     <span
                       ref={(node) => mountEditor(node, overlay)}
-                      contentEditable
+                      contentEditable={overlay.sourceFontExact !== false}
                       suppressContentEditableWarning
                       spellCheck={false}
                       className="relative block w-full min-h-[1em] whitespace-pre-wrap break-words bg-transparent outline-none"
                       style={{
-                        paddingTop: overlay.cover ? `${sizePx * 0.08}px` : undefined,
                         caretColor: overlay.color ?? DEFAULT_PDF_TEXT_COLOR,
                         // Preserve the exact glyphs from the original PDF on tap;
                         // only the caret is drawn until real text edits are made.
@@ -1579,10 +1666,12 @@ function PdfViewerScreen() {
                       }}
                     />
                   ) : (
-                    <span className="relative block w-full whitespace-pre-wrap break-words"
-                      style={{ paddingTop: overlay.cover ? `${sizePx * 0.08}px` : undefined }}>
+                    <span className="relative block w-full whitespace-pre-wrap break-words">
                       {getRuns(overlay).map((run, index) => (
-                        <span key={index} style={cssToReact(runCss(run, viewScale))}>
+                        <span key={index} style={cssToReact(runCss(run, viewScale, {
+                          fontFamily: overlay.fontFamily, cssFamily: overlay.sourceFontCss,
+                          bold: overlay.bold, italic: overlay.italic,
+                        }))}>
                           {run.text}
                         </span>
                       ))}

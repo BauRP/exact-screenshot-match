@@ -139,12 +139,15 @@ export function compactRuns(overlay: PdfTextOverlay, runs: FullRun[]): PdfTextRu
   });
 }
 
-export function runCss(run: RunStyle, viewScale: number): Record<string, string> {
+export type PdfSourceFace = { fontFamily?: string; cssFamily?: string; bold?: boolean; italic?: boolean };
+export function runCss(run: RunStyle, viewScale: number, source?: PdfSourceFace): Record<string, string> {
+  const usesSource = !!source?.cssFamily && source.fontFamily === run.fontFamily &&
+    !!source.bold === run.bold && !!source.italic === run.italic;
   return {
     "font-size": `${Math.max(run.fontSize * viewScale, 6)}px`,
-    "font-family": fontCss(run.fontFamily),
-    "font-weight": run.bold ? "700" : "400",
-    "font-style": run.italic ? "italic" : "normal",
+    "font-family": usesSource ? source!.cssFamily! : fontCss(run.fontFamily),
+    "font-weight": usesSource ? "400" : run.bold ? "700" : "400",
+    "font-style": usesSource ? "normal" : run.italic ? "italic" : "normal",
     "text-decoration": run.underline ? "underline" : "none",
     color: run.color,
   };
@@ -156,10 +159,10 @@ function escapeHtml(text: string) {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export function renderRunsInto(node: HTMLElement, runs: FullRun[], viewScale: number) {
+export function renderRunsInto(node: HTMLElement, runs: FullRun[], viewScale: number, source?: PdfSourceFace) {
   node.innerHTML = runs
     .map((run, i) => {
-      const css = Object.entries(runCss(run, viewScale))
+      const css = Object.entries(runCss(run, viewScale, source))
         .map(([k, v]) => `${k}:${v.replace(/"/g, "'")}`)
         .join(";");
       return `<span data-r="${i}" style="${css}">${escapeHtml(run.text)}</span>`;
