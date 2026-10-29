@@ -69,6 +69,12 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
                 response.put("path", Uri.fromFile(target).toString());
                 response.put("width", bitmap.getWidth());
                 response.put("height", bitmap.getHeight());
+                // No OCR is used for this preview; this local-only analysis
+                // is performed on the already decoded small image.
+                VisualScriptDetector.Result detected = VisualScriptDetector.classify(bitmap);
+                response.put("detectedScript",detected.script);
+                response.put("scriptVotes",detected.votes);
+                response.put("scriptComponents",detected.compared);
                 call.resolve(response);
             } catch (OutOfMemoryError e) {
                 if (target != null) target.delete();

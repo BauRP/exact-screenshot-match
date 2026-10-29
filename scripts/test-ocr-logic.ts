@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { ocrTextToEditorHtml, buildOcrNoteDraft, truncateOcrTitle } from "../src/lib/ocr-note";
 import { composeRecognizedText, hasConflictingNativeOcrText, extractNativeTextAlternative, recoverNativeFullTextForReview } from "../src/lib/ocr-text";
-import { ocrScanPlan, selectedOcrScanPlan, readOcrScanPreferences, saveOcrScanPreferences, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, confidentOcrPrimaryScript, cyrillicLanguageForScan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
+import { ocrScanPlan, selectedOcrScanPlan, readOcrScanPreferences, saveOcrScanPreferences, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, confidentOcrPrimaryScript, visualOcrScanPlan, cyrillicLanguageForScan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
 import { linesFromMlKit, linesFromMlKitBounded, mlKitReportedLanguages } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
 import { OcrScanCoverage } from "../src/lib/ocr-coverage";
@@ -911,3 +911,14 @@ assert.equal(confidentOcrPrimaryScript([
   {script:"cyrillic",text:"Всё"},
 ]),null);
 console.log("Automatic OCR fast path stops only with strong single-script evidence: passed.");
+
+
+assert.deepEqual(visualOcrScanPlan("korean"),["korean"]);
+assert.deepEqual(visualOcrScanPlan("devanagari"),["devanagari"]);
+assert.deepEqual(visualOcrScanPlan("japanese"),["japanese","chinese"]);
+assert.deepEqual(visualOcrScanPlan("han"),["chinese","japanese"]);
+assert.deepEqual(visualOcrScanPlan("cyrillic"),["cyrillic","latin"]);
+assert.deepEqual(visualOcrScanPlan("latin"),["latin","cyrillic"]);
+assert.equal(visualOcrScanPlan("unknown"),null);
+assert.equal(visualOcrScanPlan(""),null);
+console.log("Image-first detector maps scripts to compatible bundled engines with fallback: passed.");

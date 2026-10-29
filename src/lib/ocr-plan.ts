@@ -166,3 +166,22 @@ export function confidentOcrPrimaryScript(
     });
   return best.length===1?best[0]:null;
 }
+
+
+/** Image-first hint from VisualScriptDetector, before text recognition.
+ * Unknown or unreliable results keep the original six-engine OCR fallback.
+ * Han glyphs can be Chinese OR Japanese, so both are always checked.
+ * Latin/Cyrillic share letter shapes, so verify using BOTH recognizers.
+ * Native visual hints never turn off manual review of suspicious results.
+ */
+export function visualOcrScanPlan(script: string): OcrScript[] | null {
+  switch(script) {
+    case "latin": return ["latin","cyrillic"];
+    case "cyrillic": return ["cyrillic","latin"];
+    case "japanese": return ["japanese","chinese"];
+    case "han": return ["chinese","japanese"];
+    case "korean": return ["korean"];
+    case "devanagari": return ["devanagari"];
+    default: return null;
+  }
+}

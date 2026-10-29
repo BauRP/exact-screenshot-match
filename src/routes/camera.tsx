@@ -18,7 +18,7 @@ import { chooseLocalOcrImagePath, reusableOcrImagePath, safeLocalOcrPreviewUrl }
 import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText, extractNativeTextAlternative, recoverNativeFullTextForReview, type OcrNativeTextAlternative } from "@/lib/ocr-text";
-import { ocrScanPlan, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, confidentOcrPrimaryScript, cyrillicLanguageForScan, type OcrScanRequest } from "@/lib/ocr-plan";
+import { ocrScanPlan, AUTO_SCAN_ORDER, visualOcrScanPlan, prioritizeRemainingOcrScripts, confidentOcrPrimaryScript, cyrillicLanguageForScan, type OcrScanRequest } from "@/lib/ocr-plan";
 
 export const Route = createFileRoute("/camera")({
   head: () => ({ meta: [
@@ -105,7 +105,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
   const mlkit: NativeTextRecognitionBundle = await import("@capacitor-mlkit/text-recognition");
   const { Capacitor, registerPlugin } = await import("@capacitor/core");
   const native = Capacitor.getPlatform() === "android"
-    ? registerPlugin<{ recognize(input: {path:string; language:string}): Promise<{text:string; confidence:number; truncatedGeometry?:boolean; lines?: Omit<OcrLine, "script">[]}>; prepareImage(input:{path:string}):Promise<{path:string;width:number;height:number}>; releaseImage(input:{path:string}):Promise<void> }>("OfflineCyrillicOcr")
+    ? registerPlugin<{ recognize(input: {path:string; language:string}): Promise<{text:string; confidence:number; truncatedGeometry?:boolean; lines?: Omit<OcrLine, "script">[]}>; prepareImage(input:{path:string}):Promise<{path:string;width:number;height:number;detectedScript?:string;scriptVotes?:number;scriptComponents?:number}>; releaseImage(input:{path:string}):Promise<void> }>("OfflineCyrillicOcr")
     : null;
   const scripts: Array<{id:OcrScript; script: (typeof mlkit.Script)[keyof typeof mlkit.Script]; label: string}> = [
     {id:"latin",script:mlkit.Script.Latin,label:"Латиница"},
@@ -122,7 +122,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       const coverage = new OcrScanCoverage(scanPlan);
       // Track all native work, including operations that outlive the UI deadline.
       const outstanding: Promise<unknown>[] = [];
-      let prepared: {path:string;width:number;height:number} | null = null;
+      let prepared: {path:string;width:number;height:number;detectedScript?:string;scriptVotes?:number;scriptComponents?:number} | null = null;
       let timedOut = false;
       const nativeAlternatives: OcrNativeTextAlternative[] = [];
       // Keep the original full ML Kit text separately: composeRecognizedText
@@ -151,6 +151,15 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
               native!.releaseImage({path:late.path}).catch(console.warn),
               () => undefined));
             throw error;
+          }
+        }
+        // Image-first script hint can avoid running six OCR engines. Never
+        // trust a weak/unknown classifier; use the existing safe full plan.
+        if(mode==="auto"&&prepared?.detectedScript) {
+          const selected=visualOcrScanPlan(prepared.detectedScript);
+          if(selected) {
+            scanPlan.splice(0,scanPlan.length,...selected);
+            onProgress("Определена письменность: проверяем подходящую модель");
           }
         }
         timeBudget = new OcrTimeBudget(scanPlan.length > 1 ? 60000 : 25000);
