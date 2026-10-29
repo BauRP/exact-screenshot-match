@@ -152,7 +152,19 @@ jobs:
           # The normal Gradle configuration permits a 4 GiB heap; running that
           # alongside an emulator can exhaust a GitHub runner (exit 137).
           # Constrain only the test invocation; keep APK compilation unchanged.
-          script: adb shell svc wifi disable && adb shell svc data disable && cd android && test -x ./gradlew && ./gradlew :app:connectedDebugAndroidTest --no-daemon --no-parallel --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8" --stacktrace
+          # Clearly identify the command that fails on API 26 (previously 137
+          # before Gradle printed anything). Do NOT interpret zero test reports
+          # as successful tests. Keep offline verification for each Android API.
+          script: >-
+            set -ex;
+            echo WAVE_CHECKPOINT_ANDROID_API_${{ matrix.api-level }}_ADB;
+            adb shell getprop ro.build.version.sdk;
+            echo WAVE_CHECKPOINT_WIFI_DISABLE;
+            adb shell svc wifi disable;
+            echo WAVE_CHECKPOINT_DATA_DISABLE;
+            adb shell svc data disable;
+            echo WAVE_CHECKPOINT_GRADLE_START;
+            cd android && test -x ./gradlew && ./gradlew :app:connectedDebugAndroidTest --no-daemon --no-parallel --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8" --stacktrace
 
       - name: Record actual Android OCR instrumentation results
         if: always()
