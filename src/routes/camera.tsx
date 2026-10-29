@@ -18,7 +18,7 @@ import { chooseLocalOcrImagePath, reusableOcrImagePath, safeLocalOcrPreviewUrl }
 import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText, extractNativeTextAlternative, recoverNativeFullTextForReview, type OcrNativeTextAlternative } from "@/lib/ocr-text";
-import { ocrScanPlan, selectedOcrScanPlan, AUTO_SCAN_ORDER, readOcrScanPreferences, saveOcrScanPreferences, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, type OcrMode, type OcrScanRequest } from "@/lib/ocr-plan";
+import { ocrScanPlan, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, cyrillicLanguageForScan, type OcrScanRequest } from "@/lib/ocr-plan";
 
 export const Route = createFileRoute("/camera")({
   head: () => ({ meta: [
@@ -337,19 +337,12 @@ function CameraPage() {
   const latestReviewRef = useRef({text:"",edited:false});
   const [partialMissingScripts, setPartialMissingScripts] = useState<readonly OcrScript[]>([]);
   const [retryImagePath, setRetryImagePath] = useState<string | null>(null);
-  const [ocrMode, setOcrMode] = useState<OcrMode>("auto");
-  const [selectedOcrScripts, setSelectedOcrScripts] = useState<OcrScript[]>(["latin","cyrillic"]);
-  const [preferencesReady, setPreferencesReady] = useState(false);
+  // The only visible OCR mode is automatic.
   const [draftPersistenceWarning, setDraftPersistenceWarning] = useState(false);
-  const [selectionError, setSelectionError] = useState<string | null>(null);
   const [ocrStage, setOcrStage] = useState("");
 
   useEffect(() => {
     mountedRef.current = true;
-    const preferences=readOcrScanPreferences();
-    setOcrMode(preferences.mode);
-    setSelectedOcrScripts(preferences.scripts);
-    setPreferencesReady(true);
     const previous = readPendingOcrDraft();
     if (previous) {
       draftGateRef.current.arm();
@@ -373,10 +366,6 @@ function CameraPage() {
       pickerCleanupRef.current?.();
     };
   }, []);
-
-  useEffect(() => {
-    if (preferencesReady) saveOcrScanPreferences({mode:ocrMode,scripts:selectedOcrScripts});
-  },[preferencesReady,ocrMode,selectedOcrScripts]);
 
   useEffect(() => {
     if (!partialOcrText || savedNoteId || !draftGateRef.current.canWrite) return;
@@ -518,8 +507,7 @@ function CameraPage() {
       setModalOpen(true);
       return;
     }
-    const scanRequest = retryScripts ?? (ocrMode === "custom" ? selectedOcrScanPlan(selectedOcrScripts) : ocrMode);
-    setSelectionError(null);
+    const scanRequest: OcrScanRequest = retryScripts ?? "auto";
     const attemptedScripts = ocrScanPlan(scanRequest);
     inFlightRef.current = true;
     const operationId = operationIdRef.current + 1;
@@ -686,17 +674,6 @@ function CameraPage() {
     return true;
   };
 
-  const retryManualOnSamePhoto = () => {
-    if (!retryImagePath || inFlightRef.current || status !== "error") return;
-    if (ocrMode === "auto") {
-      toast.error("Для повторной проверки выберите язык в списке.");
-      return;
-    }
-    if (!applyUserCorrectionsBeforeRetry()) return;
-    setModalOpen(false);
-    void scanNativeImage("gallery",retryImagePath);
-  };
-
   const retryUnfinishedOnSamePhoto = () => {
     if (!retryImagePath || inFlightRef.current || status !== "error" ||
         !partialOcrText || !partialMissingScripts.length) return;
@@ -740,10 +717,6 @@ function CameraPage() {
 
   const startCapture = (source: CaptureSource) => {
     if (inFlightRef.current || partialOcrText) return;
-    if (ocrMode === "custom" && selectedOcrScripts.length === 0) {
-      setSelectionError("Выберите хотя бы один язык для распознавания.");
-      return;
-    }
     setModalOpen(false);
     if (isNativePlatform()) {
       void scanNativeImage(source);
@@ -827,13 +800,6 @@ function CameraPage() {
     ? safeLocalOcrPreviewUrl(retryImagePath, Capacitor.convertFileSrc)
     : null;
   const busy = status === "preparing" || status === "picking" || status === "scanning";
-  const toggleSelectedLanguage = (script: OcrScript) => {
-    if (busy) return;
-    setSelectedOcrScripts(current => current.includes(script)
-      ? current.filter(value => value !== script)
-      : selectedOcrScanPlan([...current,script]));
-    setSelectionError(null);
-  };
   const savePartialLabel = reviewReason === "save-retry"
     ? "Повторить сохранение распознанного текста"
     : partialMissingScripts.length
@@ -885,43 +851,11 @@ function CameraPage() {
           </div>
         </div>
 
-        <label className="mb-3 flex flex-col gap-1 text-xs text-muted-foreground" htmlFor="ocr-language">
-          Режим распознавания (автоматически проверяются все языки)
-          <select id="ocr-language" value={ocrMode} disabled={busy} onChange={(e) => setOcrMode(e.target.value as OcrMode)} className="rounded-lg border border-border bg-background p-2 text-foreground">
-            <option value="auto">Определять автоматически</option>
-            <option value="custom">Проверить несколько выбранных языков</option>
-            <option value="cyrillic">Русский + Казахский</option>
-            <option value="russian">Только русский — точная проверка</option>
-            <option value="kazakh">Только казахский — точная проверка</option>
-            <option value="latin">Латиница</option>
-            <option value="chinese">Китайский</option>
-            <option value="japanese">Японский</option>
-            <option value="korean">Корейский</option>
-            <option value="devanagari">Хинди и другие на деванагари</option>
-          </select>
-        </label>
-        {ocrMode === "custom" && (
-          <div role="group" aria-label="Языки для распознавания" className="mb-3 w-full max-w-sm rounded-xl border border-border bg-card p-3 text-left">
-            <p className="mb-2 text-xs text-muted-foreground">
-              Проверяются только выбранные языковые модели, уже встроенные в приложение.
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {AUTO_SCAN_ORDER.map(script => (
-                <label key={script} className="flex items-center gap-2 text-xs text-foreground">
-                  <input type="checkbox" checked={selectedOcrScripts.includes(script)}
-                    disabled={busy} onChange={() => toggleSelectedLanguage(script)} />
-                  {OCR_SCRIPT_LABELS[script]}
-                </label>
-              ))}
-            </div>
-            {selectionError && <p role="alert" className="mt-2 text-xs text-destructive">{selectionError}</p>}
-          </div>
-        )}
         <p className="mx-auto max-w-xs px-4 text-center text-xs leading-relaxed text-muted-foreground">
-          Распознавание текста на разных языках — без отправки фото на сервер
+          Язык текста определяется автоматически. Никаких загрузок моделей и отправки фото.
         </p>
         <h2 className="mt-3 px-4 text-center font-display text-base font-semibold leading-snug">
-          {busy ? (ocrStage || t("ocr_scanning")) : "Выберите фотографию с текстом, чтобы извлечь его и добавить в заметку"}
+          {busy ? (ocrStage || t("ocr_scanning")) : "Добавьте фотографию — язык распознавания выберется автоматически"}
         </h2>
         {error && <p className="mt-3 max-w-sm text-sm text-destructive">{error}</p>}
         {draftPersistenceWarning && partialOcrText && <p role="alert" className="mt-2 max-w-sm text-xs text-destructive">
@@ -944,7 +878,7 @@ function CameraPage() {
           className="mt-6 h-11 rounded-xl bg-gradient-to-r from-primary to-primary-glow px-6 text-sm text-primary-foreground shadow-xl hover:opacity-95"
         >
           <ImagePlus className="mr-2 h-5 w-5" />
-          {savedNoteId ? "Открыть сохранённую заметку" : partialOcrText ? savePartialLabel : t("camera_pick")}
+          {savedNoteId ? "Открыть сохранённую заметку" : partialOcrText ? savePartialLabel : "Добавить фото"}
         </Button>
       </main>
 
@@ -1091,14 +1025,6 @@ function CameraPage() {
                 Повторить недостающие языки ({partialMissingScripts.length})
               </Button>
             )}
-            {retryImagePath && !savedNoteId && (
-              <Button type="button" disabled={busy || ocrMode === "auto" || (ocrMode === "custom" && !selectedOcrScripts.length)}
-                onClick={retryManualOnSamePhoto}
-                variant="outline"
-                className="h-9 rounded-xl text-xs font-semibold">
-                Повторить на этом фото с выбранным языком
-              </Button>
-            )}
             <Button
               type="button"
               disabled={busy || Boolean(partialOcrText)}
@@ -1106,7 +1032,7 @@ function CameraPage() {
               onClick={() => startCapture("camera")}
             >
               <CameraIcon className="mr-1.5 h-4 w-4" />
-              {t("camera_open")}
+              Открыть камеру
             </Button>
             <Button
               type="button"
@@ -1116,7 +1042,7 @@ function CameraPage() {
               onClick={() => startCapture("gallery")}
             >
               <ImagePlus className="mr-1.5 h-4 w-4" />
-              {t("camera_pick")}
+              Выбрать из галереи
             </Button>
             </>
             )}

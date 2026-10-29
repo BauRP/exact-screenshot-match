@@ -22,6 +22,7 @@ import { sendFeedback } from "@/lib/feedback.functions";
 import { useAdDiagnostic, requestAdRetry } from "@/lib/ad-diagnostics";
 import { createFullBackup, restoreFullBackup, shareFullBackup } from "@/lib/backup";
 import { AppHeader } from "@/components/AppHeader";
+import { LanguagePickerSheet } from "@/components/LanguagePickerSheet";
 import { BottomNav } from "@/components/BottomNav";
 import { useTheme, setTheme } from "@/lib/theme";
 import {
@@ -87,32 +88,6 @@ function Toggle({
   );
 }
 
-function NativeSelect({
-  value,
-  onChange,
-  options,
-  label,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-  label: string;
-}) {
-  return (
-    <select
-      aria-label={label}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-8 max-w-[10rem] rounded-full border border-border bg-secondary/60 px-3 text-xs font-medium text-foreground outline-none"
-    >
-      {options.map((o) => (
-        <option key={o.value} value={o.value} className="bg-popover text-popover-foreground">
-          {o.label}
-        </option>
-      ))}
-    </select>
-  );
-}
 
 function Modal({
   open,
@@ -353,8 +328,9 @@ function SettingsPage() {
             title={t("ui_language")}
             hint={t("ui_language_hint")}
           >
-            <NativeSelect
-              label={t("ui_language")}
+            <LanguagePickerSheet
+              compact label={t("ui_language")}
+              description="Выберите язык приложения Wave Notes"
               value={language}
               onChange={(v) => setLang(v as Lang)}
               options={LANGUAGES}
