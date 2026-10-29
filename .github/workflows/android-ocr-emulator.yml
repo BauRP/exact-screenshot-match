@@ -28,6 +28,14 @@ on:
       - 'src/components/BottomNav.tsx'
       - 'src/styles.css'
       - 'scripts/write-capacitor-index.mjs'
+      - 'src/routes/editor.$id.tsx'
+      - 'src/routes/pdf.$id.tsx'
+      - 'src/routes/settings.tsx'
+      - 'src/lib/folders-store.ts'
+      - 'src/lib/backup.ts'
+      - 'src/lib/audio-files.ts'
+      - 'src/lib/pdf-fonts.ts'
+      - 'android-overlay/app/src/main/java/app/lovable/supernotes/FeedbackEmailPlugin.java'
       - 'capacitor.config.json'
 
 permissions:
