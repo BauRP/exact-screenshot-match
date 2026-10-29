@@ -117,6 +117,10 @@ function EditorPage() {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  // Recording is not committed to the note until the binary is safely stored.
+  const recordingWriteRef = useRef<Promise<void> | null>(null);
+  const settleRecordingRef = useRef<{ resolve: () => void; reject: (reason?: unknown) => void } | null>(null);
+  const savingRef = useRef(false);
 
   const [currentFontFamily, setCurrentFontFamily] = useState(FONTS[0].value);
   const [currentFontSize, setCurrentFontSize] = useState<number>(18);
@@ -249,8 +253,14 @@ function EditorPage() {
   const handleDiscard = () => navigate({ to: "/" });
 
   /** Checkmark = the one and only commit point. */
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
     try {
+    // Stop MediaRecorder and wait for its final ondataavailable/onstop events.
+    // Without this, a fast checkmark saves HTML before the audio node exists.
+    if (recorderRef.current?.state === "recording") stopRecording();
+    if (recordingWriteRef.current) await recordingWriteRef.current;
     const body = editor?.getHTML() ?? "";
     const plain = (editor?.getText() ?? "").trim();
     const typedTitle = title.trim();
@@ -282,6 +292,8 @@ function EditorPage() {
     } catch (error) {
       console.error("Unable to save note", error);
       alert(error instanceof Error ? error.message : "Не удалось сохранить заметку. Текст остаётся в редакторе.");
+    } finally {
+      savingRef.current = false;
     }
   };
 
@@ -333,6 +345,11 @@ function EditorPage() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       const rec = new MediaRecorder(stream);
+      recordingWriteRef.current = new Promise<void>((resolve, reject) => {
+        settleRecordingRef.current = { resolve, reject };
+      });
+      // Avoid an unhandled rejection when a recording is abandoned without save.
+      void recordingWriteRef.current.catch(() => undefined);
       chunksRef.current = [];
       rec.ondataavailable = (e) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
@@ -342,18 +359,31 @@ function EditorPage() {
           type: rec.mimeType || "audio/webm",
         });
         try {
-          if (blob.size > 0) {
-            const audioId = await saveAudioFile(blob);
-            if (!editor?.isDestroyed) editor?.chain().focus().insertAudioNote(`audiodb:${audioId}`).run();
+          if (blob.size === 0) throw new Error("Аудиозапись пуста");
+          const audioId = await saveAudioFile(blob);
+          if (!editor || editor.isDestroyed) throw new Error("Редактор закрыт до сохранения аудио");
+          if (!editor.chain().focus().insertAudioNote(`audiodb:${audioId}`).run()) {
+            throw new Error("Не удалось добавить аудиозапись в заметку");
           }
+          settleRecordingRef.current?.resolve();
         } catch (error) {
           console.error("Could not save audio recording", error);
+          settleRecordingRef.current?.reject(error);
           alert("Не удалось сохранить аудио. Проверьте свободное место.");
         } finally {
+          settleRecordingRef.current = null;
+          recordingWriteRef.current = null;
           chunksRef.current = [];
           streamRef.current?.getTracks().forEach((t) => t.stop());
           streamRef.current = null;
         }
+      };
+      rec.onerror = () => {
+        settleRecordingRef.current?.reject(new Error("Ошибка MediaRecorder"));
+        settleRecordingRef.current = null;
+        recordingWriteRef.current = null;
+        stream.getTracks().forEach((track) => track.stop());
+        setRecording(false);
       };
       rec.start();
       recorderRef.current = rec;
