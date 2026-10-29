@@ -7,7 +7,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.media.ExifInterface;
+import androidx.exifinterface.media.ExifInterface;
 import android.net.Uri;
 import android.provider.MediaStore;
 import java.io.InputStream;
@@ -239,39 +239,16 @@ public class OcrLocalImageInstrumentedTest {
     }
 
 
-    /** Insert a valid JPEG EXIF APP1/TIFF orientation segment immediately
-     * after SOI, avoiding the buggy Android 8 ExifInterface.saveAttributes
-     * writer. The production image reader is unchanged.
-     */
-    private static void addExifRotate90(File jpegFile) throws Exception {
-        byte[] input = new byte[(int) jpegFile.length()];
-        try (InputStream in = new java.io.FileInputStream(jpegFile)) {
-            int read = 0;
-            while (read < input.length) {
-                int count = in.read(input, read, input.length - read);
-                if (count == -1) break;
-                read += count;
-            }
-            assertEquals("JPEG was truncated", input.length, read);
-        }
-        assertTrue("JPEG has no SOI", input.length > 4 &&
-            (input[0] & 255) == 255 && (input[1] & 255) == 216);
-        byte[] exif = new byte[]{
-            (byte)255, (byte)225, 0, 34,
-            'E', 'x', 'i', 'f', 0, 0,
-            'I', 'I', 42, 0, 8, 0, 0, 0,
-            1, 0,
-            0x12, 0x01, 3, 0, 1, 0, 0, 0, 6, 0, 0, 0,
-            0, 0, 0, 0
-        };
-        try (FileOutputStream output = new FileOutputStream(jpegFile, false)) {
-            output.write(input, 0, 2);
-            output.write(exif);
-            output.write(input, 2, input.length - 2);
-        }
-        assertEquals("EXIF orientation fixture malformed",
+    /** Use AndroidX EXIF writer: Android 8's platform EXIF implementation
+     * rejects or fails to parse some otherwise valid JPEG orientation tags. */
+    private static void addExifRotate90(File photo) throws Exception {
+        ExifInterface exif = new ExifInterface(photo.getAbsolutePath());
+        exif.setAttribute(ExifInterface.TAG_ORIENTATION,
+            String.valueOf(ExifInterface.ORIENTATION_ROTATE_90));
+        exif.saveAttributes();
+        assertEquals("EXIF orientation must round-trip on API 26",
             ExifInterface.ORIENTATION_ROTATE_90,
-            new ExifInterface(jpegFile.getAbsolutePath()).getAttributeInt(
+            new ExifInterface(photo.getAbsolutePath()).getAttributeInt(
                 ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_UNDEFINED));
     }
 
