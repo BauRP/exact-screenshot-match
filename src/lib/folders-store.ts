@@ -125,13 +125,21 @@ export function exportFolderBackup(): { folders: Folder[]; hiddenSystem: string[
   };
 }
 
-export function restoreFolderBackup(folders: Folder[], _hiddenSystem: string[]): void {
+/** Non-destructive restore: include the backed-up system-tab visibility.
+ * Persist changes before publishing to the UI, and rollback a partial write.
+ */
+export function restoreFolderBackup(folders: Folder[], restoredHidden: string[]): void {
   hydrate();
-  if (!Array.isArray(folders) || folders.length > 1000) throw new Error("Invalid folder backup");
+  if (!Array.isArray(folders) || folders.length > 1000 ||
+      !Array.isArray(restoredHidden) || restoredHidden.length > SYSTEM_FOLDERS.length ||
+      restoredHidden.some((id) => typeof id !== "string" || id === "all" ||
+        !SYSTEM_FOLDERS.some((f) => f.id === id))) {
+    throw new Error("Invalid folder or hidden-tab backup");
+  }
   const known = new Set([...SYSTEM_FOLDERS, ...customFolders].map((folder) => folder.id));
   const pending: Folder[] = [];
   for (const folder of folders) {
-    if (!folder || typeof folder.id !== "string" || !/^[\w-]{1,128}$/.test(folder.id) ||
+    if (!folder || typeof folder.id !== "string" || !/^[\\w-]{1,128}$/.test(folder.id) ||
         typeof folder.name !== "string" || folder.name.length > 120) {
       throw new Error("Invalid folder record in backup");
     }
@@ -140,10 +148,25 @@ export function restoreFolderBackup(folders: Folder[], _hiddenSystem: string[]):
       known.add(folder.id);
     }
   }
-  if (pending.length === 0) return;
   const next = [...customFolders, ...pending];
-  // Save first: never tell the UI the folder was restored if persistence failed.
-  localStorage.setItem(FOLDERS_KEY, JSON.stringify(next));
+  // Restoring a ZIP never unhides a tab the current user deliberately hid.
+  const nextHidden = [...new Set([...hiddenSystem, ...restoredHidden])];
+  if (!pending.length && nextHidden.length === hiddenSystem.length) return;
+  const originalFolders = localStorage.getItem(FOLDERS_KEY);
+  const originalHidden = localStorage.getItem(HIDDEN_KEY);
+  try {
+    localStorage.setItem(FOLDERS_KEY, JSON.stringify(next));
+    localStorage.setItem(HIDDEN_KEY, JSON.stringify(nextHidden));
+  } catch (error) {
+    try {
+      if (originalFolders === null) localStorage.removeItem(FOLDERS_KEY);
+      else localStorage.setItem(FOLDERS_KEY, originalFolders);
+      if (originalHidden === null) localStorage.removeItem(HIDDEN_KEY);
+      else localStorage.setItem(HIDDEN_KEY, originalHidden);
+    } catch (rollbackError) { console.error("Folder backup rollback failed", rollbackError); }
+    throw error;
+  }
   customFolders = next;
+  hiddenSystem = nextHidden;
   emit();
 }

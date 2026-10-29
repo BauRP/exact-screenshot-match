@@ -264,15 +264,21 @@ function SettingsPage() {
     if (!topic || !text || fbSending) return;
     setFbSending(true);
     try {
-      const res = await sendFeedback({ data: { topic, text } });
-      // Success toast + modal close only on an explicit 200 OK from Telegram.
-      if (res?.ok) {
+      const { Capacitor, registerPlugin } = await import("@capacitor/core");
+      if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
+        // The offline APK does not include a TanStack feedback server.
+        // Android's email composer sends only after the user confirms.
+        const email = registerPlugin<{ compose(options: { subject: string; message: string }): Promise<void> }>("FeedbackEmail");
+        await email.compose({ subject: topic, message: text });
+        toast.info("Открыта почта. Для доставки предложения нажмите «Отправить».");
+        setFeedbackOpen(false);
+      } else {
+        const res = await sendFeedback({ data: { topic, text } });
+        if (!res?.ok) throw new Error("Feedback service unavailable");
         toast.success(t("fb_sent"));
         setFbTopic("");
         setFbText("");
         setFeedbackOpen(false);
-      } else {
-        toast.error(t("fb_failed"));
       }
     } catch {
       toast.error(t("fb_failed"));

@@ -88,9 +88,11 @@ public class AndroidShellInstrumentedTest {
             // boolean. This distinguishes an actual overlap from CSS width
             // overflow or an old WebView viewport-coordinate discrepancy.
             // Full Tailwind styles must load on old WebViews (not just React).
-            assertEquals("fixed", evaluate(web,
-                "getComputedStyle(document.querySelector('.wave-bottom-nav')).position"));
-            assertEquals("0px", evaluate(web, "getComputedStyle(document.body).marginLeft"));
+            // evaluateJavascript serializes JS strings as JSON (including quotes).
+            assertEquals("fixed", new org.json.JSONTokener(evaluate(web,
+                "getComputedStyle(document.querySelector('.wave-bottom-nav')).position")).nextValue());
+            assertEquals("0px", new org.json.JSONTokener(evaluate(web,
+                "getComputedStyle(document.body).marginLeft")).nextValue());
             String raw = evaluate(web, "(function(){var n=document.querySelector('.wave-bottom-nav');var r=n.getBoundingClientRect();var f=document.querySelector('.wave-app-frame').getBoundingClientRect();return JSON.stringify({top:r.top,bottom:r.bottom,left:r.left,right:r.right,height:r.height,viewportWidth:innerWidth,viewportHeight:innerHeight,documentWidth:document.documentElement.scrollWidth,frameTop:f.top,frameBottom:f.bottom,frameHeight:f.height})})()");
             JSONObject geometry = new JSONObject((String) new JSONTokener(raw).nextValue());
             String details = geometry.toString();

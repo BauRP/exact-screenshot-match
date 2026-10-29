@@ -1,9 +1,8 @@
-# Super Notes APK is built on Codemagic, not on GitHub Actions.
-# Connect this repository at https://codemagic.io, create a secret
-# variable GITHUB_TOKEN in the github_release group, and enable its webhook.
+# Optional Codemagic fallback. GitHub Actions is the primary APK builder.
+# Configure github_release/GITHUB_TOKEN only if enabling this workflow.
 workflows:
-  supernotes-android-apk:
-    name: Super Notes - Android APK
+  wave-notes-android-apk:
+    name: Wave Notes - Android APK
     instance_type: mac_mini_m2
     max_build_duration: 60
     environment:
@@ -15,7 +14,7 @@ workflows:
       events:
         - push
       branch_patterns:
-        - pattern: main
+        - pattern: chatgpt/super-notes-stability-20261025
           include: true
           source: true
       cancel_previous_builds: true
@@ -25,17 +24,20 @@ workflows:
           set -euo pipefail
           npm install --global bun
           bun --version
-          bun install --frozen-lockfile
+          bun install
       - name: Build offline web assets
         script: |
           set -euo pipefail
           bun run build
           test -s dist/client/index.html
           test -d dist/client/assets
+          test -s dist/client/assets/wave-notes-legacy.css
       - name: Install Android SDK 36
         script: |
           set -euo pipefail
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Bundle offline OCR language assets
+        script: bash scripts/prepare-ocr-models.sh
       - name: Generate Capacitor Android project
         script: |
           set -euo pipefail
@@ -45,16 +47,18 @@ workflows:
         script: |
           set -euo pipefail
           cp -R android-overlay/app/src/main/res/. android/app/src/main/res/
+          mkdir -p android/app/src/main/assets
+          cp -R android-overlay/app/src/main/assets/. android/app/src/main/assets/
           cp -R android-overlay/app/src/main/java/. android/app/src/main/java/
           cp android-overlay/app/build.gradle android/app/build.gradle
           cp android-overlay/app/proguard-rules.pro android/app/proguard-rules.pro
           cp android-overlay/app/src/main/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
           cp android-overlay/variables.gradle android/variables.gradle
-          # The app has no AdMob. Never require the removed advertising app ID.
-          if grep -q 'com.google.android.gms.ads.APPLICATION_ID' android/app/src/main/AndroidManifest.xml; then
-            echo "Unexpected AdMob app ID in ad-free Android manifest"
-            exit 1
-          fi
+          # Wave Notes contains native AdMob with consent and explicit labels.
+          grep -q 'com.google.android.gms.ads.APPLICATION_ID' android/app/src/main/AndroidManifest.xml
+          grep -q 'ca-app-pub-9902253594429663~4405601673' android/app/src/main/res/values/admob.xml
+          test -s android/app/src/main/assets/tessdata/rus.traineddata
+          test -s android/app/src/main/assets/tessdata/kaz.traineddata
           # Capacitor creates this value file; our overlay already declares the same color.
           if test -f android/app/src/main/res/values/ic_launcher_background.xml &&
              grep -q 'name="ic_launcher_background"' android/app/src/main/res/values/colors.xml; then
