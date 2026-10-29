@@ -11,10 +11,11 @@ import { Capacitor } from "@capacitor/core";
 import { mergeOcrCandidates, exceedsOcrSpatialBudget, mergeOversizedOcrForReview, restoreOmittedOcrScriptTextForReview, hasAmbiguousHanCandidates, hasUncertainMixedScriptLayout, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
 import { linesFromMlKitBounded, mlKitReportedLanguages } from "@/lib/ocr-geometry";
 import { mergeHybridOcr } from "@/lib/ocr-hybrid";
+import { plainOcrNoteText, usableTextFromOcrWarning } from "@/lib/ocr-user-text";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
-import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, type OcrReviewReason, OcrMixedLayoutReviewError, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrLargeLayoutReviewError, OcrOmittedScriptReviewError, OcrCombinedReviewError, resumeOcrReviewDraft, recoverFromReviewedText, hanAlternativesFromCandidates, previewHanAlternatives, mergeNativeReviewAlternatives, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
+import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, type OcrReviewReason, OcrMixedLayoutReviewError, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrLargeLayoutReviewError, OcrOmittedScriptReviewError, OcrCombinedReviewError, resumeOcrReviewDraft, recoverFromReviewedText, hanAlternativesFromCandidates, previewHanAlternatives, mergeNativeReviewAlternatives, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
 import { chooseLocalOcrImagePath, reusableOcrImagePath, safeLocalOcrPreviewUrl } from "@/lib/ocr-input";
 import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
@@ -533,7 +534,7 @@ function CameraPage() {
 
   const finishWithText = async (text: string) => {
     return saveOcrNoteAndOpenEditor(
-      text, t("camera"), createNote,
+      plainOcrNoteText(text), t("camera"), createNote,
       (id) => navigate({ to: "/editor/$id", params: { id }, search: { folder: undefined } }),
     );
   };
@@ -543,7 +544,8 @@ function CameraPage() {
     setError(message);
     setSavedNoteId(existingId ?? null);
     setStatus("error");
-    setModalOpen(true);
+    // Only Add Photo may open the camera/gallery picker.
+    setModalOpen(false);
     if (informational) toast.info(message);
     else toast.error(message);
   };
@@ -633,33 +635,18 @@ function CameraPage() {
       await finishWithText(text);
       if (shouldClearPendingDraft("note-saved")) markDraftFinished();
     } catch (caught) {
-      // A partially completed automatic scan still gives the user an editable
-      // note rather than a technical OCR review dialog. Persist before routing.
-      // Save failures retain a local draft; routing failures cannot duplicate
-      // the already-saved note.
-      if(caught instanceof OcrIncompleteScanError && !previousPhotoPath &&
-          caught.partialText.trim()) {
-        recognizedBeforeSave=caught.partialText;
+      // A completed or partially completed reading goes directly to a
+      // normal editable note; no user-facing technical confirmation.
+      const usableText = !previousPhotoPath ? usableTextFromOcrWarning(caught) : null;
+      if (usableText) {
+        recognizedBeforeSave = usableText;
         try {
-          setOcrStage("Сохранение найденного текста");
-          await finishWithText(caught.partialText);
-          if(shouldClearPendingDraft("note-saved"))markDraftFinished();
+          await finishWithText(usableText);
+          if (shouldClearPendingDraft("note-saved")) markDraftFinished();
           return;
-        } catch(saveFailure) {
-          if(saveFailure instanceof OcrEditorNavigationError)markDraftFinished();
-          if(!mountedRef.current || operationId!==operationIdRef.current)return;
-          if(!(saveFailure instanceof OcrEditorNavigationError)) {
-            const unsaved:OcrRecoveryState={
-              path:currentImagePath??"",text:caught.partialText,
-              missingScripts:[...caught.missingScripts],
-            };
-            pendingRecoveryRef.current=unsaved;
-            retainUnfinishedResult(unsaved,"save-retry");
-          }
-          handleFailure(readableOcrFailure(saveFailure),operationId,
-            saveFailure instanceof OcrEditorNavigationError
-              ? saveFailure.savedNoteId:undefined);
-          return;
+        } catch (saveFailure) {
+          // Continue through the usual safe storage/navigation recovery.
+          caught = saveFailure;
         }
       }
       // The note may be saved even when router navigation fails/unmounts.
@@ -833,7 +820,7 @@ function CameraPage() {
     const operationId = operationIdRef.current;
     setStatus("preparing");
     try {
-      await finishWithText(buildReviewedOcrText(reviewDraft, partialMissingScripts, reviewReason));
+      await finishWithText(reviewDraft);
       if (shouldClearPendingDraft("note-saved")) markDraftFinished();
       if (!mountedRef.current || operationId !== operationIdRef.current) return;
       setReviewOpen(false);

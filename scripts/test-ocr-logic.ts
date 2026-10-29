@@ -965,3 +965,16 @@ assert.equal(mergeHybridOcr([hybridJapanese,hybridNoise]).text,
  "こんにちは、元気ですか？");
 assert.equal(mergeHybridOcr([]).text,"");
 console.log("Hybrid region OCR removes cross-script overlap but keeps real mixed regions.");
+
+
+// Automatic OCR extracts editable content without app-generated warnings.
+import {plainOcrNoteText,usableTextFromOcrWarning} from "../src/lib/ocr-user-text";
+import {OcrCombinedReviewError} from "../src/lib/ocr-partial";
+const legacyNote = "⚠️ В тексте найден короткий фрагмент другого языка без надёжного расположения. Он добавлен для проверки: сравните с фотографией и удалите повторы.\n\nこんにちは、元気ですか？";
+assert.equal(plainOcrNoteText(legacyNote),"こんにちは、元気ですか？");
+assert.equal(plainOcrNoteText("こんにちは、元気ですか？\n\nПривет мир"),"こんにちは、元気ですか？\n\nПривет мир");
+assert.equal(plainOcrNoteText("⚠️ Это предупреждение написал пользователь\n\nЗаметка"),"⚠️ Это предупреждение написал пользователь\n\nЗаметка");
+assert.equal(usableTextFromOcrWarning(new OcrCombinedReviewError("日本語", "mixed-layout")),"日本語");
+assert.equal(usableTextFromOcrWarning(new OcrIncompleteScanError("Қазақ тілі",["japanese"])),"Қазақ тілі");
+assert.equal(usableTextFromOcrWarning(new Error("OCR_NOTE_SAVE_FAILED")),null);
+console.log("One-tap OCR recovers usable text without adding technical warnings.");
