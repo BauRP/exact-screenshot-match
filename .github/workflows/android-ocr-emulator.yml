@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api-level: [26, 29, 34, 36]
+        api-level: [26, 29, 34, 36, 37]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -143,19 +143,13 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
-          # The runner executes each script line in a separate shell;
-          # keep "cd android" and Gradle in a SINGLE shell command.
-          # Emulator itself has no Wi-Fi/mobile data. Gradle on the CI HOST may
-          # download Android Unified Test Platform tooling as needed.
-          # Only run tests for our app, never unrelated Capacitor subprojects.
-          # The normal Gradle configuration permits a 4 GiB heap; running that
-          # alongside an emulator can exhaust a GitHub runner (exit 137).
-          # Constrain only the test invocation; keep APK compilation unchanged.
-          # The runner spawns each newline in a SEPARATE shell: keep the
-          # entire conditional and Gradle invocation on a single script line.
-          # API 26's "adb shell svc wifi disable" exits 137 before tests start.
-          script: 'set -eu; echo WAVE_API_${{ matrix.api-level }}_BEGIN; adb shell getprop ro.build.version.sdk; if [ "${{ matrix.api-level }}" = "26" ]; then echo WAVE_API26_AIRPLANE; adb shell settings put global airplane_mode_on 1; adb shell am broadcast -a android.intent.action.AIRPLANE_MODE --ez state true; test "$(adb shell settings get global airplane_mode_on | tr -d "\r")" = "1"; else adb shell svc wifi disable; adb shell svc data disable; fi; echo WAVE_GRADLE_BEGIN; cd android && test -x ./gradlew && ./gradlew :app:connectedDebugAndroidTest --no-daemon --no-parallel --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8" --stacktrace'
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -no-metrics
+          # On Android 8, 'svc wifi disable' aborts with exit 137 and
+          # AIRPLANE_MODE broadcasts are denied to the shell. Offline tests
+          # should not be blocked by those device-management commands.
+          # Network isolation uses emulator launch options and does not
+          # alter the actual APK's permissions or bundled OCR models.
+          script: 'set -eu; echo WAVE_API_${{ matrix.api-level }}_BEGIN; adb shell getprop ro.build.version.sdk; echo WAVE_GRADLE_BEGIN; cd android && test -x ./gradlew && ./gradlew :app:connectedDebugAndroidTest --no-daemon --no-parallel --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8" --stacktrace'
 
       - name: Record actual Android OCR instrumentation results
         if: always()
