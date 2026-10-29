@@ -147,8 +147,9 @@ jobs:
           # On Android 8, 'svc wifi disable' aborts with exit 137 and
           # AIRPLANE_MODE broadcasts are denied to the shell. Offline tests
           # should not be blocked by those device-management commands.
-          # Network isolation uses emulator launch options and does not
-          # alter the actual APK's permissions or bundled OCR models.
+          # These tests no longer assert device network isolation. Bundled
+          # model integrity is checked, while offline mode remains a separate
+          # acceptance requirement; do not claim it passed from this workflow.
           script: 'set -eu; echo WAVE_API_${{ matrix.api-level }}_BEGIN; adb shell getprop ro.build.version.sdk; echo WAVE_GRADLE_BEGIN; cd android && test -x ./gradlew && ./gradlew :app:connectedDebugAndroidTest --no-daemon --no-parallel --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8" --stacktrace'
 
       - name: Record actual Android OCR instrumentation results
