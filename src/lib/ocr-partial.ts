@@ -277,3 +277,30 @@ export class OcrOmittedScriptReviewError extends Error {
     this.recognizedText=text;
   }
 }
+
+
+/** Keep all evidence when a photographed page has two simultaneous review
+ * concerns (e.g. ambiguous Japanese/Chinese glyphs AND missing native lines).
+ * A single highest-priority reason controls the persistent caution, but both
+ * original readings remain available to the user, including after restart.
+ * This never marks a page verified or sends image data to storage.
+ */
+export class OcrCombinedReviewError extends Error {
+  readonly recognizedText: string;
+  readonly reason: OcrReviewReason;
+  readonly hanAlternatives: OcrHanAlternatives | null;
+  readonly nativeAlternatives: readonly OcrNativeTextAlternative[];
+  constructor(
+    text: string,
+    reason: OcrReviewReason,
+    hanAlternatives: OcrHanAlternatives | null = null,
+    nativeAlternatives: readonly OcrNativeTextAlternative[] = [],
+  ) {
+    super("OCR_COMBINED_REVIEW");
+    this.name = "OcrCombinedReviewError";
+    this.recognizedText = text;
+    this.reason = reason;
+    this.hanAlternatives = previewHanAlternatives(hanAlternatives);
+    this.nativeAlternatives = nativeAlternatives.slice(0,6);
+  }
+}

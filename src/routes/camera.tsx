@@ -13,7 +13,7 @@ import { linesFromMlKitBounded, mlKitReportedLanguages } from "@/lib/ocr-geometr
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
-import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, type OcrReviewReason, OcrMixedLayoutReviewError, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrLargeLayoutReviewError, OcrOmittedScriptReviewError, resumeOcrReviewDraft, recoverFromReviewedText, hanAlternativesFromCandidates, previewHanAlternatives, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
+import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, type OcrReviewReason, OcrMixedLayoutReviewError, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrLargeLayoutReviewError, OcrOmittedScriptReviewError, OcrCombinedReviewError, resumeOcrReviewDraft, recoverFromReviewedText, hanAlternativesFromCandidates, previewHanAlternatives, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
 import { chooseLocalOcrImagePath, reusableOcrImagePath, safeLocalOcrPreviewUrl } from "@/lib/ocr-input";
 import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
@@ -252,19 +252,26 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         text,[...results,...nativeFullReadings],
         nativeAlternatives.map(alt => alt.script));
       const reviewText = restoreOmittedOcrScriptTextForReview(complete,results);
-      if (tooManyLines && reviewText) throw new OcrLargeLayoutReviewError(reviewText);
-      if (scanPlan.length > 1 && reviewText && hasAmbiguousHanCandidates(results)) {
-        throw new OcrAmbiguousHanError(reviewText, hanAlternativesFromCandidates(results));
-      }
-      if (reviewText !== complete) throw new OcrOmittedScriptReviewError(reviewText);
-      if (reviewText && nativeAlternatives.length) {
-        throw new OcrNativeTextReviewError(reviewText,nativeAlternatives);
-      }
-      if (scanPlan.length > 1 && reviewText && hasUncertainMixedScriptLayout(results)) {
-        throw new OcrMixedLayoutReviewError(reviewText);
-      }
-      if (reviewText && Array.isArray(mode) && scanPlan.length < AUTO_SCAN_ORDER.length) {
-        throw new OcrLimitedSelectionReviewError(reviewText);
+      // Warnings are assessed together, so one concern cannot erase the
+      // comparison evidence from another. The primary reason is conservative.
+      const uncertainHan = scanPlan.length > 1 && !!reviewText &&
+        hasAmbiguousHanCandidates(results);
+      const uncertainLayout = scanPlan.length > 1 && !!reviewText &&
+        hasUncertainMixedScriptLayout(results);
+      const restrictedLanguages = Array.isArray(mode) && scanPlan.length < AUTO_SCAN_ORDER.length;
+      const reason: OcrReviewReason | null =
+        tooManyLines ? "large-layout" :
+        uncertainHan ? "ambiguous-han" :
+        reviewText !== complete ? "script-omission" :
+        nativeAlternatives.length > 0 ? "native-text" :
+        uncertainLayout ? "mixed-layout" :
+        restrictedLanguages ? "limited-selection" : null;
+      if (reviewText && reason) {
+        throw new OcrCombinedReviewError(
+          reviewText,reason,
+          uncertainHan ? hanAlternativesFromCandidates(results) : null,
+          nativeAlternatives,
+        );
       }
       return reviewText;
       } finally {
@@ -607,7 +614,8 @@ function CameraPage() {
       }
       if (caught instanceof OcrAmbiguousHanError || caught instanceof OcrMixedLayoutReviewError ||
           caught instanceof OcrLimitedSelectionReviewError || caught instanceof OcrNativeTextReviewError ||
-          caught instanceof OcrLargeLayoutReviewError || caught instanceof OcrOmittedScriptReviewError) {
+          caught instanceof OcrLargeLayoutReviewError || caught instanceof OcrOmittedScriptReviewError ||
+          caught instanceof OcrCombinedReviewError) {
         const previous = pendingRecoveryRef.current;
         const combined = previous?.path === currentImagePath
           ? applyRecoveredOcrPass(previous, attemptedScripts, caught.recognizedText)
@@ -615,18 +623,22 @@ function CameraPage() {
         pendingRecoveryRef.current = combined;
         setPartialOcrText(combined.text);
         setPartialMissingScripts(combined.missingScripts);
-        const reason: OcrReviewReason = caught instanceof OcrAmbiguousHanError ? "ambiguous-han" :
+        const reason: OcrReviewReason = caught instanceof OcrCombinedReviewError ? caught.reason :
+          caught instanceof OcrAmbiguousHanError ? "ambiguous-han" :
           caught instanceof OcrMixedLayoutReviewError ? "mixed-layout" :
           caught instanceof OcrLimitedSelectionReviewError ? "limited-selection" :
           caught instanceof OcrLargeLayoutReviewError ? "large-layout" :
           caught instanceof OcrOmittedScriptReviewError ? "script-omission" : "native-text";
         setReviewReason(reason);
-        hanAlternativesRef.current = previewHanAlternatives(caught instanceof OcrAmbiguousHanError ? caught.alternatives : null);
+        const hanEvidence = caught instanceof OcrCombinedReviewError ? caught.hanAlternatives :
+          caught instanceof OcrAmbiguousHanError ? caught.alternatives : null;
+        hanAlternativesRef.current = previewHanAlternatives(hanEvidence);
         setHanAlternatives(hanAlternativesRef.current);
         setReviewEdited(false);
         retainUnfinishedResult(combined, reason,
-          caught instanceof OcrNativeTextReviewError ? [...caught.alternatives] : nativeAlternativesRef.current,
-          caught instanceof OcrAmbiguousHanError ? caught.alternatives : hanAlternativesRef.current);
+          caught instanceof OcrCombinedReviewError ? [...caught.nativeAlternatives] :
+            caught instanceof OcrNativeTextReviewError ? [...caught.alternatives] : nativeAlternativesRef.current,
+          hanEvidence);
       }
       if (caught instanceof OcrIncompleteScanError) {
         const recovery = pendingRecoveryRef.current;
@@ -645,7 +657,8 @@ function CameraPage() {
         caught instanceof OcrEditorNavigationError ? caught.savedNoteId : undefined,
         caught instanceof OcrAmbiguousHanError || caught instanceof OcrMixedLayoutReviewError ||
         caught instanceof OcrLimitedSelectionReviewError || caught instanceof OcrNativeTextReviewError ||
-        caught instanceof OcrLargeLayoutReviewError || caught instanceof OcrOmittedScriptReviewError);
+        caught instanceof OcrLargeLayoutReviewError || caught instanceof OcrOmittedScriptReviewError ||
+        caught instanceof OcrCombinedReviewError);
     } finally {
       inFlightRef.current = false;
     }
@@ -954,6 +967,9 @@ function CameraPage() {
                 className="mt-2 max-h-48 w-full rounded object-contain"
                 loading="lazy" />
             </details>
+          )}
+          {nativeAlternatives.length > 0 && hanAlternatives && (
+            <p className="text-xs text-muted-foreground">На фотографии обнаружены одновременно спорные иероглифы и расхождения строк. Сравните оба набора результатов перед сохранением.</p>
           )}
           {nativeAlternatives.length > 0 && (
             <div className="min-h-0 overflow-y-auto rounded-lg border border-border p-2 text-left">

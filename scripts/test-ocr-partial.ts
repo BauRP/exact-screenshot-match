@@ -1,5 +1,5 @@
 import { strict as assert } from "node:assert";
-import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrAmbiguousHanError, OcrMixedLayoutReviewError, OcrLargeLayoutReviewError, OcrOmittedScriptReviewError, resumeOcrReviewDraft, recoverFromReviewedText, previewHanAlternatives } from "../src/lib/ocr-partial";
+import { OcrIncompleteScanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, combineRecoveredOcrText, applyRecoveredOcrPass, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrAmbiguousHanError, OcrMixedLayoutReviewError, OcrLargeLayoutReviewError, OcrOmittedScriptReviewError, OcrCombinedReviewError, resumeOcrReviewDraft, recoverFromReviewedText, previewHanAlternatives } from "../src/lib/ocr-partial";
 import { saveOcrNoteAndOpenEditor } from "../src/lib/ocr-save-flow";
 import { readPendingOcrDraft, savePendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "../src/lib/ocr-draft";
 const storage=new Map<string,string>();
@@ -288,3 +288,28 @@ assert.equal(savePendingOcrDraft({...draft,reason:"script-omission"},
 assert.equal(readPendingOcrDraft(50001,draftStore)?.reason,"script-omission");
 clearPendingOcrDraft(draftStore);
 console.log("Short mixed-language OCR omissions remain reviewable after an offline restart: passed.");
+
+
+// A single photo may trigger TWO independent review concerns. Neither one
+// may erase the other when saved to the offline draft and later reopened.
+const dualEvidence = new OcrCombinedReviewError(
+  "Қазақ тілі\n日本語学校", "ambiguous-han",
+  {japanese:"日本語学校",chinese:"日本語学枚"},
+  [{script:"japanese",complete:"日本語学校",lines:"日本語学枚"}],
+);
+assert.equal(dualEvidence.reason,"ambiguous-han");
+assert.equal(dualEvidence.recognizedText,"Қазақ тілі\n日本語学校");
+assert.equal(dualEvidence.hanAlternatives?.chinese,"日本語学枚");
+assert.equal(dualEvidence.nativeAlternatives[0]?.lines,"日本語学枚");
+assert.equal(savePendingOcrDraft({
+  ...draft, reason:dualEvidence.reason, text:dualEvidence.recognizedText,
+  reviewedText:dualEvidence.recognizedText,edited:false,
+  hanAlternatives:dualEvidence.hanAlternatives,
+  nativeAlternatives:[...dualEvidence.nativeAlternatives],
+},55000,draftStore),true);
+const restoredDualEvidence=readPendingOcrDraft(55001,draftStore);
+assert.equal(restoredDualEvidence?.hanAlternatives?.chinese,"日本語学枚");
+assert.equal(restoredDualEvidence?.nativeAlternatives?.[0].complete,"日本語学校");
+assert.equal(restoredDualEvidence?.text,"Қазақ тілі\n日本語学校");
+clearPendingOcrDraft(draftStore);
+console.log("Concurrent Chinese/Japanese ambiguity and native line differences survive restart: passed.");

@@ -32,6 +32,10 @@ export function readableOcrFailure(error: unknown): string {
   if (error instanceof Error && error.message === "OCR_SCAN_BUSY") {
     return "Предыдущее сканирование ещё завершается. Повторите попытку после его окончания.";
   }
+  if (error instanceof Error && error.message === "OCR_COMBINED_REVIEW") {
+    return "Текст распознан, но несколько проверок требуют внимания. " +
+      "Проверьте исходную фотографию, оба варианта иероглифов и возможные пропущенные строки перед сохранением.";
+  }
   if (error instanceof Error && error.message === "OCR_SCRIPT_OMISSION_REVIEW") {
     return "Обнаружена короткая надпись на другом языке, которая могла исчезнуть при объединении строк. Найденный фрагмент сохранён для проверки перед созданием заметки.";
   }
