@@ -58,10 +58,29 @@ public class AndroidShellInstrumentedTest {
                 assertTrue("WebView not visible", web.getGlobalVisibleRect(visible));
                 WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(web);
                 assertNotNull("WindowInsets not dispatched", insets);
-                int sysBottom = insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom;
-                int sysTop = insets.getInsets(WindowInsetsCompat.Type.systemBars()).top;
-                assertTrue("status bar safe space missing", web.getPaddingTop() >= sysTop);
-                assertTrue("navigation bar safe space missing", web.getPaddingBottom() >= sysBottom);
+                // Padding alone is NOT the actual safe area: on Android 8-14
+                // decor may position the entire WebView below the status bar.
+                // On edge-to-edge devices it may instead start at y=0 and
+                // receive native padding. Test physical CONTENT coordinates.
+                android.graphics.Point screen = new android.graphics.Point();
+                activity.getWindowManager().getDefaultDisplay().getRealSize(screen);
+                int[] webPosition = new int[2];
+                web.getLocationOnScreen(webPosition);
+                androidx.core.graphics.Insets bars =
+                    insets.getInsets(WindowInsetsCompat.Type.systemBars());
+                androidx.core.graphics.Insets cutout =
+                    insets.getInsets(WindowInsetsCompat.Type.displayCutout());
+                int safeTop = Math.max(bars.top, cutout.top);
+                int safeBottom = Math.max(bars.bottom, cutout.bottom);
+                int contentTop = webPosition[1] + web.getPaddingTop();
+                int contentBottom = webPosition[1] + web.getHeight() - web.getPaddingBottom();
+                assertTrue("Status bar overlaps app content: top=" + contentTop
+                    + " safeTop=" + safeTop + " viewY=" + webPosition[1]
+                    + " padding=" + web.getPaddingTop(), contentTop + 1 >= safeTop);
+                assertTrue("System navigation overlaps app content: bottom=" + contentBottom
+                    + " safeBottom=" + (screen.y - safeBottom)
+                    + " padding=" + web.getPaddingBottom(),
+                    contentBottom <= screen.y - safeBottom + 1);
             });
             assertEquals("true", evaluate(web,
                 "(function(){var n=document.querySelector('.wave-bottom-nav');var r=n.getBoundingClientRect();return r.height>0 && r.bottom<=innerHeight+2 && r.top>=0 && document.documentElement.scrollWidth<=innerWidth+2})()"));
