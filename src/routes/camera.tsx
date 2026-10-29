@@ -232,7 +232,12 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
           partialMerge,[...results,...nativeFullReadings],
           nativeAlternatives.map(alt => alt.script));
         const partial = restoreOmittedOcrScriptTextForReview(partialOriginal,results);
-        if (partial.trim()) throw new OcrIncompleteScanError(partial, coverage.missingScripts());
+        if (partial.trim()) {
+          throw new OcrIncompleteScanError(
+            partial,coverage.missingScripts(),nativeAlternatives,
+            hasAmbiguousHanCandidates(results) ? hanAlternativesFromCandidates(results) : null,
+          );
+        }
         if (timedOut) throw new Error("OCR timed out");
         coverage.ensureComplete();
       }
@@ -648,10 +653,12 @@ function CameraPage() {
         pendingRecoveryRef.current = updated;
         setPartialOcrText(updated.text);
         setPartialMissingScripts(updated.missingScripts);
-        setHanAlternatives(null);
-        hanAlternativesRef.current = null;
+        setHanAlternatives(caught.hanAlternatives);
+        hanAlternativesRef.current = caught.hanAlternatives;
         setReviewEdited(false);
-        retainUnfinishedResult(updated);
+        retainUnfinishedResult(
+          updated,"recovery",[...caught.nativeAlternatives],caught.hanAlternatives,
+        );
       }
       handleFailure(readableOcrFailure(caught), operationId,
         caught instanceof OcrEditorNavigationError ? caught.savedNoteId : undefined,

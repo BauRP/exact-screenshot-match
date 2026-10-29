@@ -77,3 +77,12 @@ The APK contains pinned `rus` and `kaz` assets. On Android the first copy to app
 - Camera/gallery OCR offers separate Russian-only and Kazakh-only modes alongside combined Cyrillic. These call the preinstalled rus and kaz models, without downloading anything to the phone. Automatic scans and multi-script recovery retain the combined pinned kaz+rus model.
 - Native Android decoder now checks the device low-RAM classification before allocating photo bitmaps. On low-RAM devices, it downsamples to at most roughly 6 megapixels and 3200 pixels maximum edge (instead of the ordinary 12 megapixels / 4500 pixels). Actual decoded dimensions depend on power-of-two sampling. Reduced memory pressure may come at the cost of fine-print accuracy.
 - Automated logic tests cover language routing; emulator workflows compile and exercise the native decoder. Physical-device performance and recognition accuracy remain unverified.
+
+## 2026-10-29 last-mile checks for partially failed multi-script pages
+
+- When an offline language model times out after other models finished, verify the **incomplete** caution and list of missing scripts are visible; do not auto-create a note.
+- If successful Japanese/Chinese models disagreed with each other, or ML Kit full text disagreed with individual lines, the review must display **both independent original readings** alongside the edited draft, even though another language timed out.
+- Correct the text, switch apps/reopen the screen, and check that missing-script labels and both comparison variants persist. A cold restart retains text and evidence but never the original image path or photo bytes.
+- Recheck only failed models on the same photo; if a retry succeeds with zero characters, mark that model completed without deleting earlier text. After all models complete, still request manual confirmation.
+- Delete an unfinished OCR draft only on explicit discard or confirmed note save. If local storage is full, warn the user that a draft may not survive app termination.
+- The above are implementation acceptance scenarios and unit tests, **not yet physically tested** on a user's phone. Keep Play/public release approval separate from a successfully compiled debug APK.

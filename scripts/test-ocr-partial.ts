@@ -313,3 +313,33 @@ assert.equal(restoredDualEvidence?.nativeAlternatives?.[0].complete,"日本語�
 assert.equal(restoredDualEvidence?.text,"Қазақ тілі\n日本語学校");
 clearPendingOcrDraft(draftStore);
 console.log("Concurrent Chinese/Japanese ambiguity and native line differences survive restart: passed.");
+
+
+// A time-limited partial OCR scan can already include useful conflicting
+// readings from successful recognizers. Preserve both sets of evidence even
+// when another recognizer failed, and restore the ORIGINAL alternatives after
+// a cold WebView restart. Missing language flags remain authoritative.
+const partialWithDisagreement = new OcrIncompleteScanError(
+  "Қазақ тілі\n日本語学校",
+  ["korean","devanagari","korean"],
+  [{script:"japanese",complete:"日本語学校",lines:"日本語学枚"}],
+  {japanese:"日本語学校",chinese:"日本語学枚"},
+);
+assert.deepEqual(partialWithDisagreement.missingScripts,["korean","devanagari"]);
+assert.equal(partialWithDisagreement.nativeAlternatives[0]?.lines,"日本語学枚");
+assert.equal(partialWithDisagreement.hanAlternatives?.chinese,"日本語学枚");
+assert.equal(savePendingOcrDraft({
+  ...draft,text:partialWithDisagreement.partialText,
+  reviewedText:partialWithDisagreement.partialText,
+  missingScripts:[...partialWithDisagreement.missingScripts],
+  reason:"recovery",edited:false,
+  nativeAlternatives:[...partialWithDisagreement.nativeAlternatives],
+  hanAlternatives:partialWithDisagreement.hanAlternatives,
+},60000,draftStore),true);
+const restoredIncomplete=readPendingOcrDraft(60001,draftStore);
+assert.deepEqual(restoredIncomplete?.missingScripts,["korean","devanagari"]);
+assert.equal(restoredIncomplete?.nativeAlternatives?.[0]?.complete,"日本語学校");
+assert.equal(restoredIncomplete?.hanAlternatives?.chinese,"日本語学枚");
+assert.equal(restoredIncomplete?.text,partialWithDisagreement.partialText);
+clearPendingOcrDraft(draftStore);
+console.log("Partial OCR preserves both native and Han evidence and missing scripts across restart: passed.");

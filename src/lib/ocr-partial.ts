@@ -15,11 +15,20 @@ export const OCR_SCRIPT_LABELS: Readonly<Record<OcrScript, string>> = {
 export class OcrIncompleteScanError extends Error {
   readonly partialText: string;
   readonly missingScripts: readonly OcrScript[];
-  constructor(partialText: string, missingScripts: readonly OcrScript[]) {
+  readonly nativeAlternatives: readonly OcrNativeTextAlternative[];
+  readonly hanAlternatives: OcrHanAlternatives | null;
+  constructor(
+    partialText: string,
+    missingScripts: readonly OcrScript[],
+    nativeAlternatives: readonly OcrNativeTextAlternative[] = [],
+    hanAlternatives: OcrHanAlternatives | null = null,
+  ) {
     super("OCR_INCOMPLETE_WITH_TEXT");
     this.name = "OcrIncompleteScanError";
     this.partialText = partialText;
     this.missingScripts = [...new Set(missingScripts)];
+    this.nativeAlternatives = nativeAlternatives.slice(0, 6);
+    this.hanAlternatives = previewHanAlternatives(hanAlternatives);
   }
 }
 export function markIncompleteOcrText(
