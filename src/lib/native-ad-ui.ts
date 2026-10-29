@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from "react";
 
-// Only actual blocking dialogs hide the Android native overlays. A three-dot
-// menu is rendered in normal page flow and must NEVER blank the advertisements.
+// Google native ads are separate Android views above WebView. Hide them
+// temporarily while a floating dropdown or blocking dialog is open, so they
+// cannot cover the menu's options. The ad feed stays alive; no ad reload.
 let blockingDialog = false;
 const listeners = new Set<() => void>();
 export function setNativeAdDialogBlocked(value: boolean) {
