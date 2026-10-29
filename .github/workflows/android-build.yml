@@ -59,6 +59,9 @@ jobs:
           node scripts/verify-admob-native-layout.mjs
 
       - name: Build app
+        env:
+          # Developer APK only. Real Play releases never expose this UI.
+          VITE_ADMOB_DIAGNOSTICS: "true"
         run: |
           set -euo pipefail
           bun run build
@@ -68,6 +71,9 @@ jobs:
 
       - name: TypeScript static checks
         run: bunx tsc --noEmit
+
+      - name: Verify diagnostic screen separation and cross-route retry
+        run: bun scripts/test-admob-diagnostics.ts
 
       - name: Verify consent reuse and clipping for every native ad slot
         run: bun scripts/test-admob-session-layout.ts

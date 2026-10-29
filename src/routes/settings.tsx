@@ -14,11 +14,9 @@ import {
   MessageSquarePlus,
   Download,
   Upload,
-  Radio,
-  RefreshCw,
-} from "lucide-react";
+ } from "lucide-react";
 import { sendFeedback } from "@/lib/feedback.functions";
-import { useAdDiagnostic, requestAdRetry } from "@/lib/ad-diagnostics";
+import { AdMobDiagnosticsPanel } from "@/components/AdMobDiagnosticsPanel";
 import { saveLocalBackup, restoreLocalBackup } from "@/lib/local-backup";
 import { invalidateConsentForSession, requestConsentForSession } from "@/lib/admob-session";
 import { AppHeader } from "@/components/AppHeader";
@@ -174,7 +172,6 @@ function SettingsPage() {
   const [fbText, setFbText] = useState("");
   const [fbSending, setFbSending] = useState(false);
   const [backupBusy, setBackupBusy] = useState(false);
-  const adDiagnostic = useAdDiagnostic();
   const [adPrivacyAvailable, setAdPrivacyAvailable] = useState(false);
   const [adPrivacyLoading, setAdPrivacyLoading] = useState(false);
 
@@ -451,36 +448,10 @@ function SettingsPage() {
           </Row>
         </Section>
 
-        {import.meta.env.DEV || import.meta.env.VITE_ADMOB_LIVE_ADS !== "true" ? (
-          <Section title="Диагностика тестовой рекламы" eyebrow="06">
-            <Row
-              icon={<Radio className="h-4 w-4" />}
-              title={adDiagnostic.message}
-              hint={`Состояние: ${adDiagnostic.status}; загрузок: ${adDiagnostic.loadedCount}; ошибок: ${adDiagnostic.failedCount}`}
-            >
-              <Btn onClick={() => { requestAdRetry(); navigate({ to: "/" }); }}><RefreshCw className="mr-1 inline h-3 w-3" />Повторить</Btn>
-            </Row>
-            {adDiagnostic.issueCode ? (
-              <p className="break-words px-3 pb-1 text-xs text-muted-foreground">
-                Причина: {adDiagnostic.issueCode}
-              </p>
-            ) : null}
-            {adDiagnostic.advice ? (
-              <p className="break-words px-3 pb-2 text-xs text-muted-foreground">
-                Что делать: {adDiagnostic.advice}
-              </p>
-            ) : null}
-            {adDiagnostic.lastError ? (
-              <p className="break-words px-3 pb-2 text-xs text-destructive">
-                Технические сведения: {adDiagnostic.lastError}
-              </p>
-            ) : null}
-            {adDiagnostic.lastSlot ? (
-              <p className="break-words px-3 pb-2 text-[10px] text-muted-foreground">
-                Место: {adDiagnostic.lastSlot}
-              </p>
-            ) : null}
-          </Section>
+        {/* Build-time opt-in only: never show debug details in live-ad releases. */}
+        {import.meta.env.VITE_ADMOB_DIAGNOSTICS === "true" &&
+         import.meta.env.VITE_ADMOB_LIVE_ADS !== "true" ? (
+          <AdMobDiagnosticsPanel onGoHome={() => void navigate({ to: "/" })} />
         ) : null}
 
         <p className="pt-4 text-center font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">

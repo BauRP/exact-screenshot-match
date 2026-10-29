@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ViewMode } from "@/lib/notes-store";
 import { waitForPlugin } from "@/lib/native-ready";
-import { updateAdDiagnostic } from "@/lib/ad-diagnostics";
+import { consumePendingAdRetry, updateAdDiagnostic } from "@/lib/ad-diagnostics";
 import { classifyAdMobFailure, type AdFailureStage } from "@/lib/admob-error-guide";
 import { requestConsentForSession, initializeMobileAdsForSession } from "@/lib/admob-session";
 
@@ -169,6 +169,7 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
     };
     const onOnline = () => { updateAdDiagnostic("waiting", "Интернет доступен, повторяем запрос"); void initialize(); };
     const onRetry = () => {
+      consumePendingAdRetry();
       attempts = 0;
       slotRetries.clear();
       if (retryTimer) clearTimeout(retryTimer);
@@ -186,7 +187,8 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
     };
     window.addEventListener("supernotes-admob-retry", onRetry);
     window.addEventListener("online", onOnline);
-    void initialize();
+    if (consumePendingAdRetry()) onRetry();
+    else void initialize();
     return () => {
       disposed = true;
       abort.abort();

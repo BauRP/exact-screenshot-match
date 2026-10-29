@@ -35,6 +35,17 @@ export function updateAdDiagnostic(status: AdStatus, message: string, details?: 
 export const useAdDiagnostic = (): AdDiagnostic =>
   useSyncExternalStore((cb) => { subscribers.add(cb); return () => subscribers.delete(cb); }, () => state, () => state);
 
+// The settings screen is a different route from the native ad feed.
+// Persist ONE retry request in memory until the home feed starts listening.
+let pendingRetry = false;
 export function requestAdRetry(): void {
-  window.dispatchEvent(new Event("supernotes-admob-retry"));
+  pendingRetry = true;
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("supernotes-admob-retry"));
+  }
+}
+export function consumePendingAdRetry(): boolean {
+  const requested = pendingRetry;
+  pendingRetry = false;
+  return requested;
 }
