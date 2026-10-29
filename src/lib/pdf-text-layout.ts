@@ -31,7 +31,7 @@ export function wrapPdfGlyphs<T extends PdfMeasuredGlyph>(glyphs: T[], maxWidth:
         newline();
         if (isSpace) continue;
       }
-      if (isSpace && width === 0) continue;
+      // Keep spaces for faithful text round-tripping, including line breaks.
       lines[lines.length - 1].push(glyph);
       width += glyph.width;
     }

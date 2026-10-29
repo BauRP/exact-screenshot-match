@@ -881,39 +881,58 @@ function PdfViewerScreen() {
         prepared.push({ run, portions });
       }
 
+      // Measure every glyph in the actual embedded font before drawing.
+      // Text is wrapped inside the chosen boundaries, never clipped at the right edge.
+      const maxSize = runs.reduce((m, run) => Math.max(m, run.fontSize), 0) || boxHeight * 0.8;
+      const glyphs: Array<{text: string; width: number; font: any; run: RunStyle}> = [];
+      for (const {run, portions} of prepared) {
+        for (const portion of portions) {
+          for (const character of portion.text) {
+            glyphs.push({
+              text: character, width: character === "\n" || character === "\r" ? 0 :
+                portion.font.widthOfTextAtSize(character, run.fontSize),
+              font: portion.font, run,
+            });
+          }
+        }
+      }
+      const maxWidth = Math.max(1, (overlay.widthPct / 100) * width);
+      const lines = wrapPdfGlyphs(glyphs, maxWidth);
+      const lineAdvance = maxSize * 1.25;
+      const lastBaseline = y + boxHeight - maxSize * 0.8 - (lines.length - 1) * lineAdvance;
+      if (lastBaseline < 0) {
+        throw new Error("Текст не помещается на странице PDF. Увеличьте область или уменьшите размер.");
+      }
+      // Mask the original glyph rectangle, not the expanded editable text region.
       if (overlay.cover) {
+        const eraseX = ((overlay.eraseXPct ?? overlay.xPct) / 100) * width;
+        const eraseTop = ((overlay.eraseYPct ?? overlay.yPct) / 100) * height;
+        const eraseWidth = ((overlay.eraseWidthPct ?? overlay.widthPct) / 100) * width;
+        const eraseHeight = ((overlay.eraseHeightPct ?? overlay.heightPct) / 100) * height;
         target.drawRectangle({
-          x: x - 1,
-          y: y - 1,
-          width: (overlay.widthPct / 100) * width + 2,
-          height: boxHeight + 2,
+          x: eraseX - 1, y: height - eraseTop - eraseHeight - 1,
+          width: eraseWidth + 2, height: eraseHeight + 2,
           color: rgb(1, 1, 1),
         });
       }
 
-      const maxSize = runs.reduce((m, run) => Math.max(m, run.fontSize), 0) || boxHeight * 0.8;
-      const baselineY = y + Math.max((boxHeight - maxSize) / 2, 0) + maxSize * 0.2;
-      let cursorX = x;
-      for (const { run, portions } of prepared) {
-        const size = run.fontSize;
-        const { r, g, b } = hexToRgb(run.color);
-        for (const portion of portions) {
-          const runWidth = portion.font.widthOfTextAtSize(portion.text, size);
-          if (cursorX + runWidth > width + 0.5) {
-            throw new Error("Text exceeds the PDF page edge. Reduce the font size or move the text.");
-          }
-          target.drawText(portion.text, {
-            x: cursorX, y: baselineY, size,
-            font: portion.font, color: rgb(r, g, b),
+      for (let lineNo = 0; lineNo < lines.length; lineNo++) {
+        const baseline = y + boxHeight - maxSize * 0.8 - lineNo * lineAdvance;
+        let cursor = x;
+        for (const glyph of lines[lineNo]) {
+          const {r,g,b} = hexToRgb(glyph.run.color);
+          target.drawText(glyph.text, {
+            x: cursor, y: baseline, font: glyph.font,
+            size: glyph.run.fontSize, color: rgb(r,g,b),
           });
-          if (run.underline && portion.text.trim()) {
+          if (glyph.run.underline && glyph.text.trim()) {
             target.drawRectangle({
-              x: cursorX, y: baselineY - size * 0.12,
-              width: runWidth, height: Math.max(size * 0.06, 0.6),
-              color: rgb(r, g, b),
+              x: cursor, y: baseline - glyph.run.fontSize * 0.12,
+              width: glyph.width, height: Math.max(glyph.run.fontSize * 0.06, 0.6),
+              color: rgb(r,g,b),
             });
           }
-          cursorX += runWidth;
+          cursor += glyph.width;
         }
       }
     }

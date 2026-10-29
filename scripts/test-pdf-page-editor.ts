@@ -42,5 +42,5 @@ const { normalizePdfMargins, wrapPdfGlyphs } = await import("../src/lib/pdf-text
 assert.deepEqual(normalizePdfMargins(-10, 150), {left: 0, right: 100});
 assert.deepEqual(normalizePdfMargins(95, 96), {left: 95, right: 99});
 const glyphs = Array.from("hello world", text => ({text,width:1}));
-assert.equal(wrapPdfGlyphs(glyphs, 6).map(line => line.map(ch=>ch.text).join("")).join("/"),"hello/world");
+assert.equal(wrapPdfGlyphs(glyphs, 6).map(line => line.map(ch=>ch.text).join("")).join("/"),"hello /world");
 console.log("PDF tap no-op, 4 rotations, rotated text hitboxes and page-switch cleanup: PASS");
