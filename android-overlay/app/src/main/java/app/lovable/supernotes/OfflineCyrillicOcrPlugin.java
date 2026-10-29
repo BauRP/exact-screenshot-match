@@ -71,10 +71,17 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
                 response.put("height", bitmap.getHeight());
                 // No OCR is used for this preview; this local-only analysis
                 // is performed on the already decoded small image.
-                VisualScriptDetector.Result detected = VisualScriptDetector.classify(bitmap);
-                response.put("detectedScript",detected.script);
-                response.put("scriptVotes",detected.votes);
-                response.put("scriptComponents",detected.compared);
+                try {
+                    VisualScriptDetector.Result detected = VisualScriptDetector.classify(bitmap);
+                    response.put("detectedScript",detected.script);
+                    response.put("scriptVotes",detected.votes);
+                    response.put("scriptComponents",detected.compared);
+                } catch (RuntimeException visualError) {
+                    // Script detection is optional. A failed probe must not
+                    // prevent the original photo from reaching full offline OCR.
+                    android.util.Log.w("WaveOCR", "Visual script probe unavailable; using full OCR", visualError);
+                    response.put("detectedScript", "unknown");
+                }
                 call.resolve(response);
             } catch (OutOfMemoryError e) {
                 if (target != null) target.delete();
