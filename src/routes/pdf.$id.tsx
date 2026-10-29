@@ -26,6 +26,8 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { hasPdfDraftChanges, hasSaveablePdfContent } from "@/lib/pdf-edit-guard";
+import { displayToSourceRect, pdfTextBounds, sourceOverlayTransform } from "@/lib/pdf-page-geometry";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ColorGrid, PALETTE } from "@/components/ColorGrid";
 import {
@@ -161,6 +163,15 @@ function PdfViewerScreen() {
   const [infoOpen, setInfoOpen] = useState(false);
   const [textBoxes, setTextBoxes] = useState<TextItemBox[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Source text is a temporary edit draft; never save a new white mask on tap.
+  const [draftOverlay, setDraftOverlayState] = useState<PdfTextOverlay | null>(null);
+  const draftOverlayRef = useRef<PdfTextOverlay | null>(null);
+  const setDraftOverlay = useCallback((draft: PdfTextOverlay | null) => {
+    draftOverlayRef.current = draft;
+    setDraftOverlayState(draft);
+  }, []);
+  const [unrotatedPageSize, setUnrotatedPageSize] = useState({width: 0,height: 0});
+  const renderedPageRef = useRef("");
   const [busy, setBusy] = useState(false);
   const [canvasHeight, setCanvasHeight] = useState(0);
   const [viewScale, setViewScale] = useState(1);
@@ -179,7 +190,11 @@ function PdfViewerScreen() {
   const pendingTapRef = useRef<{ x: number; y: number } | null>(null);
 
   const overlays = useMemo(() => note?.pdf?.overlays ?? [], [note]);
-  const pageOverlays = useMemo(() => overlays.filter((item) => item.page === page), [overlays, page]);
+  const pageOverlays = useMemo(() => {
+    const saved = overlays.filter((item) => item.page === page);
+    return draftOverlay?.page === page && !saved.some((item) => item.id === draftOverlay.id)
+      ? [...saved, draftOverlay] : saved;
+  }, [overlays, page, draftOverlay]);
 
   const goBack = useCallback(() => {
     if (router.history.canGoBack()) router.history.back();
@@ -247,6 +262,7 @@ function PdfViewerScreen() {
       const base = pdfPage.getViewport({ scale: 1, rotation });
       const fitScale = available / base.width;
       const viewport = pdfPage.getViewport({ scale: fitScale * zoom, rotation });
+      const sourceViewport = pdfPage.getViewport({ scale: fitScale * zoom, rotation: 0 });
 
       const canvas = canvasRef.current;
       if (!canvas) return;
@@ -260,6 +276,8 @@ function PdfViewerScreen() {
       canvas.style.height = `${viewport.height}px`;
       setCanvasHeight(viewport.height);
       setViewScale(viewport.scale || 1);
+      setUnrotatedPageSize({width:sourceViewport.width,height:sourceViewport.height});
+      renderedPageRef.current = `${page}:${rotation}`;
 
       task = pdfPage.render({
         canvasContext: context,
@@ -284,6 +302,7 @@ function PdfViewerScreen() {
           const tx = pdfjs.Util.transform(viewport.transform, item.transform);
           const height = Math.hypot(tx[2], tx[3]) || 12;
           const width = item.width * (viewport.scale || 1);
+          const bounds = pdfTextBounds(tx,width,height,viewport.width,viewport.height);
           const style = (content.styles ?? {})[item.fontName] ?? {};
           let realName = String(item.fontName ?? "");
           try {
@@ -300,10 +319,10 @@ function PdfViewerScreen() {
             fontSize: roundSize(height / (viewport.scale || 1)),
             ...detected,
             text: item.str,
-            leftPct: (tx[4] / viewport.width) * 100,
-            topPct: ((tx[5] - height) / viewport.height) * 100,
-            widthPct: (width / viewport.width) * 100,
-            heightPct: (height / viewport.height) * 100,
+            leftPct: bounds.x,
+            topPct: bounds.y,
+            widthPct: bounds.width,
+            heightPct: bounds.height,
           };
         });
       if (!cancelled) setTextBoxes(boxes);
@@ -376,21 +395,36 @@ function PdfViewerScreen() {
   );
 
   const editingOverlay = useMemo(
-    () => overlays.find((item) => item.id === editingId) ?? null,
-    [overlays, editingId],
+    () => overlays.find((item) => item.id === editingId) ??
+      (draftOverlay?.id === editingId ? draftOverlay : null),
+    [overlays, editingId, draftOverlay],
   );
 
   const patchOverlay = useCallback(
     (overlayId: string, patch: Partial<PdfTextOverlay>) => {
-      const next = overlays.map((item) =>
-        item.id === overlayId ? { ...item, ...patch } : item,
-      );
-      persistOverlays(next);
+      const draft = draftOverlayRef.current;
+      if (draft?.id === overlayId) {
+        const updated = { ...draft, ...patch };
+        if (!hasPdfDraftChanges(draft, updated) || !hasSaveablePdfContent(updated)) {
+          setDraftOverlay(updated);
+          return;
+        }
+        setDraftOverlay(null);
+        persistOverlays([...overlays.filter((item) => item.id !== overlayId), updated]);
+        return;
+      }
+      if (overlays.some((item) => item.id === overlayId)) {
+        persistOverlays(overlays.map((item) =>
+          item.id === overlayId ? { ...item, ...patch } : item,
+        ));
+      }
     },
-    [overlays, persistOverlays],
+    [overlays, persistOverlays, setDraftOverlay],
   );
 
   const commitEditing = useCallback(() => {
+    // An untouched source PDF line is never saved as an annotation.
+    if (draftOverlayRef.current) setDraftOverlay(null);
     const current = editingId ? overlays.find((item) => item.id === editingId) : null;
     if (current && !current.text.trim() && !current.cover) {
       persistOverlays(overlays.filter((item) => item.id !== current.id));
@@ -398,7 +432,20 @@ function PdfViewerScreen() {
     editingNodeRef.current = null;
     setEditingId(null);
     setFontMenuOpen(false);
-  }, [editingId, overlays, persistOverlays]);
+  }, [editingId, overlays, persistOverlays, setDraftOverlay]);
+
+  // Switching pages or rotating never leaves the old caret floating over
+  // another page. Saved annotations remain attached to their PDF page.
+  const lastPageRotationRef = useRef(`${page}:${rotation}`);
+  useEffect(() => {
+    const next = `${page}:${rotation}`;
+    if (lastPageRotationRef.current === next) return;
+    lastPageRotationRef.current = next;
+    setDraftOverlay(null);
+    setEditingId(null);
+    editingNodeRef.current = null;
+    setTextBoxes([]);
+  }, [page, rotation, setDraftOverlay]);
 
   /* ---------------- Scoped rich-text formatting for the active box -------- */
   type FullRun = RunStyle & { text: string };
@@ -639,39 +686,46 @@ function PdfViewerScreen() {
     const rect = wrap.getBoundingClientRect();
     const xPct = ((event.clientX - rect.left) / rect.width) * 100;
     const yPct = ((event.clientY - rect.top) / rect.height) * 100;
+    const sourcePoint = displayToSourceRect({x:xPct,y:yPct,width:0,height:0},rotation);
 
     const existing = pageOverlays.find(
       (item) =>
-        xPct >= item.xPct &&
-        xPct <= item.xPct + item.widthPct &&
-        yPct >= item.yPct &&
-        yPct <= item.yPct + item.heightPct,
+        sourcePoint.x >= item.xPct &&
+        sourcePoint.x <= item.xPct + item.widthPct &&
+        sourcePoint.y >= item.yPct &&
+        sourcePoint.y <= item.yPct + item.heightPct,
     );
     if (existing) {
+      if (draftOverlayRef.current?.id !== existing.id) setDraftOverlay(null);
       pendingTapRef.current = { x: event.clientX, y: event.clientY };
       editingNodeRef.current = null;
       setEditingId(existing.id);
       return;
     }
 
-    const hit = textBoxes.find(
+    // Never hit-test stale text extracted for a previous page/rotation.
+    const hit = renderedPageRef.current === `${page}:${rotation}` && !draftOverlayRef.current
+      ? textBoxes.find(
       (box) =>
         xPct >= box.leftPct &&
         xPct <= box.leftPct + box.widthPct &&
         yPct >= box.topPct &&
         yPct <= box.topPct + box.heightPct,
-    );
+    ) : undefined;
 
     if (hit) {
       pendingTapRef.current = { x: event.clientX, y: event.clientY };
-      const heightPx = (hit.heightPct / 100) * canvasHeight;
+      const sourceBox = displayToSourceRect({
+        x:hit.leftPct,y:hit.topPct,width:hit.widthPct,height:hit.heightPct,
+      },rotation);
+      const heightPx = (sourceBox.height / 100) * unrotatedPageSize.height;
       const overlay: PdfTextOverlay = {
         id: createOverlayId(),
         page,
-        xPct: hit.leftPct,
-        yPct: hit.topPct,
-        widthPct: Math.max(hit.widthPct, 8),
-        heightPct: hit.heightPct,
+        xPct: sourceBox.x,
+        yPct: sourceBox.y,
+        widthPct: Math.max(sourceBox.width, 3),
+        heightPct: sourceBox.height,
         text: hit.text,
         cover: true,
         // Inspect the tapped text's own size; the toolbar value is never applied here.
@@ -681,7 +735,8 @@ function PdfViewerScreen() {
         italic: hit.italic,
         color: DEFAULT_PDF_TEXT_COLOR,
       };
-      persistOverlays([...overlays, overlay]);
+      // Temporarily place a caret without changing the source PDF.
+      setDraftOverlay(overlay);
       editingNodeRef.current = null;
       setEditingId(overlay.id);
       return;
@@ -691,10 +746,10 @@ function PdfViewerScreen() {
     const overlay: PdfTextOverlay = {
       id: createOverlayId(),
       page,
-      xPct: clamp(xPct, 0, 90),
-      yPct: clamp(yPct, 0, 96),
+      xPct: clamp(sourcePoint.x, 0, 90),
+      yPct: clamp(sourcePoint.y, 0, 96),
       widthPct: 40,
-      heightPct: Math.max(((draftStyle.fontSize * viewScale * 1.35) / Math.max(canvasHeight, 1)) * 100, 2),
+      heightPct: Math.max(((draftStyle.fontSize * viewScale * 1.35) / Math.max(unrotatedPageSize.height, 1)) * 100, 2),
       text: "",
       cover: false,
       fontSize: draftStyle.fontSize,
@@ -704,7 +759,7 @@ function PdfViewerScreen() {
       italic: draftStyle.italic,
       underline: draftStyle.underline,
     };
-    persistOverlays([...overlays, overlay]);
+    setDraftOverlay(overlay);
     editingNodeRef.current = null;
     setEditingId(overlay.id);
   };
@@ -1383,7 +1438,15 @@ function PdfViewerScreen() {
                 ))}
               </div>
             )}
-            {/* Text hit-testing stays active, without drawing yellow markers over the PDF. */}
+            {/* All editable text is attached to the source PDF page, not the
+                screen viewport. Rotate/scroll this group with the PDF canvas. */}
+            <div className="absolute left-0 top-0" style={{
+              width: unrotatedPageSize.width,
+              height: unrotatedPageSize.height,
+              transform: sourceOverlayTransform(rotation, unrotatedPageSize.width, unrotatedPageSize.height),
+              transformOrigin: "top left",
+              pointerEvents: "none",
+            }}>
             {pageOverlays.map((overlay) => {
               const isEditing = overlay.id === editingId;
               const sizePx = Math.max((overlay.fontSize ?? DEFAULT_PDF_FONT_SIZE) * viewScale, 6);
@@ -1401,14 +1464,16 @@ function PdfViewerScreen() {
                     }
                   }}
                   className={`absolute flex items-center overflow-visible whitespace-pre text-left leading-tight ${
-                    overlay.cover ? "bg-white" : ""
+                    overlay.cover && draftOverlay?.id !== overlay.id ? "bg-white" : ""
                   }`}
                   style={{
                     left: `${overlay.xPct}%`,
                     top: `${overlay.yPct}%`,
                     width: `${overlay.widthPct}%`,
                     minHeight: `${overlay.heightPct}%`,
+                    pointerEvents: "auto",
                     fontSize: `${sizePx}px`,
+                    lineHeight: 1,
                     fontFamily: fontCss(overlay.fontFamily),
                     fontWeight: overlay.bold ? 700 : 400,
                     fontStyle: overlay.italic ? "italic" : "normal",
@@ -1423,7 +1488,12 @@ function PdfViewerScreen() {
                       suppressContentEditableWarning
                       spellCheck={false}
                       className="block w-full bg-transparent outline-none"
-                      style={{ caretColor: overlay.color ?? DEFAULT_PDF_TEXT_COLOR }}
+                      style={{
+                        caretColor: overlay.color ?? DEFAULT_PDF_TEXT_COLOR,
+                        // Preserve the exact glyphs from the original PDF on tap;
+                        // only the caret is drawn until real text edits are made.
+                        WebkitTextFillColor: draftOverlay?.id === overlay.id && overlay.cover ? "transparent" : undefined,
+                      }}
                       onInput={(event) => {
                         const runs = readRunsFromDom(event.currentTarget, renderedRunsRef.current, baseStyle(overlay));
                         saveRuns(overlay.id, runs);
@@ -1449,6 +1519,7 @@ function PdfViewerScreen() {
                 </div>
               );
             })}
+            </div>
           </div>
         </div>
       </div>

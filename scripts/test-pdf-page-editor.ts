@@ -1,0 +1,33 @@
+import { strict as assert } from "node:assert";
+import { displayToSourceRect, sourceToDisplayRect, sourceOverlayTransform, pdfTextBounds } from "../src/lib/pdf-page-geometry";
+import { hasPdfDraftChanges, hasSaveablePdfContent } from "../src/lib/pdf-edit-guard";
+import type { PdfTextOverlay } from "../src/lib/notes-store";
+const close=(a:number,b:number)=>assert.ok(Math.abs(a-b)<0.00001,`not equal: ${a} vs ${b}`);
+const sample={x:15,y:24,width:32,height:6};
+for (const rotation of [0,90,180,270]) {
+  const display=sourceToDisplayRect(sample,rotation);
+  const source=displayToSourceRect(display,rotation);
+  for (const key of ["x","y","width","height"] as const) close(source[key],sample[key]);
+}
+assert.equal(sourceOverlayTransform(0,300,500),"none");
+assert.equal(sourceOverlayTransform(90,300,500),"translate(500px,0px) rotate(90deg)");
+assert.equal(sourceOverlayTransform(180,300,500),"translate(300px,500px) rotate(180deg)");
+assert.equal(sourceOverlayTransform(270,300,500),"translate(0px,300px) rotate(270deg)");
+const r0=pdfTextBounds([12,0,0,-12,40,60],70,12,300,500);
+close(r0.x,40/300*100);close(r0.y,48/500*100);
+const r90=pdfTextBounds([0,12,12,0,40,60],70,12,500,300);
+close(r90.x,40/500*100);close(r90.y,60/300*100);
+const text:PdfTextOverlay={id:"a",page:1,xPct:15,yPct:24,widthPct:32,heightPct:6,text:"Original",cover:true,fontSize:11,fontFamily:"Arial"};
+assert.equal(hasPdfDraftChanges(text,{...text}),false);
+assert.equal(hasPdfDraftChanges(text,{...text,text:"Changed"}),true);
+assert.equal(hasPdfDraftChanges(text,{...text,fontSize:14}),true);
+assert.equal(hasSaveablePdfContent({...text,text:"",cover:false}),false);
+const src=await Bun.file("src/routes/pdf.$id.tsx").text();
+assert.ok(!src.includes("persistOverlays([...overlays, overlay])"),"Tap cannot persist");
+assert.ok(src.includes("setDraftOverlay(overlay)"));
+assert.ok(src.includes("sourceOverlayTransform(rotation,"));
+assert.ok(src.includes("renderedPageRef.current ==="));
+assert.ok(src.includes("displayToSourceRect("));
+assert.ok(src.includes('WebkitTextFillColor:'));
+assert.ok(src.includes("setEditingId(null);"),"Page change exits editor");
+console.log("PDF tap no-op, 4 rotations, rotated text hitboxes and page-switch cleanup: PASS");

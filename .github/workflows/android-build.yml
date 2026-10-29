@@ -72,6 +72,9 @@ jobs:
       - name: TypeScript static checks
         run: bunx tsc --noEmit
 
+      - name: Verify PDF text editing preserves original on taps and rotates with page
+        run: bun scripts/test-pdf-page-editor.ts
+
       - name: Verify diagnostic screen separation and cross-route retry
         run: bun scripts/test-admob-diagnostics.ts
 
