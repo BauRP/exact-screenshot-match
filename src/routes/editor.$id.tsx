@@ -254,7 +254,7 @@ function EditorPage() {
   // after saving; the backup runs only once the editor is closed.
   useEffect(() => {
     window.dispatchEvent(new Event("wave-notes-editor-opened"));
-    return () => window.dispatchEvent(new Event("wave-notes-editor-closed"));
+    return () => { window.dispatchEvent(new Event("wave-notes-editor-closed")); };
   }, []);
 
   /** Back = discard: nothing typed in this session reaches the notes list. */
