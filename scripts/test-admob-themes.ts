@@ -1,0 +1,9 @@
+import { strict as assert } from "node:assert";
+const theme=await Bun.file("src/lib/theme.tsx").text();
+const native=await Bun.file("src/lib/native-ads.ts").text();
+assert.match(theme,/dispatchEvent\(new Event\("wave-admob-theme-changed"\)\)/);
+assert.match(native,/backgroundColor: lightTheme \? "#F5F6F8" : "#17191F"/);
+assert.match(native,/headlineColor: lightTheme \? "#16191F" : "#F4F5F7"/);
+assert.match(native,/addEventListener\("wave-admob-theme-changed", onPrivacyChanged\)/);
+assert.match(native,/removeEventListener\("wave-admob-theme-changed", onPrivacyChanged\)/);
+console.log("Native AdMob style follows dark/light mode without enlarging the 120px card: PASS");

@@ -93,14 +93,15 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
         const testAds = import.meta.env.VITE_ADMOB_LIVE_ADS !== "true";
         stage = "native";
         updateAdDiagnostic("loading", testAds ? "Загрузка тестовой нативной рекламы" : "Загрузка нативной рекламы");
+        const lightTheme = document.documentElement.classList.contains("light");
         const feed = await NativeAdFeed.create({
           feedId: HOME_AD_FEED_ID,
           template: NativeAdTemplate.Small,
           isTesting: testAds,
           ...(testAds ? {} : { adId: NATIVE_AD_UNIT_ID }),
           style: {
-            backgroundColor: "#17191F",
-            headlineColor: "#F4F5F7",
+            backgroundColor: lightTheme ? "#F5F6F8" : "#17191F",
+            headlineColor: lightTheme ? "#16191F" : "#F4F5F7",
             cornerRadius: 16,
             callToActionBackgroundColor: "#FFB52E",
           },
@@ -215,6 +216,7 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
     window.addEventListener("supernotes-admob-retry", onRetry);
     window.addEventListener("online", onOnline);
     window.addEventListener("wave-admob-consent-changed", onPrivacyChanged);
+    window.addEventListener("wave-admob-theme-changed", onPrivacyChanged);
     if (consumePendingAdRetry()) onRetry();
     else void initialize();
     return () => {
@@ -222,6 +224,7 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
       abort.abort();
       window.removeEventListener("online", onOnline);
       window.removeEventListener("wave-admob-consent-changed", onPrivacyChanged);
+      window.removeEventListener("wave-admob-theme-changed", onPrivacyChanged);
       window.removeEventListener("supernotes-admob-retry", onRetry);
       for (const timer of slotTimers) clearTimeout(timer);
       if (retryTimer !== null) clearTimeout(retryTimer);
