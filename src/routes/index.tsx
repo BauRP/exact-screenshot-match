@@ -276,9 +276,9 @@ function Index() {
       </div>
 
       {hydrated && status !== "error" && filteredNotes.length === 0 ? (
-        <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-4"><NativeAdCard slotKey="home-first" /></main>
+        <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-4" style={{ marginBottom: "var(--wave-bottom-nav-occlusion, 104px)" }}><NativeAdCard slotKey="home-first" /></main>
       ) : (
-        <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-4 [-webkit-overflow-scrolling:touch]">
+        <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-4 [-webkit-overflow-scrolling:touch]" style={{ marginBottom: "var(--wave-bottom-nav-occlusion, 104px)" }}>
           {!hydrated ? (
             <LoadingState />
           ) : status === "error" ? (
