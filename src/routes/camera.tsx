@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Capacitor } from "@capacitor/core";
 import { mergeOcrCandidates, exceedsOcrSpatialBudget, mergeOversizedOcrForReview, restoreOmittedOcrScriptTextForReview, hasAmbiguousHanCandidates, hasUncertainMixedScriptLayout, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
 import { linesFromMlKitBounded, mlKitReportedLanguages } from "@/lib/ocr-geometry";
+import { mergeHybridOcr } from "@/lib/ocr-hybrid";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
@@ -261,15 +262,19 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       // A timeout leaves an incomplete multilingual page. Do not silently
       // save partial results as if every configured recognizer had completed.
       if (timedOut || (!coverage.isComplete() && !fastDetected)) {
-        const partialMerge = exceedsOcrSpatialBudget(results, nativeGeometryTruncated)
-          ? mergeOversizedOcrForReview(results) : mergeOcrCandidates(results);
+        const partialMerge = mode==="auto" && !exceedsOcrSpatialBudget(results,nativeGeometryTruncated)
+          ? mergeHybridOcr(results).text
+          : exceedsOcrSpatialBudget(results, nativeGeometryTruncated)
+            ? mergeOversizedOcrForReview(results) : mergeOcrCandidates(results);
         // Partial scans can ALSO have full-text/line disagreements. Do not
         // discard those original sentences merely because another recognizer
         // failed before the normal review stage.
-        const partialOriginal = recoverNativeFullTextForReview(
-          partialMerge,[...results,...nativeFullReadings],
-          nativeAlternatives.map(alt => alt.script));
-        const partial = restoreOmittedOcrScriptTextForReview(partialOriginal,results);
+        const partialOriginal = mode==="auto" ? partialMerge :
+          recoverNativeFullTextForReview(
+            partialMerge,[...results,...nativeFullReadings],
+            nativeAlternatives.map(alt => alt.script));
+        const partial = mode==="auto" ? partialOriginal :
+          restoreOmittedOcrScriptTextForReview(partialOriginal,results);
         if (partial.trim()) {
           throw new OcrIncompleteScanError(
             partial,coverage.missingScripts(),nativeAlternatives,
@@ -288,7 +293,12 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       onProgress("Объединение распознанных строк");
       const tooManyLines = exceedsOcrSpatialBudget(results, nativeGeometryTruncated);
       const text = tooManyLines
-        ? mergeOversizedOcrForReview(results) : mergeOcrCandidates(results);
+        ? mergeOversizedOcrForReview(results)
+        : mode==="auto" ? mergeHybridOcr(results).text : mergeOcrCandidates(results);
+      // Camera mode is now always automatic. Save the selected text straight
+      // into one editable note, without asking for a second confirmation.
+      // Never concatenate the rival full-page readings of other engines.
+      if(mode==="auto" && text.trim()) return text;
       // Compute once, BEFORE any review exception: Han ambiguity, dense
       // layouts and missing scripts must all retain original full readings.
       const complete = recoverNativeFullTextForReview(
@@ -623,6 +633,35 @@ function CameraPage() {
       await finishWithText(text);
       if (shouldClearPendingDraft("note-saved")) markDraftFinished();
     } catch (caught) {
+      // A partially completed automatic scan still gives the user an editable
+      // note rather than a technical OCR review dialog. Persist before routing.
+      // Save failures retain a local draft; routing failures cannot duplicate
+      // the already-saved note.
+      if(caught instanceof OcrIncompleteScanError && !previousPhotoPath &&
+          caught.partialText.trim()) {
+        recognizedBeforeSave=caught.partialText;
+        try {
+          setOcrStage("Сохранение найденного текста");
+          await finishWithText(caught.partialText);
+          if(shouldClearPendingDraft("note-saved"))markDraftFinished();
+          return;
+        } catch(saveFailure) {
+          if(saveFailure instanceof OcrEditorNavigationError)markDraftFinished();
+          if(!mountedRef.current || operationId!==operationIdRef.current)return;
+          if(!(saveFailure instanceof OcrEditorNavigationError)) {
+            const unsaved:OcrRecoveryState={
+              path:currentImagePath??"",text:caught.partialText,
+              missingScripts:[...caught.missingScripts],
+            };
+            pendingRecoveryRef.current=unsaved;
+            retainUnfinishedResult(unsaved,"save-retry");
+          }
+          handleFailure(readableOcrFailure(saveFailure),operationId,
+            saveFailure instanceof OcrEditorNavigationError
+              ? saveFailure.savedNoteId:undefined);
+          return;
+        }
+      }
       // The note may be saved even when router navigation fails/unmounts.
       // Never leave a retryable draft that could create a duplicate note.
       if (caught instanceof OcrEditorNavigationError) markDraftFinished();

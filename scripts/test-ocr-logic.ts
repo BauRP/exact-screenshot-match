@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { mergeHybridOcr } from "../src/lib/ocr-hybrid";
 import { ocrTextToEditorHtml, buildOcrNoteDraft, truncateOcrTitle } from "../src/lib/ocr-note";
 import { composeRecognizedText, hasConflictingNativeOcrText, extractNativeTextAlternative, recoverNativeFullTextForReview } from "../src/lib/ocr-text";
 import { ocrScanPlan, selectedOcrScanPlan, readOcrScanPreferences, saveOcrScanPreferences, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, confidentOcrPrimaryScript, visualOcrScanPlan, cyrillicLanguageForScan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
@@ -925,3 +926,42 @@ console.log("Image-first detector maps scripts to compatible bundled engines wit
 
 // Unknown visual hints must continue all six engines, not invent a detected script.
 assert.equal(visualOcrScanPlan("script-not-supported"),null);
+
+
+// Hybrid OCR: the same image rectangle must NEVER become a second fake
+// foreign-language paragraph. Preserve truly separate scripts and words.
+const hybridJapanese = {script:"japanese" as const,
+ text:"こんにちは、元気ですか？",lines:[{
+  text:"こんにちは、元気ですか？",script:"japanese" as const,
+  left:.1,right:.85,top:.20,bottom:.28,language:"ja",
+ }]};
+const hybridFakeCyrillic={script:"cyrillic" as const,
+ text:"САЕЬН, яжсФо?",confidence:43,lines:[{
+  text:"САЕЬН, яжсФо?",script:"cyrillic" as const,
+  left:.11,right:.83,top:.21,bottom:.29,confidence:43,
+ }]};
+assert.equal(mergeHybridOcr([hybridFakeCyrillic,hybridJapanese]).text,
+ "こんにちは、元気ですか？");
+assert.equal(mergeHybridOcr([hybridFakeCyrillic,hybridJapanese])
+ .discardedOverlappingReadings,1);
+const hybridRealCyrillic={script:"cyrillic" as const,
+ text:"Привет, как дела?",confidence:85,lines:[{
+  text:"Привет, как дела?",script:"cyrillic" as const,
+  left:.09,right:.80,top:.46,bottom:.54,confidence:85,
+ }]};
+assert.equal(mergeHybridOcr([hybridJapanese,hybridRealCyrillic]).text,
+ "こんにちは、元気ですか？\n\nПривет, как дела?");
+const hybridLatin={script:"latin" as const,text:"Hello",lines:[{
+  text:"Hello",script:"latin" as const,left:.08,right:.42,top:.70,bottom:.75,
+}]};
+const hybridKorean={script:"korean" as const,text:"안녕하세요",lines:[{
+  text:"안녕하세요",script:"korean" as const,left:.53,right:.87,top:.70,bottom:.75,
+}]};
+assert.equal(mergeHybridOcr([hybridKorean,hybridLatin]).text,
+ "Hello\n안녕하세요");
+const hybridNoise={script:"cyrillic" as const,
+ text:"САЕЬН яжсФо?",lines:[]};
+assert.equal(mergeHybridOcr([hybridJapanese,hybridNoise]).text,
+ "こんにちは、元気ですか？");
+assert.equal(mergeHybridOcr([]).text,"");
+console.log("Hybrid region OCR removes cross-script overlap but keeps real mixed regions.");
