@@ -7,13 +7,14 @@ import { createNote, getNote } from "@/lib/notes-store";
 import { saveOcrNoteAndOpenEditor, reopenSavedOcrNote, OcrEditorNavigationError } from "@/lib/ocr-save-flow";
 import { useT } from "@/lib/i18n";
 import { toast } from "sonner";
+import { Capacitor } from "@capacitor/core";
 import { mergeOcrCandidates, exceedsOcrSpatialBudget, mergeOversizedOcrForReview, restoreOmittedOcrScriptTextForReview, hasAmbiguousHanCandidates, hasUncertainMixedScriptLayout, type OcrCandidate, type OcrLine, type OcrScript } from "@/lib/ocr-merge";
 import { linesFromMlKitBounded, mlKitReportedLanguages } from "@/lib/ocr-geometry";
 import { OcrSessionGate } from "@/lib/ocr-session";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "@/lib/ocr-budget";
 import { OcrScanCoverage } from "@/lib/ocr-coverage";
 import { OcrIncompleteScanError, OcrAmbiguousHanError, markIncompleteOcrText, markRecoveredOcrText, buildReviewedOcrText, applyRecoveredOcrPass, OCR_SCRIPT_LABELS, type OcrRecoveryState, type OcrHanAlternatives, type OcrReviewReason, OcrMixedLayoutReviewError, OcrLimitedSelectionReviewError, OcrNativeTextReviewError, OcrLargeLayoutReviewError, OcrOmittedScriptReviewError, resumeOcrReviewDraft, recoverFromReviewedText, hanAlternativesFromCandidates, previewHanAlternatives, cyrillicTextWithLineFallback } from "@/lib/ocr-partial";
-import { chooseLocalOcrImagePath, reusableOcrImagePath } from "@/lib/ocr-input";
+import { chooseLocalOcrImagePath, reusableOcrImagePath, safeLocalOcrPreviewUrl } from "@/lib/ocr-input";
 import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText, extractNativeTextAlternative, recoverNativeFullTextForReview, type OcrNativeTextAlternative } from "@/lib/ocr-text";
@@ -224,7 +225,13 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       if (timedOut || !coverage.isComplete()) {
         const partialMerge = exceedsOcrSpatialBudget(results, nativeGeometryTruncated)
           ? mergeOversizedOcrForReview(results) : mergeOcrCandidates(results);
-        const partial = restoreOmittedOcrScriptTextForReview(partialMerge,results);
+        // Partial scans can ALSO have full-text/line disagreements. Do not
+        // discard those original sentences merely because another recognizer
+        // failed before the normal review stage.
+        const partialOriginal = recoverNativeFullTextForReview(
+          partialMerge,[...results,...nativeFullReadings],
+          nativeAlternatives.map(alt => alt.script));
+        const partial = restoreOmittedOcrScriptTextForReview(partialOriginal,results);
         if (partial.trim()) throw new OcrIncompleteScanError(partial, coverage.missingScripts());
         if (timedOut) throw new Error("OCR timed out");
         coverage.ensureComplete();
@@ -239,27 +246,27 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       const tooManyLines = exceedsOcrSpatialBudget(results, nativeGeometryTruncated);
       const text = tooManyLines
         ? mergeOversizedOcrForReview(results) : mergeOcrCandidates(results);
-      if (tooManyLines && text) throw new OcrLargeLayoutReviewError(text);
-      if (scanPlan.length > 1 && text && hasAmbiguousHanCandidates(results)) {
-        throw new OcrAmbiguousHanError(text, hanAlternativesFromCandidates(results));
+      // Compute once, BEFORE any review exception: Han ambiguity, dense
+      // layouts and missing scripts must all retain original full readings.
+      const complete = recoverNativeFullTextForReview(
+        text,[...results,...nativeFullReadings],
+        nativeAlternatives.map(alt => alt.script));
+      const reviewText = restoreOmittedOcrScriptTextForReview(complete,results);
+      if (tooManyLines && reviewText) throw new OcrLargeLayoutReviewError(reviewText);
+      if (scanPlan.length > 1 && reviewText && hasAmbiguousHanCandidates(results)) {
+        throw new OcrAmbiguousHanError(reviewText, hanAlternativesFromCandidates(results));
       }
-      const fullText = restoreOmittedOcrScriptTextForReview(text,results);
-      if (fullText !== text) throw new OcrOmittedScriptReviewError(fullText);
-      // Give priority to presenting the recognizer's own full-text reading
-      // when its geometry omitted paragraphs. Otherwise an independent
-      // mixed-layout warning would hide these concrete comparison excerpts.
-      if (text && nativeAlternatives.length) {
-        const complete = recoverNativeFullTextForReview(
-          text,[...results,...nativeFullReadings],nativeAlternatives.map(alt => alt.script));
-        throw new OcrNativeTextReviewError(complete,nativeAlternatives);
+      if (reviewText !== complete) throw new OcrOmittedScriptReviewError(reviewText);
+      if (reviewText && nativeAlternatives.length) {
+        throw new OcrNativeTextReviewError(reviewText,nativeAlternatives);
       }
-      if (scanPlan.length > 1 && text && hasUncertainMixedScriptLayout(results)) {
-        throw new OcrMixedLayoutReviewError(text);
+      if (scanPlan.length > 1 && reviewText && hasUncertainMixedScriptLayout(results)) {
+        throw new OcrMixedLayoutReviewError(reviewText);
       }
-      if (text && Array.isArray(mode) && scanPlan.length < AUTO_SCAN_ORDER.length) {
-        throw new OcrLimitedSelectionReviewError(text);
+      if (reviewText && Array.isArray(mode) && scanPlan.length < AUTO_SCAN_ORDER.length) {
+        throw new OcrLimitedSelectionReviewError(reviewText);
       }
-      return text;
+      return reviewText;
       } finally {
         // Releasing an image while ML Kit still reads it causes intermittent
         // failures. Hold the gate until every underlying promise has settled.
@@ -794,6 +801,11 @@ function CameraPage() {
     }
   };
 
+  // This URL is only a local Capacitor WebView mapping. No image bytes are
+  // uploaded, and a restored text draft intentionally contains no photo path.
+  const localPhotoPreview = isNativePlatform() && retryImagePath
+    ? safeLocalOcrPreviewUrl(retryImagePath, Capacitor.convertFileSrc)
+    : null;
   const busy = status === "preparing" || status === "picking" || status === "scanning";
   const toggleSelectedLanguage = (script: OcrScript) => {
     if (busy) return;
@@ -932,6 +944,17 @@ function CameraPage() {
                 : " Результат нескольких проверок может содержать ошибки."}
             </DialogDescription>
           </DialogHeader>
+          {localPhotoPreview && (
+            <details className="shrink-0 rounded-lg border border-border p-2 text-left">
+              <summary className="cursor-pointer text-xs font-medium">
+                Сравнить распознанный текст с исходной фотографией
+              </summary>
+              <img src={localPhotoPreview}
+                alt="Исходная фотография для проверки символов и порядка строк"
+                className="mt-2 max-h-48 w-full rounded object-contain"
+                loading="lazy" />
+            </details>
+          )}
           {nativeAlternatives.length > 0 && (
             <div className="min-h-0 overflow-y-auto rounded-lg border border-border p-2 text-left">
               <p className="mb-2 text-xs font-semibold">Разные варианты текста от распознавателя</p>

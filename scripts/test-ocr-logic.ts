@@ -6,7 +6,7 @@ import { linesFromMlKit, linesFromMlKitBounded, mlKitReportedLanguages } from ".
 import { OcrSessionGate } from "../src/lib/ocr-session";
 import { OcrScanCoverage } from "../src/lib/ocr-coverage";
 import { OcrIncompleteScanError, markIncompleteOcrText, OCR_SCRIPT_LABELS, hanAlternativesFromCandidates, previewHanAlternatives, cyrillicTextWithLineFallback } from "../src/lib/ocr-partial";
-import { chooseLocalOcrImagePath, reusableOcrImagePath } from "../src/lib/ocr-input";
+import { chooseLocalOcrImagePath, reusableOcrImagePath, safeLocalOcrPreviewUrl } from "../src/lib/ocr-input";
 import { OcrTimeBudget, withOcrDeadline, startOcrWithinBudget } from "../src/lib/ocr-budget";
 import { isLocalOcrImagePath } from "../src/lib/ocr-input";
 import { isCameraCancellation, readableOcrFailure } from "../src/lib/ocr-errors";
@@ -860,3 +860,20 @@ assert.ok(edited.includes("Қазақша мәтін"));
 assert.ok(edited.includes("first\nlast"));
 assert.equal(edited.match(/日本語の文章/g)?.length,1);
 console.log("Original native full readings survive disagreement with block-only OCR: passed.");
+
+
+// The review image must be rendered by the device's local WebView bridge.
+// Never convert a remote image URL, and never leak it to a remote HTTP origin.
+assert.equal(safeLocalOcrPreviewUrl("content://media/external/images/media/7",
+  () => "http://localhost/_capacitor_content_/media/7"),
+  "http://localhost/_capacitor_content_/media/7");
+assert.equal(safeLocalOcrPreviewUrl("file:///data/user/0/wave/photo.jpg",
+  () => "https://localhost/_capacitor_file_/wave/photo.jpg"),
+  "https://localhost/_capacitor_file_/wave/photo.jpg");
+assert.equal(safeLocalOcrPreviewUrl("https://example.com/photo.jpg",
+  () => {throw new Error("Remote conversion must not execute");}),null);
+assert.equal(safeLocalOcrPreviewUrl("content://media/external/images/media/7",
+  () => "https://images.example.com/photo.jpg"),null);
+assert.equal(safeLocalOcrPreviewUrl("/data/user/0/wave/photo.jpg",
+  () => {throw new Error("Photo unavailable");}),null);
+console.log("Local-only camera/photo review is safe and cannot fetch external images: passed.");

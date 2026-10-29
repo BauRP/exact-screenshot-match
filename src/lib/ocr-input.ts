@@ -29,3 +29,19 @@ export function reusableOcrImagePath(path: unknown): string {
   }
   return path;
 }
+
+
+/** Preview only an existing local photo using Capacitor's private WebView
+ * mapping. Never produce a remote image request or persist photo bytes.
+ * A cold-restored OCR draft intentionally does not retain a photo path.
+ */
+export function safeLocalOcrPreviewUrl(
+  path: unknown, convert: (localPath: string) => string,
+): string | null {
+  if (!isLocalOcrImagePath(path)) return null;
+  try {
+    const url = convert(path);
+    return /^(?:https?:\/\/localhost(?::\d+)?\/|capacitor:\/\/localhost\/)/iu.test(url)
+      ? url : null;
+  } catch { return null; }
+}
