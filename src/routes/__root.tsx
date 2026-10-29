@@ -16,6 +16,7 @@ import { ThemeBoot } from "../lib/theme";
 import { AppLockGate } from "../lib/app-lock";
 import { NativeShellBoot } from "../lib/native-shell";
 import { NativeBackHandler } from "../lib/native-back";
+import { startLocalBackupAutoSync } from "../lib/local-backup";
 import { normalizeLang, dirOf } from "../lib/i18n";
 
 
@@ -140,6 +141,7 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  useEffect(() => startLocalBackupAutoSync(), []);
 
   useEffect(() => {
     try {

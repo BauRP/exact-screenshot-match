@@ -28,7 +28,10 @@ function persist() {
     localStorage.setItem(HIDDEN_KEY, JSON.stringify(hiddenSystem));
   } catch {}
 }
-function emit() { listeners.forEach((l) => l()); }
+function emit() {
+  listeners.forEach((l) => l());
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("wave-notes-data-changed"));
+}
 
 function hydrate() {
   if (hydrated || typeof window === "undefined") return;

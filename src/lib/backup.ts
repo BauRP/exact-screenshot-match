@@ -23,6 +23,7 @@ type BackupManifest = {
   hiddenSystem: string[];
   pdfIds: string[];
   audioIds: string[];
+  deletedAt?: Record<string, number>;
 };
 
 function parseManifest(input: Uint8Array): BackupManifest {
@@ -49,41 +50,65 @@ function uniqueIds(ids: string[]) {
   return [...new Set(ids)];
 }
 
-export async function createFullBackup(): Promise<Blob> {
-  const payload = JSON.parse(exportNotes()) as { notes: Note[] };
-  const notes = payload.notes;
+/** Build a complete current snapshot, retaining deleted items for 24 hours.
+ * Previous ZIP bytes carry the deleted PDFs/audio so deletion of live files is safe.
+ * Old archive is validated before it can influence a new snapshot.
+ */
+export async function createFullBackup(previous?: Blob): Promise<Blob> {
+  const liveNotes = (JSON.parse(exportNotes()) as { notes: Note[] }).notes;
   const folders = exportFolderBackup();
+  const liveIds = new Set(liveNotes.map((note) => note.id));
+  const deletedAt: Record<string, number> = {};
+  const retained: Note[] = [];
+  let previousEntries: Record<string, Uint8Array> = {};
+  if (previous) {
+    if (previous.size > MAX_ARCHIVE_BYTES) throw new Error("Предыдущая копия превышает 100 МБ");
+    previousEntries = unzipSync(new Uint8Array(await previous.arrayBuffer()), {
+      filter: (entry) => {
+        if (entry.originalSize > MAX_ENTRY_BYTES) throw new Error("Повреждена старая резервная копия");
+        return true;
+      },
+    });
+    if (!previousEntries["manifest.json"]) throw new Error("В прежней копии отсутствуют данные");
+    const old = parseManifest(previousEntries["manifest.json"]);
+    const oldDeletions = old.deletedAt ?? {};
+    const now = Date.now();
+    for (const note of old.notes) {
+      if (liveIds.has(note.id)) continue;
+      const when = Object.prototype.hasOwnProperty.call(oldDeletions, note.id) ? oldDeletions[note.id] : now;
+      if (!Number.isFinite(when) || when > now || now - when >= 24 * 60 * 60 * 1000) continue;
+      retained.push(note);
+      deletedAt[note.id] = when;
+    }
+  }
+  const notes = [...liveNotes, ...retained];
   const pdfIds = uniqueIds(notes.filter((note) => note.kind === "pdf").map((note) => note.id));
   const audioIds = uniqueIds(notes.flatMap((note) => audioIdsInHtml(note.body)));
   const entries: Record<string, Uint8Array> = {};
   let total = 0;
-
   const add = (name: string, bytes: Uint8Array) => {
     total += bytes.byteLength;
-    if (total > MAX_ARCHIVE_BYTES) throw new Error("Резервная копия превышает 100 МБ. Требуется перенос больших файлов отдельно.");
+    if (total > MAX_ARCHIVE_BYTES) throw new Error("Резервная копия превышает 100 МБ. Удалите ненужные вложения.");
     entries[name] = bytes;
   };
-
   const manifest: BackupManifest = {
     format: FORMAT, version: VERSION, createdAt: Date.now(),
-    notes, folders: folders.folders, hiddenSystem: folders.hiddenSystem, pdfIds, audioIds,
+    notes, folders: folders.folders, hiddenSystem: folders.hiddenSystem, pdfIds, audioIds, deletedAt,
   };
   add("manifest.json", strToU8(JSON.stringify(manifest)));
-
   for (const id of pdfIds) {
-    const buffer = await loadPdfFile(id);
-    if (!buffer) throw new Error("Не найден PDF. Резервная копия отменена: " + id);
-    add("pdf/" + id + ".pdf", new Uint8Array(buffer));
+    const buffer = liveIds.has(id) ? await loadPdfFile(id) : null;
+    const raw = buffer ? new Uint8Array(buffer) : previousEntries["pdf/" + id + ".pdf"];
+    if (!raw) throw new Error("Не найден PDF. Сохранение копии отменено: " + id);
+    add("pdf/" + id + ".pdf", raw);
   }
-
   for (const id of audioIds) {
-    const blob = await loadAudioFile(id);
-    if (!blob) throw new Error("Не найдено аудио. Резервная копия отменена: " + id);
-    add("audio/" + id + ".blob", new Uint8Array(await blob.arrayBuffer()));
+    const audio = await loadAudioFile(id);
+    const raw = audio ? new Uint8Array(await audio.arrayBuffer()) : previousEntries["audio/" + id + ".blob"];
+    if (!raw) throw new Error("Не найдено аудио. Сохранение копии отменено: " + id);
+    add("audio/" + id + ".blob", raw);
   }
-  // Binary PDF/audio assets are already compressed; no CPU-intensive recompression.
-  const archived = zipSync(entries, { level: 0 });
-  return new Blob([archived.slice().buffer], { type: "application/zip" });
+  return new Blob([zipSync(entries, { level: 0 }).slice().buffer], { type: "application/zip" });
 }
 
 export async function shareFullBackup(blob: Blob): Promise<void> {

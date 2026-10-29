@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import {
   Moon,
   Sun,
-  Trash2,
   LayoutGrid,
   List,
   Table2,
@@ -20,15 +19,13 @@ import {
 } from "lucide-react";
 import { sendFeedback } from "@/lib/feedback.functions";
 import { useAdDiagnostic, requestAdRetry } from "@/lib/ad-diagnostics";
-import { createFullBackup, restoreFullBackup, shareFullBackup } from "@/lib/backup";
+import { saveLocalBackup, restoreLocalBackup } from "@/lib/local-backup";
 import { AppHeader } from "@/components/AppHeader";
 import { LanguagePickerSheet } from "@/components/LanguagePickerSheet";
 import { BottomNav } from "@/components/BottomNav";
 import { useTheme, setTheme } from "@/lib/theme";
 import {
-  clearAll,
   setView,
-  useNotes,
   useView,
   type ViewMode,
 } from "@/lib/notes-store";
@@ -160,13 +157,10 @@ function Btn({
 function SettingsPage() {
   const { theme } = useTheme();
   const view = useView();
-  const notes = useNotes();
   const language = useLang();
   const t = useT();
   const navigate = useNavigate();
-  const [clearing, setClearing] = useState(false);
   const { pinEnabled, bioEnabled } = useLockConfig();
-  const [clearOpen, setClearOpen] = useState(false);
   const [pinDialog, setPinDialog] = useState(false);
   const [pinValue, setPinValue] = useState("");
   const [enableBioAfterPin, setEnableBioAfterPin] = useState(false);
@@ -216,28 +210,26 @@ function SettingsPage() {
       setAdPrivacyLoading(false);
     }
   };
-  const backupPickerRef = useRef<HTMLInputElement>(null);
 
   const makeBackup = async () => {
     if (backupBusy) return;
     setBackupBusy(true);
     try {
-      const archive = await createFullBackup();
-      await shareFullBackup(archive);
-      toast.success("Резервная копия подготовлена");
+      await saveLocalBackup();
+      toast.success("Резервная копия сохранена внутри приложения");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось создать резервную копию");
+      toast.error(error instanceof Error ? error.message : "Не удалось сохранить резервную копию");
     } finally { setBackupBusy(false); }
   };
 
-  const importBackup = async (file: File) => {
+  const restoreBackup = async () => {
     if (backupBusy) return;
     setBackupBusy(true);
     try {
-      const count = await restoreFullBackup(file);
-      toast.success(`Восстановлено заметок: ${count}. Существующие заметки сохранены.`);
+      const count = await restoreLocalBackup();
+      toast.success(count > 0 ? `Восстановлено заметок: ${count}` : "Резервная копия проверена. Новых заметок нет.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось восстановить архив");
+      toast.error(error instanceof Error ? error.message : "Не удалось восстановить резервную копию");
     } finally { setBackupBusy(false); }
   };
 
@@ -418,27 +410,12 @@ function SettingsPage() {
         </Section>
 
         <Section title={t("data")} eyebrow="05">
-          <Row icon={<Download className="h-4 w-4" />} title="Полная резервная копия" hint="Заметки, PDF, аудио и папки — один ZIP-файл">
+          <Row icon={<Download className="h-4 w-4" />} title="Создать резервную копию" hint="Сохраняет все данные приложения в резервную копию">
             <Btn disabled={backupBusy} onClick={() => void makeBackup()}>Сохранить</Btn>
           </Row>
           <div className="h-px bg-border" />
-          <Row icon={<Upload className="h-4 w-4" />} title="Восстановить из ZIP" hint="Добавляет документы, не удаляя существующие">
-            <Btn disabled={backupBusy} onClick={() => backupPickerRef.current?.click()}>Открыть</Btn>
-          </Row>
-          <input ref={backupPickerRef} className="hidden" type="file" accept=".zip,application/zip" onChange={(event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (file) void importBackup(file);
-          }} />
-          <div className="h-px bg-border" />
-          <Row
-            icon={<Trash2 className="h-4 w-4 text-destructive" />}
-            title={t("clear_all_notes")}
-            hint={t("cant_undo")}
-          >
-            <Btn variant="destructive" onClick={() => setClearOpen(true)} disabled={notes.length === 0}>
-              {t("clear")}
-            </Btn>
+          <Row icon={<Upload className="h-4 w-4" />} title="Восстановить резервную копию" hint="Восстанавливает данные из последней сохранённой резервной копии">
+            <Btn disabled={backupBusy} onClick={() => void restoreBackup()}>Восстановить</Btn>
           </Row>
           <div className="h-px bg-border" />
           <Row icon={<Shield className="h-4 w-4" />} title={t("privacy_policy")}>
@@ -617,39 +594,6 @@ function SettingsPage() {
             className="w-full resize-none rounded-xl border border-border bg-secondary/40 px-3 py-2 text-sm outline-none focus:border-primary"
           />
         </div>
-      </Modal>
-
-      {/* Clear-all confirm */}
-      <Modal
-        open={clearOpen}
-        onClose={() => { if (!clearing) setClearOpen(false); }}
-        title={t("delete_all_q")}
-        icon={<Trash2 className="h-4 w-4 text-destructive" />}
-        footer={
-          <>
-            <Btn variant="ghost" onClick={() => setClearOpen(false)}>
-              {t("cancel")}
-            </Btn>
-            <Btn
-              variant="destructive"
-              onClick={async () => {
-                if (clearing) return;
-                setClearing(true);
-                try {
-                  await clearAll();
-                  setClearOpen(false);
-                  toast.success(t("delete_all"));
-                } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "Не удалось удалить заметки");
-                } finally { setClearing(false); }
-              }}
-            >
-              {t("delete_all")}
-            </Btn>
-          </>
-        }
-      >
-        <p className="text-xs text-muted-foreground">{t("delete_all_body")}</p>
       </Modal>
 
       <BottomNav />

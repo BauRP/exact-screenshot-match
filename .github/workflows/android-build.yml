@@ -64,6 +64,9 @@ jobs:
       - name: TypeScript static checks
         run: bunx tsc --noEmit
 
+      - name: Verify local backup auto-update and 24-hour deletion protection
+        run: bun scripts/test-internal-backup.ts
+
       - name: Verify ZIP backup restores custom folders and hidden system tabs
         run: bun scripts/test-folder-zip-restore.ts
 
