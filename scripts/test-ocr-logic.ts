@@ -922,3 +922,6 @@ assert.deepEqual(visualOcrScanPlan("latin"),["latin","cyrillic"]);
 assert.equal(visualOcrScanPlan("unknown"),null);
 assert.equal(visualOcrScanPlan(""),null);
 console.log("Image-first detector maps scripts to compatible bundled engines with fallback: passed.");
+
+// Unknown visual hints must continue all six engines, not invent a detected script.
+assert.equal(visualOcrScanPlan("script-not-supported"),null);

@@ -133,6 +133,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       let nativeGeometryTruncated = false;
       let timeBudget: OcrTimeBudget | null = null;
       let fastDetected: OcrScript | null = null;
+      let visualFastPath = false;
       const timed = <T,>(start: () => Promise<T>, duration: number): Promise<T> => {
         if (!timeBudget) throw new Error("OCR budget was not initialized");
         return startOcrWithinBudget(timeBudget, duration, start, task => outstanding.push(task));
@@ -159,6 +160,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
           const selected=visualOcrScanPlan(prepared.detectedScript);
           if(selected) {
             scanPlan.splice(0,scanPlan.length,...selected);
+            visualFastPath = true;
             onProgress("Определена письменность: проверяем подходящую модель");
           }
         }
@@ -220,6 +222,15 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         } else {
           const item = scripts.find(item => item.id === script);
           if (item) await recognize(item, index + 1);
+        }
+        // A misleading visual classification must NEVER make an image look
+        // blank. If its selected engines read nothing, widen the current
+        // session to every remaining bundled recognizer automatically.
+        if (mode === "auto" && visualFastPath && index === scanPlan.length-1 &&
+            results.length === 0 && !timedOut) {
+          scanPlan.push(...AUTO_SCAN_ORDER.filter(item=>!scanPlan.includes(item)));
+          visualFastPath = false;
+          onProgress("Письменность не подтверждена — расширяем проверку");
         }
         // Fast path: stop costly recognizers only on substantial single-script
         // evidence. Otherwise continue and preserve the mixed-language review.
