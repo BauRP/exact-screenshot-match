@@ -119,7 +119,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       const releaseSession = native ? nativeOcrGate.enter() : () => undefined;
       const results: OcrCandidate[] = [];
       const scanPlan = ocrScanPlan(mode);
-      const coverage = new OcrScanCoverage(scanPlan);
+      let coverage = new OcrScanCoverage(scanPlan);
       // Track all native work, including operations that outlive the UI deadline.
       const outstanding: Promise<unknown>[] = [];
       let prepared: {path:string;width:number;height:number;detectedScript?:string;scriptVotes?:number;scriptComponents?:number} | null = null;
@@ -160,6 +160,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
           const selected=visualOcrScanPlan(prepared.detectedScript);
           if(selected) {
             scanPlan.splice(0,scanPlan.length,...selected);
+            coverage = new OcrScanCoverage(scanPlan);
             visualFastPath = true;
             onProgress("Определена письменность: проверяем подходящую модель");
           }
@@ -229,6 +230,9 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         if (mode === "auto" && visualFastPath && index === scanPlan.length-1 &&
             results.length === 0 && !timedOut) {
           scanPlan.push(...AUTO_SCAN_ORDER.filter(item=>!scanPlan.includes(item)));
+          coverage = new OcrScanCoverage(scanPlan);
+          // Existing completed short-list checks must be retained.
+          for(const prior of scanPlan.slice(0,index+1)) coverage.markCompleted(prior);
           visualFastPath = false;
           onProgress("Письменность не подтверждена — расширяем проверку");
         }
