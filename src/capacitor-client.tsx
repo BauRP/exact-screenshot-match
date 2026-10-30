@@ -8,6 +8,9 @@ import { getRouter } from "./router";
 import { hideNativeSplash } from "./lib/native-ready";
 
 const CAPACITOR_ENTRY_MARKER = "wave-notes-capacitor-client-entry";
+if (typeof document !== "undefined") {
+  document.documentElement.classList.add("wave-native-android");
+}
 if (typeof window !== "undefined") {
   (window as Window & { __waveNotesCapacitorEntry?: string }).__waveNotesCapacitorEntry =
     CAPACITOR_ENTRY_MARKER;
@@ -23,7 +26,7 @@ const finishIntro = () => (window as StartupWindow).__waveNotesIntro?.finish();
 // animation is safe if the bridge is late: HTML has its own independent timer.
 const splashTimer = setTimeout(() => {
   void hideNativeSplash().finally(beginIntro);
-}, 2200);
+}, 1500);
 
 window.addEventListener("error", (event) => {
   console.error("[startup] uncaught error", event.error ?? event.message);
