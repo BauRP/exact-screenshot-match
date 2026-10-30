@@ -124,113 +124,139 @@ ${cssLinks}
     </script>
   
     <style id="wave-intro-style">
-      /* Android-only Capacitor boot screen. Rendered outside the React app. */
+      /* Premium startup: continuous, screen-wide illumination. No static T,
+         full-screen blur, SVG filters, animated clipping or descending strips. */
       #wave-intro {
         position: fixed; inset: 0; z-index: 2147483000; overflow: hidden;
-        display: flex; justify-content: center; align-items: center;
+        display: flex; align-items: center; justify-content: center;
         background: #050609; color: #fff; isolation: isolate;
-        font-family: system-ui, -apple-system, "Roboto", Arial, sans-serif;
-        transition: opacity .34s ease-out; opacity: 1;
+        font-family: system-ui, -apple-system, Roboto, Arial, sans-serif;
+        opacity: 1; transition: opacity .30s ease-out;
       }
       #wave-intro.wave-intro-leave { opacity: 0; pointer-events: none; }
-      #wave-intro-beam {
-        position: absolute; top: -9%; left: 50%;
-        width: 140vw; max-width: 900px; height: 108%;
-        transform: translateX(-50%); opacity: 0;
-        background: linear-gradient(90deg, transparent 2%, rgba(200,222,246,.035) 24%, rgba(227,239,255,.20) 50%, rgba(200,222,246,.035) 76%, transparent 98%);
-        /* Full-width gradient lighting: no expensive clipped blur layer. */
+      #wave-intro-atmosphere, #wave-intro-beam {
+        position: absolute; inset: 0; opacity: 0; pointer-events: none;
+        will-change: opacity;
       }
       #wave-intro-atmosphere {
-        position: absolute; inset: -5% -20%; opacity: 0;
-        background: radial-gradient(ellipse 65% 45% at 50% 35%, rgba(191,220,245,.22), transparent 82%);
-        pointer-events: none;
+        background:
+          linear-gradient(180deg, rgba(27,44,67,.37) 0%,
+            rgba(17,30,48,.22) 45%, rgba(8,16,30,.10) 75%, transparent 100%),
+          radial-gradient(ellipse 125% 90% at 50% 15%,
+            rgba(158,188,220,.22), rgba(80,112,145,.11) 54%, transparent 96%);
+      }
+      #wave-intro-beam {
+        background:
+          radial-gradient(ellipse 100% 97% at 50% -6%,
+            rgba(243,249,255,.35), rgba(177,211,240,.17) 36%,
+            rgba(86,116,151,.06) 74%, transparent 100%),
+          linear-gradient(90deg, rgba(112,145,182,.02) 0%,
+            rgba(170,204,235,.07) 25%, rgba(240,248,255,.17) 50%,
+            rgba(170,204,235,.07) 75%, rgba(112,145,182,.02) 100%);
       }
       #wave-intro-glow {
-        position: absolute; top: 50%; left: 50%; width: 100vw; height: 40vh;
-        transform: translate(-50%,-50%); opacity: 0;
-        background: radial-gradient(ellipse, rgba(244,250,255,.22), transparent 67%);
-        pointer-events: none;
-      }
-      #wave-intro.wave-intro-play #wave-intro-atmosphere {
-        animation: wave-atmosphere 3.1s ease-out both;
-      }
-      #wave-intro.wave-intro-play #wave-intro-glow {
-        animation: wave-halo 2.7s ease-out .4s both;
+        position: absolute; left: 50%; top: 44%;
+        width: min(86vw, 350px); height: min(46vw, 200px);
+        transform: translate(-50%,-50%); opacity: 0; pointer-events: none;
+        border-radius: 50%;
+        background: radial-gradient(ellipse,
+          rgba(247,251,255,.28), rgba(183,211,240,.10) 45%, transparent 77%);
       }
       #wave-intro-content {
-        position: relative; z-index: 1; width: min(94vw, 360px);
+        position: relative; z-index: 1; width: min(94vw, 390px);
         display: flex; flex-direction: column; align-items: center;
-        transform: translateY(-2.5vh); text-align: center;
+        transform: translateY(-3vh); text-align: center;
       }
-      #wave-intro-logo { width: clamp(145px, 42vw, 185px); max-width: 51%; height: auto; overflow: visible; }
+      #wave-intro-logo {
+        width: clamp(146px, 43vw, 190px); max-width: 52%; height: auto;
+        overflow: visible; transform: translateY(12px) scale(.925);
+        transform-origin: center;
+      }
       #wave-intro-logo .wave-intro-outline {
-        fill: none; stroke: #f8fbff; stroke-width: 2;
-        stroke-linejoin: round; stroke-linecap: round;
-        opacity: 0;
+        fill: none; stroke: #eaf4ff; stroke-width: 2.1;
+        stroke-linecap: round; stroke-linejoin: round; opacity: 0;
       }
-      #wave-intro-logo .wave-intro-solid {
-        fill: #fff; opacity: 0;
-      }
+      #wave-intro-logo .wave-intro-solid { fill: #fff; opacity: 0; }
       #wave-intro-title {
-        margin-top: 12px; font-weight: 700;
-        font-size: clamp(19px, 5.45vw, 25px); line-height: 1.2;
-        white-space: nowrap; letter-spacing: .1px; opacity: 0;
-        /* Contrast comes from white text and the light behind it. */
+        margin-top: 12px; font-size: clamp(20px, 5.6vw, 26px);
+        font-weight: 700; line-height: 1.2; letter-spacing: .1px;
+        white-space: nowrap; opacity: 0; transform: translateY(7px);
       }
       #wave-intro-subtitle {
-        margin-top: 8px; padding-left: 4px;
-        color: rgba(241,245,252,.78);
-        font-size: 10px; font-weight: 500; letter-spacing: 4px;
-        line-height: 1.3; white-space: nowrap; opacity: 0;
+        margin-top: 9px; padding-left: 4px; font-size: 10px;
+        font-weight: 500; line-height: 1.3; letter-spacing: 4px;
+        white-space: nowrap; color: rgba(242,246,253,.79);
+        opacity: 0; transform: translateY(6px);
+      }
+      /* Each static full-screen light field changes alpha continuously,
+         never slides from top to bottom in sections. The small glyph moves. */
+      #wave-intro.wave-intro-play #wave-intro-atmosphere {
+        animation: wave-atmosphere 4.14s ease-in-out both;
       }
       #wave-intro.wave-intro-play #wave-intro-beam {
-        animation: wave-light 2.8s ease-out both;
+        animation: wave-beam 4.14s ease-in-out both;
+      }
+      #wave-intro.wave-intro-play #wave-intro-glow {
+        animation: wave-halo 2.8s ease-in-out .38s both;
+      }
+      #wave-intro.wave-intro-play #wave-intro-logo {
+        animation: wave-mark-arrive 1.85s cubic-bezier(.17,.76,.26,1) .22s both;
       }
       #wave-intro.wave-intro-play .wave-intro-outline {
-        animation: wave-stroke 1.35s ease-out .30s both;
+        animation: wave-contour 1.35s ease-in-out .35s both;
       }
       #wave-intro.wave-intro-play .wave-intro-solid {
-        animation: wave-fill .75s ease-out 1.18s both;
+        animation: wave-mark-fill .93s ease-out 1.17s both;
       }
       #wave-intro.wave-intro-play #wave-intro-title {
-        animation: wave-words .70s ease-out 1.75s both;
+        animation: wave-words .72s ease-out 1.90s both;
       }
       #wave-intro.wave-intro-play #wave-intro-subtitle {
-        animation: wave-words .70s ease-out 2.07s both;
+        animation: wave-words .72s ease-out 2.24s both;
       }
       @keyframes wave-atmosphere {
-        0% { opacity: 0; } 35% { opacity: .68; } 100% { opacity: .2; }
+        0% { opacity: .04; } 12% { opacity: .55; }
+        34% { opacity: .9; } 65% { opacity: .7; } 100% { opacity: .46; }
+      }
+      @keyframes wave-beam {
+        0% { opacity: 0; } 11% { opacity: .38; }
+        28% { opacity: .88; } 51% { opacity: .65; }
+        74% { opacity: .78; } 100% { opacity: .31; }
       }
       @keyframes wave-halo {
-        0% { opacity: 0; transform: translate(-50%,-50%) scale(.7); }
-        40% { opacity: .62; }
-        100% { opacity: .12; transform: translate(-50%,-50%) scale(1.18); }
+        0% { opacity: 0; transform: translate(-50%,-50%) scale(.84); }
+        42% { opacity: .78; } 76% { opacity: .48; }
+        100% { opacity: .18; transform: translate(-50%,-50%) scale(1.04); }
       }
-      @keyframes wave-light {
-        0% { opacity: 0; transform: translateX(-50%) scaleY(.65); }
-        30% { opacity: .62; } 70% { opacity: .3; }
-        100% { opacity: .09; transform: translateX(-50%) scaleY(1); }
+      @keyframes wave-mark-arrive {
+        0% { transform: translateY(12px) scale(.925); }
+        55% { transform: translateY(1px) scale(.99); }
+        100% { transform: translateY(0) scale(1); }
       }
-      @keyframes wave-stroke {
-        0% { opacity: 0; }
-        25% { opacity: .95; }
-        80% { opacity: .75; }
-        100% { opacity: 0; }
+      @keyframes wave-contour {
+        0% { opacity: 0; } 24% { opacity: .84; }
+        61% { opacity: .93; } 100% { opacity: 0; }
       }
-      @keyframes wave-fill {
-        from { opacity: 0; transform: translateY(7px) scale(.97); transform-origin: center; }
-        to { opacity: 1; transform: translateY(0) scale(1); }
+      @keyframes wave-mark-fill {
+        0% { opacity: 0; } 60% { opacity: .88; } 100% { opacity: 1; }
       }
       @keyframes wave-words {
         from { opacity: 0; transform: translateY(7px); }
         to { opacity: 1; transform: translateY(0); }
       }
       @media (prefers-reduced-motion: reduce) {
-        #wave-intro *, #wave-intro *::before, #wave-intro *::after { animation: none !important; }
-        #wave-intro-beam { opacity: .08 !important; }
-        #wave-intro-atmosphere, #wave-intro-glow { opacity: .1 !important; }
+        #wave-intro *, #wave-intro *::before, #wave-intro *::after {
+          animation: none !important;
+        }
+        #wave-intro-atmosphere { opacity: .46 !important; }
+        #wave-intro-beam { opacity: .3 !important; }
+        #wave-intro-glow { opacity: .16 !important; }
+        #wave-intro-logo { transform: none !important; }
         #wave-intro-logo .wave-intro-outline { opacity: 0 !important; }
-        #wave-intro-logo .wave-intro-solid, #wave-intro-title, #wave-intro-subtitle { opacity: 1 !important; }
+        #wave-intro-logo .wave-intro-solid,
+        #wave-intro-title, #wave-intro-subtitle {
+          opacity: 1 !important; transform: none !important;
+        }
       }
     </style>
   </head>
@@ -242,44 +268,46 @@ ${cssLinks}
       <div id="wave-intro-content">
         <svg id="wave-intro-logo" viewBox="0 0 400 380" aria-hidden="true">
           <path class="wave-intro-outline" pathLength="1000" d="M16,55 L42,168 L53,162 L66,158 L90,157 L141,169 L151,173 L151,277 L148,285 L139,300 L132,308 L132,310 L200,352 L268,310 L257,296 L248,278 L248,173 L270,166 L308,157 L327,157 L337,159 L357,167 L376,89 L377,80 L382,64 L383,55 L385,51 L367,55 L354,60 L303,73 L257,87 L227,94 L224,98 L220,113 L217,118 L202,163 L200,165 L196,161 L174,95 L120,81 L117,79 L109,78 L103,75 L31,55 L23,54 L16,51 Z"></path>
-          <path class="wave-intro-outline" pathLength="1000" d="M199,3 C211,3 221,13 221,25 C221,37 211,47 199,47 C187,47 177,37 177,25 C177,13 187,3 199,3 Z"></path>
+          <path class="wave-intro-outline" pathLength="1000" d="M199,1 C212,1 223,12 223,25 C223,38 212,49 199,49 C186,49 175,38 175,25 C175,12 186,1 199,1 Z"></path>
           <path class="wave-intro-solid" d="M16,55 L42,168 L53,162 L66,158 L90,157 L141,169 L151,173 L151,277 L148,285 L139,300 L132,308 L132,310 L200,352 L268,310 L257,296 L248,278 L248,173 L270,166 L308,157 L327,157 L337,159 L357,167 L376,89 L377,80 L382,64 L383,55 L385,51 L367,55 L354,60 L303,73 L257,87 L227,94 L224,98 L220,113 L217,118 L202,163 L200,165 L196,161 L174,95 L120,81 L117,79 L109,78 L103,75 L31,55 L23,54 L16,51 Z"></path>
-          <path class="wave-intro-solid" d="M199,3 C211,3 221,13 221,25 C221,37 211,47 199,47 C187,47 177,37 177,25 C177,13 187,3 199,3 Z"></path>
+          <path class="wave-intro-solid" d="M199,1 C212,1 223,12 223,25 C223,38 212,49 199,49 C186,49 175,38 175,25 C175,12 186,1 199,1 Z"></path>
         </svg>
         <div id="wave-intro-title">Tengrize Studio</div>
         <div id="wave-intro-subtitle">WAVE NOTES</div>
       </div>
     </div>
     <script>
-      /* The startup clock begins before the main application bundle loads.
-         Never block navigation if the app fails to render or Android is slow. */
+      /* Begin on first WebView frame instead of waiting for React boot.
+         Capacitor's later begin() call is idempotent and cannot restart this
+         ~4.6 second studio intro. A 5.2s watchdog prevents a blocked startup. */
       (function () {
         var intro = document.getElementById("wave-intro");
-        var born = Date.now();
-        var active = false, closed = false, finishTimer;
+        if (!intro) return;
+        var born = Date.now(), started = false, closed = false, finishTimer, safety;
         function finish() {
           if (closed) return;
           closed = true;
           clearTimeout(finishTimer);
           clearTimeout(safety);
           intro.classList.add("wave-intro-leave");
-          setTimeout(function () { if (intro.parentNode) intro.parentNode.removeChild(intro); }, 375);
+          window.__waveNotesIntro = null;
+          setTimeout(function () {
+            if (intro.parentNode) intro.parentNode.removeChild(intro);
+          }, 325);
         }
         function begin() {
-          if (active || closed) return;
-          active = true;
+          if (started || closed) return;
+          started = true;
           intro.classList.add("wave-intro-play");
-          var elapsed = Date.now() - born;
-          // About 4–5 s overall; short and smooth on normal Android starts.
-          var left = Math.max(2650, Math.min(3400, 4300 - elapsed));
-          finishTimer = setTimeout(finish, left);
+          finishTimer = setTimeout(finish, Math.max(0, 4320 - (Date.now() - born)));
         }
-        // Failsafe: the logo can never trap the user on a black screen.
-        var safety = setTimeout(finish, 5300);
-        window.__waveNotesIntro = {
-          begin: begin,
-          finish: function () { clearTimeout(safety); finish(); }
-        };
+        safety = setTimeout(finish, 5200);
+        window.__waveNotesIntro = { begin: begin, finish: finish };
+        if (typeof requestAnimationFrame === "function") {
+          requestAnimationFrame(begin);
+        } else {
+          setTimeout(begin, 0);
+        }
       }());
     </script>
     <div id="root"></div>
