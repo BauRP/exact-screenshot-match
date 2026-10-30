@@ -27,9 +27,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { hasPdfDraftChanges, hasSaveablePdfContent } from "@/lib/pdf-edit-guard";
-import { wrapPdfGlyphs, pdfBaselineTopPx, displayPdfFontSize } from "@/lib/pdf-text-layout";
+import { wrapPdfGlyphs, pdfBaselineTopPx, displayPdfFontSize, adaptivePdfTextScale } from "@/lib/pdf-text-layout";
 import { displayToSourceRect, pdfTextBounds, sourceOverlayTransform } from "@/lib/pdf-page-geometry";
-import { safeSourceRight, sameSourceText, sourceLineFits } from "@/lib/pdf-text-safety";
+import { safeSourceRight, sameSourceText } from "@/lib/pdf-text-safety";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ColorGrid, PALETTE } from "@/components/ColorGrid";
 import {
@@ -575,7 +575,7 @@ function PdfViewerScreen() {
     const node = editingNodeRef.current;
     if (!node) return;
     const active = editingOverlayRef.current;
-    renderRunsInto(node, runs, viewScaleRef.current, {
+    renderRunsInto(node, runs, viewScaleRef.current * (active ? previewTextFit(active,runs) : 1), {
       fontFamily: active?.fontFamily, cssFamily: active?.sourceFontCss,
       bold: active?.bold, italic: active?.italic,
     });
@@ -674,21 +674,37 @@ function PdfViewerScreen() {
     }
   }, [editingId]);
 
-  const sourceEditFits = (overlay: PdfTextOverlay, content: string): boolean => {
-    if (!overlay.cover) return true;
-    const width=(overlay.widthPct / 100)*unrotatedPageSize.width;
-    const font=(overlay.fontSize ?? DEFAULT_PDF_FONT_SIZE)*viewScaleRef.current;
-    const canvas=canvasRef.current;
-    const ctx=canvas?.getContext("2d");
-    if (!ctx) return !/[\r\n]/.test(content);
+  /** All input remains editable. Long replacement text is fitted inside its
+   * existing glyph area rather than rejected or painted over nearby PDF lines.
+   * This is presentation-only: original fonts and text sizes stay in metadata.
+   */
+  const previewTextFit = (overlay: PdfTextOverlay, runs: FullRun[]): number => {
+    if (!overlay.cover || !runs.length) return 1;
+    if (draftOverlayRef.current?.id === overlay.id && draftStartRef.current &&
+        !hasPdfDraftChanges(draftStartRef.current, overlay)) return 1;
+    const ctx=canvasRef.current?.getContext("2d");
+    if (!ctx) return 1;
+    const zoom=viewScaleRef.current;
+    const source={fontFamily:overlay.fontFamily,cssFamily:overlay.sourceFontCss,
+      bold:overlay.bold,italic:overlay.italic};
+    const lineWidths=[0];
+    let highest=0;
     ctx.save();
-    ctx.font=`${overlay.italic ? "italic " : ""}${overlay.bold ? "bold " : ""}${font}px ${overlay.sourceFontCss ?? fontCss(overlay.fontFamily)}`;
-    const measured=(text:string)=>ctx.measureText(text).width;
-    // A substitute font can be slightly wider than the real PDF font.
-    const baseline=Math.max(width,measured(draftStartRef.current?.text ?? overlay.text));
-    const fits=sourceLineFits(content,baseline,measured);
-    ctx.restore();
-    return fits;
+    try {
+      for(const run of runs) {
+        highest=Math.max(highest,run.fontSize*zoom);
+        const css=runCss(run,zoom,source);
+        ctx.font=`${css["font-style"]} ${css["font-weight"]} ${run.fontSize*zoom}px ${css["font-family"]}`;
+        for(const piece of run.text.split(/(\\r\\n|\\r|\\n)/)) {
+          if(piece==="\\n" || piece==="\\r" || piece==="\\r\\n") lineWidths.push(0);
+          else lineWidths[lineWidths.length-1]+=ctx.measureText(piece).width;
+        }
+      }
+    } finally {ctx.restore();}
+    const pageWidth=unrotatedPageSize.width;
+    const width=Math.max(1,Math.min(overlay.widthPct,99-overlay.xPct)/100*pageWidth);
+    const boxHeight=Math.max(1,overlay.heightPct/100*unrotatedPageSize.height);
+    return adaptivePdfTextScale(lineWidths,width,highest,boxHeight);
   };
 
   const mountEditor = useCallback(
@@ -696,7 +712,7 @@ function PdfViewerScreen() {
       if (!node || editingNodeRef.current === node) return;
       editingNodeRef.current = node;
       const runs = getRuns(overlay);
-      renderRunsInto(node, runs, viewScaleRef.current, {
+      renderRunsInto(node, runs, viewScaleRef.current * previewTextFit(overlay,runs), {
         fontFamily: overlay.fontFamily, cssFamily: overlay.sourceFontCss,
         bold: overlay.bold, italic: overlay.italic,
       });
@@ -745,7 +761,7 @@ function PdfViewerScreen() {
         if (!newline && (event.inputType !== "insertText" || !event.data)) return;
         const offsets = getSelectionOffsets(node);
         if (!offsets) return;
-        if (!newline && offsets.start !== offsets.end) return;
+        // Replacing selected text is handled as one atomic DOM transaction too.
         const base = baseStyle(editingOverlayRef.current ?? overlay);
         const current = readRunsFromDom(node, renderedRunsRef.current, base);
         let pending = pendingRef.current;
@@ -761,17 +777,13 @@ function PdfViewerScreen() {
         const inserted = newline ? "\n" : event.data!;
         const style = pending?.style ?? styleAt(current, offsets.start, base);
         const next = replaceAt(current, offsets.start, offsets.end, inserted, style);
-        const source=editingOverlayRef.current ?? overlay;
-        if (!sourceEditFits(source, runsText(next))) {
-          event.preventDefault();
-          toast.error("Новая строка пересечёт другой текст PDF. Сократите текст или уменьшите шрифт.",{id:"pdf-source-overflow"});
-          return;
-        }
+        // Never block typing because text became longer than the PDF source.
+        // Refit the rendered glyphs instead of discarding input.
         event.preventDefault();
         const caret = offsets.start + inserted.length;
         pendingRef.current = { offset: caret, style };
         const liveFace = editingOverlayRef.current ?? overlay;
-        renderRunsInto(node, next, viewScaleRef.current, {
+        renderRunsInto(node, next, viewScaleRef.current * previewTextFit(liveFace,next), {
           fontFamily: liveFace.fontFamily, cssFamily: liveFace.sourceFontCss,
           bold: liveFace.bold, italic: liveFace.italic,
         });
@@ -1006,8 +1018,15 @@ function PdfViewerScreen() {
       // masking the original text. Unsupported scripts abort safely.
       // Unavailable PDF font data must not prevent saving user edits.
       // Export with the automatically matched compatible family instead.
-      const exactFont = overlay.sourceFontId && overlay.sourceFontExact !== false && runs.length
-        ? await getPdfOriginalFont(overlay) : null;
+      let exactFont: any = null;
+      if (overlay.sourceFontId && overlay.sourceFontExact !== false && runs.length) {
+        try { exactFont=await getPdfOriginalFont(overlay); }
+        catch(error) {
+          // A subset embedded font can lack raw embeddable bytes. Preserve
+          // editing and use a compatible fallback rather than fail the export.
+          console.warn("PDF original font unavailable for export; using fallback",error);
+        }
+      }
       const prepared = [];
       for (const run of runs) {
         const original = exactFont && run.fontFamily === overlay.fontFamily &&
@@ -1019,16 +1038,18 @@ function PdfViewerScreen() {
           try {
             original.encodeText(character);
           } catch {
-            if (exactFont && original === exactFont)
-              throw new Error("Исходный шрифт не содержит введённый символ. Выберите другой шрифт.");
-            if (!/[\u0400-\u052f]/u.test(character)) {
-              throw new Error("This PDF includes characters unsupported by the embedded export fonts.");
-            }
-            chosen = await embedCyrillic(run.bold, run.italic);
-            try {
+            // Subset PDF fonts often omit newly typed glyphs. Fall back
+            // character-by-character while preserving original glyphs.
+            chosen = exactFont && original === exactFont
+              ? await embedStandard(standardFontKey(run.fontFamily,run.bold,run.italic))
+              : original;
+            try { chosen.encodeText(character); }
+            catch {
+              if (!/[\u0400-\u052f]/u.test(character)) {
+                throw new Error("Этот символ не поддерживается шрифтами экспорта PDF.");
+              }
+              chosen=await embedCyrillic(run.bold,run.italic);
               chosen.encodeText(character);
-            } catch {
-              throw new Error("Unable to embed a Cyrillic character; the original PDF remains untouched.");
             }
           }
           const last = portions[portions.length - 1];
@@ -1053,7 +1074,7 @@ function PdfViewerScreen() {
           }
         }
       }
-      const maxWidth = Math.max(1, (overlay.widthPct / 100) * width);
+      const maxWidth = Math.max(1, Math.min((overlay.widthPct / 100) * width, width - x - 1));
       const measureLine = (items: typeof glyphs) => {
         let total = 0;
         for (let i = 0; i < items.length;) {
@@ -1068,13 +1089,23 @@ function PdfViewerScreen() {
         }
         return total;
       };
-      const lines = wrapPdfGlyphs(glyphs, maxWidth, measureLine);
-      if (overlay.cover && lines.length > 1) {
-        // An original PDF text item may be adjacent to independent text boxes.
-        // Reflowing it over those boxes corrupts the document.
-        throw new Error("Замена не помещается в исходной строке PDF. Сократите текст или уменьшите шрифт.");
-      }
-      const lineAdvance = maxSize * 1.2;
+      // Existing PDF source text remains anchored to the same area. Unlike
+      // new annotations, it must never reflow into an unrelated PDF paragraph.
+      // If the user types more, automatically fit the glyphs to this area.
+      const lines = overlay.cover ? (() => {
+        const explicit: typeof glyphs[]=[[]];
+        for(let i=0;i<glyphs.length;i++) {
+          const char=glyphs[i].text;
+          if(char==="\\r" && glyphs[i+1]?.text==="\\n") {explicit.push([]);i++;}
+          else if(char==="\\r"||char==="\\n") explicit.push([]);
+          else explicit[explicit.length-1].push(glyphs[i]);
+        }
+        return explicit;
+      })() : wrapPdfGlyphs(glyphs,maxWidth,measureLine);
+      const fitScale=overlay.cover ? adaptivePdfTextScale(
+        lines.map(measureLine),maxWidth,maxSize,boxHeight,
+      ) : 1;
+      const lineAdvance = maxSize * fitScale * 1.2;
       const firstBaseline = overlay.sourceBaselinePct !== undefined
         ? height - overlay.sourceBaselinePct / 100 * height
         : height - overlay.yPct / 100 * height - maxSize * .94;
@@ -1106,19 +1137,20 @@ function PdfViewerScreen() {
           while (j < line.length && line[j].font === first.font &&
             line[j].run === first.run) j++;
           const word = line.slice(i, j).map(item => item.text).join("");
-          const widthOfRun = first.font.widthOfTextAtSize(word, first.run.fontSize);
-          if (cursor + widthOfRun > x + maxWidth + 0.5) {
+          const effectiveSize=first.run.fontSize * fitScale;
+          const widthOfRun = first.font.widthOfTextAtSize(word, effectiveSize);
+          if (!overlay.cover && cursor + widthOfRun > x + maxWidth + 0.5) {
             throw new Error("Текст выходит за правую границу. Увеличьте область или уменьшите шрифт.");
           }
           const {r,g,b} = hexToRgb(first.run.color);
           target.drawText(word, {
             x: cursor, y: baseline, font: first.font,
-            size: first.run.fontSize, color: rgb(r,g,b),
+            size: effectiveSize, color: rgb(r,g,b),
           });
           if (first.run.underline && word.trim()) {
             target.drawRectangle({
-              x: cursor, y: baseline - first.run.fontSize * 0.12,
-              width: widthOfRun, height: Math.max(first.run.fontSize * 0.06, 0.6),
+              x: cursor, y: baseline - effectiveSize * 0.12,
+              width: widthOfRun, height: Math.max(effectiveSize * 0.06, 0.25),
               color: rgb(r,g,b),
             });
           }
@@ -1701,7 +1733,8 @@ function PdfViewerScreen() {
             }}>
             {pageOverlays.map((overlay) => {
               const isEditing = overlay.id === editingId;
-              const sizePx = (overlay.fontSize ?? DEFAULT_PDF_FONT_SIZE) * viewScale;
+              const previewFit=previewTextFit(overlay,getRuns(overlay));
+              const sizePx = (overlay.fontSize ?? DEFAULT_PDF_FONT_SIZE) * viewScale * previewFit;
               const untouchedSource = overlay.cover && draftOverlay?.id === overlay.id &&
                 !!draftStartRef.current && !hasPdfDraftChanges(draftStartRef.current, overlay);
               const baselineTop = overlay.sourceBaselinePct === undefined ? null : pdfBaselineTopPx(
@@ -1729,7 +1762,7 @@ function PdfViewerScreen() {
                   style={{
                     left: `${overlay.xPct}%`,
                     top: baselineTop === null ? `${overlay.yPct}%` : `${baselineTop}px`,
-                    width: `${overlay.widthPct}%`,
+                    width: `${Math.min(overlay.widthPct,Math.max(1,99-overlay.xPct))}%`,
                     minHeight: `${overlay.heightPct}%`,
                     maxHeight: overlay.cover ? `${(overlay.eraseHeightPct ?? overlay.heightPct) / 100 * unrotatedPageSize.height + 6}px` : undefined,
                     overflow: overlay.cover ? "hidden" : "visible",
@@ -1766,23 +1799,39 @@ function PdfViewerScreen() {
                       }}
                       onInput={(event) => {
                         const node=event.currentTarget;
-                        const runs=readRunsFromDom(node, renderedRunsRef.current, baseStyle(overlay));
                         const source=editingOverlayRef.current ?? overlay;
-                        if (!sourceEditFits(source, runsText(runs))) {
-                          // Android IME, paste and dictation can bypass beforeinput.
-                          // Restore the last safe draft instead of saving overlap.
-                          const previous=renderedRunsRef.current;
-                          const caret=selRef.current?.start ?? runsText(previous).length;
-                          renderRunsInto(node,previous,viewScaleRef.current,{
+                        const runs=readRunsFromDom(node, renderedRunsRef.current, baseStyle(source));
+                        const selection=getSelectionOffsets(node);
+                        renderedRunsRef.current=runs;
+                        saveRuns(overlay.id,runs);
+                        // Never replace DOM nodes during active Android IME
+                        // composition: that would swallow letters or reset the caret.
+                        if(!(event.nativeEvent as InputEvent).isComposing) {
+                          renderRunsInto(node,runs,viewScaleRef.current * previewTextFit(source,runs),{
                             fontFamily:source.fontFamily,cssFamily:source.sourceFontCss,
                             bold:source.bold,italic:source.italic,
                           });
-                          setSelectionOffsets(node,caret,caret);
-                          toast.error("Текст не помещается в исходной строке PDF.",{id:"pdf-source-overflow"});
-                          return;
+                          if(selection) {
+                            setSelectionOffsets(node,selection.start,selection.end);
+                            selRef.current=selection;
+                          }
                         }
+                      }}
+                      onCompositionEnd={(event) => {
+                        const node=event.currentTarget;
+                        const source=editingOverlayRef.current ?? overlay;
+                        const runs=readRunsFromDom(node,renderedRunsRef.current,baseStyle(source));
+                        const selection=getSelectionOffsets(node);
                         renderedRunsRef.current=runs;
                         saveRuns(overlay.id,runs);
+                        renderRunsInto(node,runs,viewScaleRef.current * previewTextFit(source,runs),{
+                          fontFamily:source.fontFamily,cssFamily:source.sourceFontCss,
+                          bold:source.bold,italic:source.italic,
+                        });
+                        if(selection) {
+                          setSelectionOffsets(node,selection.start,selection.end);
+                          selRef.current=selection;
+                        }
                       }}
                       onKeyDown={(event) => {
                         event.stopPropagation();
@@ -1801,7 +1850,7 @@ function PdfViewerScreen() {
                   ) : (
                     <span className={`relative block w-full ${overlay.cover ? "whitespace-pre" : "whitespace-pre-wrap break-words"}`}>
                       {getRuns(overlay).map((run, index) => (
-                        <span key={index} style={cssToReact(runCss(run, viewScale, {
+                        <span key={index} style={cssToReact(runCss(run, viewScale * previewFit, {
                           fontFamily: overlay.fontFamily, cssFamily: overlay.sourceFontCss,
                           bold: overlay.bold, italic: overlay.italic,
                         }))}>

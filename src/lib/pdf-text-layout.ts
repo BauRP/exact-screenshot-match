@@ -3,6 +3,25 @@ export function displayPdfFontSize(points: number): number {
   return Number.isFinite(points) ? Math.max(1, Math.min(96, Math.round(points))) : 11;
 }
 
+/** Fit edits into their original PDF text area instead of blocking typing.
+ * Same rule is used for Android preview and the final PDF export.
+ * A single-line edit keeps its original size unless it actually exceeds
+ * the free width. Explicit multi-line edits are scaled to their box height.
+ * Never changes the user's text or stored font size.
+ */
+export function adaptivePdfTextScale(
+  lineWidths: number[], availableWidth: number, maxFontSize: number, availableHeight: number,
+): number {
+  const width = Math.max(0.001, Number.isFinite(availableWidth) ? availableWidth : 1);
+  const longest = Math.max(0, ...lineWidths.map(x => Number.isFinite(x) ? x : 0));
+  const horizontal = longest > 0 ? Math.min(1, width / longest) : 1;
+  const count = Math.max(1, lineWidths.length);
+  const heightScale = count > 1 && maxFontSize > 0
+    ? Math.min(1, Math.max(0.001, availableHeight) / (count * maxFontSize * 1.2))
+    : 1;
+  return Math.max(0.000001, Math.min(horizontal, heightScale, 1));
+}
+
 /** Exact PDF baseline in page coordinates, adjusted for browser font metrics. */
 export function pdfBaselineTopPx(baselinePct: number, pageHeightPx: number, fontSizePx: number, cssFamily: string): number {
   if (typeof document === "undefined") return baselinePct / 100 * pageHeightPx - fontSizePx;
