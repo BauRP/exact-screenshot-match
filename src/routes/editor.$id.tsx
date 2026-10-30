@@ -75,6 +75,7 @@ export const Route = createFileRoute("/editor/$id")({
   ] }),
   validateSearch: (search: Record<string, unknown>) => ({
     folder: typeof search.folder === "string" ? search.folder : undefined,
+    template: search.template === "checklist" ? "checklist" : undefined,
   }),
   component: EditorPage,
 });
@@ -94,7 +95,8 @@ function EditorPage() {
   // Recompute when notes list changes (e.g. after title/body edits from elsewhere)
   // "new" is a draft that exists only in memory until the checkmark is tapped.
   const isNew = id === "new";
-  const { folder: folderParam } = Route.useSearch();
+  const { folder: folderParam, template } = Route.useSearch();
+  const appliedTemplate=useRef(false);
   const note = useMemo(
     () => (isNew ? undefined : (notes.find((n) => n.id === id) ?? getNote(id))),
     [id, isNew, hydrated, notes],
@@ -230,6 +232,13 @@ function EditorPage() {
     onTransaction: () => scheduleTick(),
   });
 
+
+  useEffect(()=>{
+    if(!editor||!isNew||template!=="checklist"||appliedTemplate.current)return;
+    appliedTemplate.current=true;
+    editor.commands.setContent({type:"doc",content:[{type:"waveChecklistItem",
+      attrs:{shape:"square",done:false},content:[{type:"text",text:" "}]}]});
+  },[editor,isNew,template]);
 
   // Load body when the note becomes available after hydration.
   useEffect(() => {

@@ -16,6 +16,7 @@ import {
   Palette,
   FolderInput,
   Plus,
+  ListChecks,
   Table2,
   Trash2,
 } from "lucide-react";
@@ -199,6 +200,10 @@ function Index() {
     });
   };
 
+  const createChecklistInCurrentFolder=()=>{
+    navigate({to:"/editor/$id",params:{id:"new"},search:{folder:activeFolder==="all"?"all":activeFolder,template:"checklist"}});
+  };
+  
   const importPdf = async () => {
     const file = await pickPdfFile();
     if (!file) return;
@@ -310,6 +315,7 @@ function Index() {
                 view={view}
                 sort={sort}
                 onCreateNote={createNoteInCurrentFolder}
+                onCreateChecklist={createChecklistInCurrentFolder}
                 onCreateFolder={() => setFolderDialog({ mode: "add", value: "" })}
                 onImportPdf={() => void importPdf()}
               />
@@ -476,6 +482,7 @@ function TopContextMenu({
   view,
   sort,
   onCreateNote,
+  onCreateChecklist,
   onCreateFolder,
   onImportPdf,
 }: {
@@ -484,6 +491,7 @@ function TopContextMenu({
   view: ViewMode;
   sort: SortMode;
   onCreateNote: () => void;
+  onCreateChecklist: () => void;
   onCreateFolder: () => void;
   onImportPdf: () => void;
 }) {
@@ -506,6 +514,10 @@ function TopContextMenu({
         <DropdownMenuItem onClick={onCreateNote} className="gap-2 py-2.5">
           <Plus className="h-4 w-4 text-primary" />
           {t("add_note")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onCreateChecklist} className="gap-2 py-2.5">
+          <ListChecks className="h-4 w-4 text-primary"/>
+          Создать список дел
         </DropdownMenuItem>
         <DropdownMenuItem onClick={onCreateFolder} className="gap-2 py-2.5">
           <FolderPlus className="h-4 w-4 text-primary" />
