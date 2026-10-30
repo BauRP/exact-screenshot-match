@@ -34,6 +34,7 @@ import {
   BookOpen,
   EyeOff,
   CalendarDays,
+  ImagePlus,
 } from "lucide-react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -58,6 +59,8 @@ import {
 } from "@/components/ui/popover";
 import { AutoLinkExtras } from "@/lib/editor-extensions";
 import { AudioNote } from "@/components/editor/AudioNode";
+import { WaveImage } from "@/components/editor/WaveImage";
+import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import { useFolders, type Folder } from "@/lib/folders-store";
 import {
   DropdownMenu,
@@ -128,6 +131,7 @@ function EditorPage() {
   const recordingWriteRef = useRef<Promise<void> | null>(null);
   const settleRecordingRef = useRef<{ resolve: () => void; reject: (reason?: unknown) => void } | null>(null);
   const createdAudioIdsRef=useRef(new Set<string>());
+  const createdImageIdsRef=useRef(new Set<string>());
   const committedNoteRef=useRef(false);
   const cleanupNewAudio=async(keep: string[] = [])=>{
     const retained=new Set(keep);
@@ -218,6 +222,7 @@ function EditorPage() {
       }),
       AutoLinkExtras,
       AudioNote,
+      WaveImage,
       InNoteSearch,
       WaveChecklistItem,
       WaveCallout,
@@ -381,6 +386,8 @@ function EditorPage() {
     if (recorderRef.current?.state === "recording" || nativeRecordingRef.current) stopRecording();
     await recordingWriteRef.current?.catch(()=>undefined);
     await cleanupNewAudio();
+    await Promise.allSettled([...createdImageIdsRef.current].map(id=>deleteImageFile(id)));
+    createdImageIdsRef.current.clear();
     navigate({to:"/"});
   };
 
@@ -397,12 +404,15 @@ function EditorPage() {
     if (recordingWriteRef.current) await recordingWriteRef.current;
     const body = editor?.getHTML() ?? "";
     const plain = (editor?.getText() ?? "").trim();
+    const hasImages=imageIdsInHtml(body).length>0;
     const typedTitle = title.trim();
 
     if (isNew) {
       // A note that was opened and left blank is cancelled entirely.
-      if (!typedTitle && !plain) {
+      if (!typedTitle && !plain && !hasImages) {
         await cleanupNewAudio();
+        await Promise.allSettled([...createdImageIdsRef.current].map(id=>deleteImageFile(id)));
+        createdImageIdsRef.current.clear();
         navigate({ to: "/" });
         return;
       }
@@ -426,6 +436,9 @@ function EditorPage() {
 
     committedNoteRef.current=true;
     await cleanupNewAudio(audioIdsInHtml(body));
+    const keepImages=new Set(imageIdsInHtml(body));
+    await Promise.allSettled([...createdImageIdsRef.current].filter(id=>!keepImages.has(id)).map(id=>deleteImageFile(id)));
+    createdImageIdsRef.current.clear();
     toast.success(t("saved"),{duration:1600});
     navigate({ to: "/" });
     } catch (error) {
@@ -476,6 +489,25 @@ function EditorPage() {
     return f.name;
   };
 
+  const addImage=()=>{
+    if(!editor||savingRef.current)return;
+    const picker=document.createElement("input");
+    picker.type="file";picker.accept="image/jpeg,image/png,image/webp";picker.style.display="none";
+    picker.addEventListener("change",()=>{
+      const file=picker.files?.[0];picker.remove();
+      if(!file)return;
+      void (async()=>{
+        try{
+          const id=await saveImageFile(file);
+          createdImageIdsRef.current.add(id);
+          if(editor.isDestroyed||!editor.chain().focus().insertWaveImage(id).run()){
+            throw Error("Не удалось вставить фотографию");
+          }
+        }catch(error){toast.error(error instanceof Error?error.message:"Ошибка добавления фото");}
+      })();
+    },{once:true});
+    document.body.append(picker);picker.click();
+  };
   const attachAudio = async (blob: Blob) => {
     if (!blob.size) throw new Error("Пустая аудиозапись");
     const audioId=await saveAudioFile(blob);
@@ -659,6 +691,10 @@ function EditorPage() {
             aria-label={t("audio")}
           >
             {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+          </button>
+          <button type="button" onClick={addImage} aria-label="Добавить фотографию из галереи"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
+            <ImagePlus className="h-4 w-4"/>
           </button>
           <button
             onClick={handlePin}
