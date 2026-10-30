@@ -75,7 +75,7 @@ export const Route = createFileRoute("/editor/$id")({
   ] }),
   validateSearch: (search: Record<string, unknown>) => ({
     folder: typeof search.folder === "string" ? search.folder : undefined,
-    template: search.template === "checklist" ? "checklist" : undefined,
+    ...(search.template === "checklist" ? {template:"checklist" as const} : {}),
   }),
   component: EditorPage,
 });

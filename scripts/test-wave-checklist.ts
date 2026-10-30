@@ -7,7 +7,7 @@ assert.equal(schema.group,"block");
 assert.equal(schema.content,"inline*");
 const ext=readFileSync("src/lib/wave-checklist.ts","utf8");
 assert.ok(ext.includes('data-type="wave-check-item"'));
-assert.ok(ext.includes('updateAttributes({done:!current.attrs.done})'));
+assert.ok(ext.includes("editor.view.state.tr.setNodeMarkup(pos,undefined"));
 assert.ok(ext.includes('data-done'));
 const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
 assert.ok(editor.includes("WaveChecklistItem,"));
