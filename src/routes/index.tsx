@@ -20,6 +20,7 @@ import { useLongPress } from "@/hooks/use-long-press";
 import { BottomNav } from "@/components/BottomNav";
 import { NoteCard } from "@/components/NoteCard";
 import { NativeAdCard } from "@/components/NativeAdCard";
+import { OneTimeDedication, useOneTimeDedication } from "@/components/OneTimeDedication";
 import { setNativeAdDialogBlocked } from "@/lib/native-ad-ui";
 import { Button } from "@/components/ui/button";
 import {
@@ -100,6 +101,12 @@ function Index() {
   const activeFolder = useActiveFolder();
   const navigate = useNavigate();
   const t = useT();
+
+  // Temporary, fully removable dedication. Observes only successfully
+  // persisted notes/PDFs; never reacts to unsaved drafts.
+  const showOneTimeDedication = useOneTimeDedication(
+    notes.length, hydrated && status === "ready",
+  );
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -281,7 +288,13 @@ function Index() {
       </div>
 
       {hydrated && status !== "error" && filteredNotes.length === 0 ? (
-        <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-4" style={{ marginBottom: "var(--wave-bottom-nav-occlusion, 104px)" }}><NativeAdCard slotKey="home-first" /></main>
+        <main
+          className="mx-auto flex w-full min-h-0 max-w-xl flex-1 flex-col overflow-y-auto overscroll-contain px-4 pb-5 pt-4 [-webkit-overflow-scrolling:touch]"
+          style={{ marginBottom: "var(--wave-bottom-nav-occlusion, 104px)" }}
+        >
+          <NativeAdCard slotKey="home-first" />
+          {activeFolder === "all" && showOneTimeDedication && <OneTimeDedication />}
+        </main>
       ) : (
         <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-4 [-webkit-overflow-scrolling:touch]" style={{ marginBottom: "var(--wave-bottom-nav-occlusion, 104px)" }}>
           {!hydrated ? (
