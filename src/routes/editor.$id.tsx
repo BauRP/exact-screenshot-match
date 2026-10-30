@@ -408,11 +408,12 @@ function EditorPage() {
     const body = editor?.getHTML() ?? "";
     const plain = (editor?.getText() ?? "").trim();
     const hasImages=imageIdsInHtml(body).length>0;
+    const hasDrawing=body.includes("data-wave-drawing");
     const typedTitle = title.trim();
 
     if (isNew) {
       // A note that was opened and left blank is cancelled entirely.
-      if (!typedTitle && !plain && !hasImages) {
+      if (!typedTitle && !plain && !hasImages && !hasDrawing) {
         await cleanupNewAudio();
         await Promise.allSettled([...createdImageIdsRef.current].map(id=>deleteImageFile(id)));
         createdImageIdsRef.current.clear();
