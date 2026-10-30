@@ -7,10 +7,11 @@ import { zip, unzip, strToU8, strFromU8 } from "fflate";
 import {audioIdsInHtml,loadAudioFile,saveNewAudioFile,deleteAudioFile} from "./audio-files";
 import {loadPdfFile,saveNewPdfFile,deletePdfFile} from "./pdf-files";
 import {createNote,type Note} from "./notes-store";
+import {imageIdsInHtml,loadImageFile,saveNewImageFile,deleteImageFile} from "./image-files";
 
 const LIMIT=80*1024*1024;
 const ID=/^[a-zA-Z0-9_-]{1,128}$/;
-type Envelope={format:"wave-notes-single";version:1;createdAt:number;originId:string;note:Note;audioIds:string[];hasPdf:boolean};
+type Envelope={format:"wave-notes-single";version:1;createdAt:number;originId:string;note:Note;audioIds:string[];imageIds?:string[];hasPdf:boolean};
 
 async function pack(files:Record<string,Uint8Array>):Promise<Uint8Array>{
  return new Promise((resolve,reject)=>zip(files,{level:0},(err,output)=>err?reject(err):resolve(output)));
@@ -43,11 +44,18 @@ function parseManifest(files:Record<string,Uint8Array>):Envelope{
  if(p.format!=="wave-notes-single"||p.version!==1||!n||!ID.test(p.originId||"")||!ID.test(n.id)||
     typeof n.title!=="string"||n.title.length>250||typeof n.body!=="string"||n.body.length>2_000_000||
     !Array.isArray(p.audioIds)||p.audioIds.length>50||typeof p.hasPdf!=="boolean"||
-    p.audioIds.some(id=>!ID.test(id)))throw Error("Недопустимые данные заметки");
+    p.audioIds.some(id=>!ID.test(id))||
+    (p.imageIds!==undefined&&(!Array.isArray(p.imageIds)||p.imageIds.length>50||p.imageIds.some(id=>typeof id!=="string"||!ID.test(id)))))throw Error("Недопустимые данные заметки");
  const refs=audioIdsInHtml(n.body);
  if(refs.some(id=>!p.audioIds!.includes(id)))throw Error("Вложение заметки отсутствует в описании");
  for(const id of p.audioIds){
   if(!files["audio/"+id+".blob"]?.byteLength)throw Error("Отсутствует аудиозапись");
+ }
+ const imageIds=p.imageIds||[];
+ const imageRefs=imageIdsInHtml(n.body);
+ if(imageRefs.some(id=>!imageIds.includes(id)))throw Error("Вложение фотографии отсутствует в описании");
+ for(const id of imageIds){
+  if(!files["images/"+id+".blob"]?.byteLength)throw Error("Отсутствует фотография");
  }
  if(p.hasPdf){
   if(n.kind!=="pdf"||!files["document.pdf"]?.byteLength)throw Error("Отсутствует оригинал PDF");
@@ -61,11 +69,17 @@ export async function inspectWaveFile(file:File):Promise<{title:string;originId:
 }
 export async function makeWaveNote(note:Note):Promise<Blob>{
  const audioIds=audioIdsInHtml(note.body);
+ const imageIds=imageIdsInHtml(note.body);
  const files:Record<string,Uint8Array>={};
  for(const id of audioIds){
   const blob=await loadAudioFile(id);
   if(!blob)throw Error("Не найдена прикреплённая аудиозапись");
   files["audio/"+id+".blob"]=new Uint8Array(await blob.arrayBuffer());
+ }
+ for(const id of imageIds){
+  const blob=await loadImageFile(id);
+  if(!blob)throw Error("Не найдена прикреплённая фотография");
+  files["images/"+id+".blob"]=new Uint8Array(await blob.arrayBuffer());
  }
  if(note.kind==="pdf"){
   const data=await loadPdfFile(note.id);
@@ -74,7 +88,7 @@ export async function makeWaveNote(note:Note):Promise<Blob>{
  }
  const originId=note.originId&&ID.test(note.originId)?note.originId:note.id;
  files["manifest.json"]=strToU8(JSON.stringify({
-  format:"wave-notes-single",version:1,createdAt:Date.now(),originId,note,audioIds,hasPdf:note.kind==="pdf"
+  format:"wave-notes-single",version:1,createdAt:Date.now(),originId,note,audioIds,imageIds,hasPdf:note.kind==="pdf"
  } satisfies Envelope));
  const binary=await pack(files);
  if(binary.byteLength>LIMIT)throw Error("Размер заметки превышает 80 МБ");
@@ -101,7 +115,7 @@ export async function shareWaveNote(note:Note):Promise<void>{
 }
 export async function receiveWaveNote(file:File,folderId:string):Promise<Note>{
  const files=await unpack(file),p=parseManifest(files);
- const generatedAudio:string[]=[];let generatedPdf:string|null=null;
+ const generatedAudio:string[]=[];const generatedImages:string[]=[];let generatedPdf:string|null=null;
  try{
   let body=p.note.body;
   for(const id of p.audioIds){
@@ -109,6 +123,15 @@ export async function receiveWaveNote(file:File,folderId:string):Promise<Note>{
    await saveNewAudioFile(fresh,new Blob([files["audio/"+id+".blob"].slice().buffer]));
    generatedAudio.push(fresh);
    body=body.split("audiodb:"+id).join("audiodb:"+fresh);
+  }
+  for(const imageId of p.imageIds||[]){
+   const fresh=crypto.randomUUID();
+   const data=files["images/"+imageId+".blob"];
+   const type=data[0]===0x89&&data[1]===0x50?"image/png":data[0]===0xff&&data[1]===0xd8?"image/jpeg":"image/webp";
+   await saveNewImageFile(fresh,new Blob([data.slice().buffer],{type}));
+   generatedImages.push(fresh);
+   body=body.split('data-image-id="'+imageId+'"').join('data-image-id="'+fresh+'"');
+   body=body.split("data-image-id='"+imageId+"'").join("data-image-id='"+fresh+"'");
   }
   const id=crypto.randomUUID();
   if(p.hasPdf){
@@ -122,6 +145,7 @@ export async function receiveWaveNote(file:File,folderId:string):Promise<Note>{
     pinned:false,manualOrder:undefined});
  }catch(error){
   await Promise.allSettled(generatedAudio.map(id=>deleteAudioFile(id)));
+  await Promise.allSettled(generatedImages.map(id=>deleteImageFile(id)));
   if(generatedPdf)await deletePdfFile(generatedPdf).catch(console.error);
   throw error;
  }
