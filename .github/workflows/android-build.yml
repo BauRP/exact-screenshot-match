@@ -109,6 +109,9 @@ jobs:
       - name: Verify single-file Wave Notes transfer without overwrites
         run: bun scripts/test-wave-transfer.ts
 
+      - name: Verify offline note search and scoped filters
+        run: bun scripts/test-wave-note-search.ts
+
       - name: Verify safe return-note conflicts and audio cleanup
         run: bun scripts/test-wave-return-conflicts.ts
 
