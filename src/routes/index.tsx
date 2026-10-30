@@ -12,6 +12,7 @@ import {
   MoreVertical,
   FileType2,
   Pencil,
+  Copy,
   Palette,
   FolderInput,
   Plus,
@@ -110,6 +111,7 @@ function Index() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [colorDialog,setColorDialog]=useState(false);
   const [moveDialog,setMoveDialog]=useState(false);
+  const [copyBusy,setCopyBusy]=useState(false);
   const [folderDialog, setFolderDialog] = useState<FolderDialogState>(null);
   // The menu floats above the list without moving folders or ads.
   // Google renders native ads above WebView; temporarily hide that overlay
@@ -143,6 +145,44 @@ function Index() {
       : navigate({ to: "/editor/$id", params: { id: note.id }, search: { folder: undefined } });
 
   const selectedNotes = notes.filter((n) => selected.has(n.id));
+  const duplicateSelectedNote = async () => {
+    if(copyBusy || selectedNotes.length!==1)return;
+    setCopyBusy(true);
+    const original=selectedNotes[0];
+    let pdfCopyId:string|null=null;
+    const addedAudioIds:string[]=[];
+    try{
+      let body=original.body;
+      const { audioIdsInHtml, loadAudioFile, saveAudioFile }=await import("@/lib/audio-files");
+      for(const id of audioIdsInHtml(body)){
+        const blob=await loadAudioFile(id);
+        if(!blob)throw new Error("Не удалось прочитать исходную аудиозапись");
+        const copiedId=await saveAudioFile(blob);
+        addedAudioIds.push(copiedId);
+        body=body.replaceAll(`audiodb:${id}`,`audiodb:${copiedId}`);
+      }
+      if(original.kind==="pdf"){
+        const {loadPdfFile,saveNewPdfFile}=await import("@/lib/pdf-files");
+        const file=await loadPdfFile(original.id);
+        if(!file)throw new Error("Исходный PDF не найден");
+        pdfCopyId=crypto.randomUUID();
+        await saveNewPdfFile(pdfCopyId,file);
+      }
+      createNote({
+        ...original,id:pdfCopyId??crypto.randomUUID(),title:original.title+" — копия",
+        body,pdf:original.pdf?structuredClone(original.pdf):undefined,
+        createdAt:Date.now(),updatedAt:Date.now(),
+      });
+      setSelected(new Set());
+      toast.success("Независимая копия создана");
+    }catch(error){
+      const {deleteAudioFile}=await import("@/lib/audio-files");
+      await Promise.allSettled(addedAudioIds.map(id=>deleteAudioFile(id)));
+      if(pdfCopyId){const {deletePdfFile}=await import("@/lib/pdf-files");await deletePdfFile(pdfCopyId).catch(console.error);}
+      console.error("Duplicate note failed",error);
+      toast.error(error instanceof Error?error.message:"Не удалось создать копию");
+    }finally{setCopyBusy(false);}
+  };
 
 
   const filteredNotes = useMemo(() => {
@@ -246,6 +286,10 @@ function Index() {
                       <Pencil className="h-4 w-4" />
                     </button>
                   )}
+                  {selected.size===1 && <button type="button" aria-label="Создать копию заметки" disabled={copyBusy} onClick={()=>void duplicateSelectedNote()}
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary hover:bg-secondary/70 disabled:opacity-40">
+                    <Copy className="h-4 w-4"/>
+                  </button>}
                   <button type="button" aria-label="Цвет карточки" onClick={()=>setColorDialog(true)}
                     className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary hover:bg-secondary/70"><Palette className="h-4 w-4"/></button>
                   <button type="button" aria-label="Переместить в папку" onClick={()=>setMoveDialog(true)}
