@@ -116,6 +116,16 @@ assert.ok(!src.includes("pdf-source-overflow"), "Do not show red text overflow e
 assert.ok(!src.includes("if (overlay.cover && lines.length > 1)"), "Source edits must not be limited to original length");
 assert.ok(src.includes("const fitScale=overlay.cover ? adaptivePdfTextScale("));
 assert.ok(src.includes("onCompositionEnd={(event) =>"));
+assert.ok(src.includes("if (!newline && !pending) return;"),
+  "Normal Android keyboard insertion must remain browser-native");
+assert.ok(src.includes("adjustLiveEditorFit(node,source,runs);"),
+  "Long input should be resized without resetting editable DOM");
+const onInputSource=src.slice(src.indexOf('onInput={(event) => {'),src.indexOf('onCompositionEnd={(event) => {'));
+assert.ok(!onInputSource.includes("renderRunsInto("),
+  "Do not replace active contentEditable DOM on every typed letter");
+const compositionSource=src.slice(src.indexOf('onCompositionEnd={(event) => {'),src.indexOf('onKeyDown={(event) => {',src.indexOf('onCompositionEnd={(event) => {')));
+assert.ok(!compositionSource.includes("renderRunsInto("),
+  "Android input method composition must preserve the native DOM and caret");
 assert.equal(adaptivePdfTextScale([120],100,12,16),100/120);
 assert.equal(adaptivePdfTextScale([50],100,12,16),1);
 assert.equal(adaptivePdfTextScale([50,50],100,12,14),14/(2*12*1.2));

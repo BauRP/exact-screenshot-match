@@ -534,6 +534,59 @@ function PdfViewerScreen() {
   const viewScaleRef = useRef(viewScale);
   viewScaleRef.current = viewScale;
 
+  /** All input remains editable. Long replacement text is fitted inside its
+   * existing glyph area rather than rejected or painted over nearby PDF lines.
+   * This is presentation-only: original fonts and text sizes stay in metadata.
+   */
+  const previewTextFit = useCallback((overlay: PdfTextOverlay, runs: FullRun[]): number => {
+    if (!overlay.cover || !runs.length) return 1;
+    if (draftOverlayRef.current?.id === overlay.id && draftStartRef.current &&
+        !hasPdfDraftChanges(draftStartRef.current, overlay)) return 1;
+    const ctx=canvasRef.current?.getContext("2d");
+    if (!ctx) return 1;
+    const zoom=viewScaleRef.current;
+    const source={fontFamily:overlay.fontFamily,cssFamily:overlay.sourceFontCss,
+      bold:overlay.bold,italic:overlay.italic};
+    const lineWidths=[0];
+    let highest=0;
+    ctx.save();
+    try {
+      for(const run of runs) {
+        highest=Math.max(highest,run.fontSize*zoom);
+        const css=runCss(run,zoom,source);
+        ctx.font=`${css["font-style"]} ${css["font-weight"]} ${run.fontSize*zoom}px ${css["font-family"]}`;
+        for(const piece of run.text.split(/(\r\n|\r|\n)/)) {
+          if(piece==="\n" || piece==="\r" || piece==="\r\n") lineWidths.push(0);
+          else lineWidths[lineWidths.length-1]+=ctx.measureText(piece).width;
+        }
+      }
+    } finally {ctx.restore();}
+    const pageWidth=unrotatedPageSize.width;
+    const width=Math.max(1,Math.min(overlay.widthPct,99-overlay.xPct)/100*pageWidth);
+    const boxHeight=Math.max(1,overlay.heightPct/100*unrotatedPageSize.height);
+    return adaptivePdfTextScale(lineWidths,width,highest,boxHeight);
+  }, [unrotatedPageSize.width,unrotatedPageSize.height]);
+
+  // Native Android IMEs own the live editable DOM. Resizing the existing
+  // span styles in place preserves composition, selections and the caret.
+  // Recreating innerHTML after each keystroke used to reset keyboard input.
+  const activeEditorFitRef=useRef(1);
+  const adjustLiveEditorFit=useCallback((node: HTMLSpanElement,overlay:PdfTextOverlay,runs:FullRun[])=>{
+    const next=previewTextFit(overlay,runs);
+    const prev=activeEditorFitRef.current>0?activeEditorFitRef.current:1;
+    const ratio=next/prev;
+    if (Number.isFinite(ratio) && Math.abs(ratio-1)>0.000001) {
+      for (const child of node.querySelectorAll<HTMLElement>("[data-r]")) {
+        const size=parseFloat(child.style.fontSize);
+        if (Number.isFinite(size) && size>0) child.style.fontSize=`${size*ratio}px`;
+      }
+    }
+    // A native IME may create a text node directly inside the editable span;
+    // its inherited font must follow the same scale as existing styled runs.
+    node.style.fontSize=`${(overlay.fontSize??DEFAULT_PDF_FONT_SIZE)*viewScaleRef.current*next}px`;
+    activeEditorFitRef.current=next;
+  },[previewTextFit]);
+
   const currentRuns = useCallback((): FullRun[] => {
     const node = editingNodeRef.current;
     const overlay = editingOverlayRef.current;
@@ -575,7 +628,9 @@ function PdfViewerScreen() {
     const node = editingNodeRef.current;
     if (!node) return;
     const active = editingOverlayRef.current;
-    renderRunsInto(node, runs, viewScaleRef.current * (active ? previewTextFit(active,runs) : 1), {
+    const fit=active ? previewTextFit(active,runs):1;
+    activeEditorFitRef.current=fit;
+    renderRunsInto(node, runs, viewScaleRef.current * fit, {
       fontFamily: active?.fontFamily, cssFamily: active?.sourceFontCss,
       bold: active?.bold, italic: active?.italic,
     });
@@ -583,7 +638,7 @@ function PdfViewerScreen() {
     node.focus({ preventScroll: true });
     setSelectionOffsets(node, start, end);
     selRef.current = { start, end };
-  }, []);
+  }, [previewTextFit]);
 
   /** Applies a style change to the selection only, or to the next typed text. */
   const applyStyle = useCallback(
@@ -674,45 +729,15 @@ function PdfViewerScreen() {
     }
   }, [editingId]);
 
-  /** All input remains editable. Long replacement text is fitted inside its
-   * existing glyph area rather than rejected or painted over nearby PDF lines.
-   * This is presentation-only: original fonts and text sizes stay in metadata.
-   */
-  const previewTextFit = (overlay: PdfTextOverlay, runs: FullRun[]): number => {
-    if (!overlay.cover || !runs.length) return 1;
-    if (draftOverlayRef.current?.id === overlay.id && draftStartRef.current &&
-        !hasPdfDraftChanges(draftStartRef.current, overlay)) return 1;
-    const ctx=canvasRef.current?.getContext("2d");
-    if (!ctx) return 1;
-    const zoom=viewScaleRef.current;
-    const source={fontFamily:overlay.fontFamily,cssFamily:overlay.sourceFontCss,
-      bold:overlay.bold,italic:overlay.italic};
-    const lineWidths=[0];
-    let highest=0;
-    ctx.save();
-    try {
-      for(const run of runs) {
-        highest=Math.max(highest,run.fontSize*zoom);
-        const css=runCss(run,zoom,source);
-        ctx.font=`${css["font-style"]} ${css["font-weight"]} ${run.fontSize*zoom}px ${css["font-family"]}`;
-        for(const piece of run.text.split(/(\r\n|\r|\n)/)) {
-          if(piece==="\n" || piece==="\r" || piece==="\r\n") lineWidths.push(0);
-          else lineWidths[lineWidths.length-1]+=ctx.measureText(piece).width;
-        }
-      }
-    } finally {ctx.restore();}
-    const pageWidth=unrotatedPageSize.width;
-    const width=Math.max(1,Math.min(overlay.widthPct,99-overlay.xPct)/100*pageWidth);
-    const boxHeight=Math.max(1,overlay.heightPct/100*unrotatedPageSize.height);
-    return adaptivePdfTextScale(lineWidths,width,highest,boxHeight);
-  };
 
   const mountEditor = useCallback(
     (node: HTMLSpanElement | null, overlay: PdfTextOverlay) => {
       if (!node || editingNodeRef.current === node) return;
       editingNodeRef.current = node;
       const runs = getRuns(overlay);
-      renderRunsInto(node, runs, viewScaleRef.current * previewTextFit(overlay,runs), {
+      const fit=previewTextFit(overlay,runs);
+      activeEditorFitRef.current=fit;
+      renderRunsInto(node, runs, viewScaleRef.current * fit, {
         fontFamily: overlay.fontFamily, cssFamily: overlay.sourceFontCss,
         bold: overlay.bold, italic: overlay.italic,
       });
@@ -771,9 +796,11 @@ function PdfViewerScreen() {
           const at = styleAt(current, offsets.start, base);
           if (at.color.toLowerCase() !== sticky.toLowerCase()) pending = { offset: offsets.start, style: { ...at, color: sticky } };
         }
-        // Always own ordinary insertions; uncontrolled mobile browser edits
-        // otherwise bypass the collision and draft checks on later taps.
+        // Let Android's IME perform normal typing and selection replacement.
+        // Only own insertion when applying an explicit next-character style,
+        // or when Enter needs a literal newline instead of an HTML paragraph.
         if (event.isComposing) return;
+        if (!newline && !pending) return;
         const inserted = newline ? "\n" : event.data!;
         const style = pending?.style ?? styleAt(current, offsets.start, base);
         const next = replaceAt(current, offsets.start, offsets.end, inserted, style);
@@ -783,7 +810,9 @@ function PdfViewerScreen() {
         const caret = offsets.start + inserted.length;
         pendingRef.current = { offset: caret, style };
         const liveFace = editingOverlayRef.current ?? overlay;
-        renderRunsInto(node, next, viewScaleRef.current * previewTextFit(liveFace,next), {
+        const fit=previewTextFit(liveFace,next);
+        activeEditorFitRef.current=fit;
+        renderRunsInto(node, next, viewScaleRef.current * fit, {
           fontFamily: liveFace.fontFamily, cssFamily: liveFace.sourceFontCss,
           bold: liveFace.bold, italic: liveFace.italic,
         });
@@ -795,7 +824,7 @@ function PdfViewerScreen() {
       });
       refreshActive();
     },
-    [refreshActive],
+    [refreshActive,previewTextFit],
   );
 
   const ui = editingOverlay ? (activeStyle ?? baseStyle(editingOverlay)) : textTool ? draftStyle : null;
@@ -1804,18 +1833,12 @@ function PdfViewerScreen() {
                         const selection=getSelectionOffsets(node);
                         renderedRunsRef.current=runs;
                         saveRuns(overlay.id,runs);
-                        // Never replace DOM nodes during active Android IME
-                        // composition: that would swallow letters or reset the caret.
+                        // Never rebuild the DOM during Android IME typing.
+                        // A style-only adjustment cannot discard inserted text.
                         if(!(event.nativeEvent as InputEvent).isComposing) {
-                          renderRunsInto(node,runs,viewScaleRef.current * previewTextFit(source,runs),{
-                            fontFamily:source.fontFamily,cssFamily:source.sourceFontCss,
-                            bold:source.bold,italic:source.italic,
-                          });
-                          if(selection) {
-                            setSelectionOffsets(node,selection.start,selection.end);
-                            selRef.current=selection;
-                          }
+                          adjustLiveEditorFit(node,source,runs);
                         }
+                        if(selection) selRef.current=selection;
                       }}
                       onCompositionEnd={(event) => {
                         const node=event.currentTarget;
@@ -1824,14 +1847,8 @@ function PdfViewerScreen() {
                         const selection=getSelectionOffsets(node);
                         renderedRunsRef.current=runs;
                         saveRuns(overlay.id,runs);
-                        renderRunsInto(node,runs,viewScaleRef.current * previewTextFit(source,runs),{
-                          fontFamily:source.fontFamily,cssFamily:source.sourceFontCss,
-                          bold:source.bold,italic:source.italic,
-                        });
-                        if(selection) {
-                          setSelectionOffsets(node,selection.start,selection.end);
-                          selRef.current=selection;
-                        }
+                        adjustLiveEditorFit(node,source,runs);
+                        if(selection) selRef.current=selection;
                       }}
                       onKeyDown={(event) => {
                         event.stopPropagation();
