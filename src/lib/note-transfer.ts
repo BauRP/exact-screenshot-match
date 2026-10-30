@@ -55,9 +55,9 @@ function parseManifest(files:Record<string,Uint8Array>):Envelope{
  if(n.kind==="pdf"&&!p.hasPdf)throw Error("Не указан PDF");
  return p as Envelope;
 }
-export async function inspectWaveFile(file:File):Promise<{title:string;originId:string;containsPdf:boolean;audioCount:number}>{
+export async function inspectWaveFile(file:File):Promise<{title:string;originId:string;kind:"note"|"pdf";containsPdf:boolean;audioCount:number}>{
  const envelope=parseManifest(await unpack(file));
- return {title:envelope.note.title,originId:envelope.originId,containsPdf:envelope.hasPdf,audioCount:envelope.audioIds.length};
+ return {title:envelope.note.title,originId:envelope.originId,kind:envelope.note.kind==="pdf"?"pdf":"note",containsPdf:envelope.hasPdf,audioCount:envelope.audioIds.length};
 }
 export async function makeWaveNote(note:Note):Promise<Blob>{
  const audioIds=audioIdsInHtml(note.body);
