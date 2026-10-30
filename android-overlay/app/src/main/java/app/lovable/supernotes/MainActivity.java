@@ -45,12 +45,13 @@ public class MainActivity extends BridgeActivity {
         // Some OEM Capacitor containers provide non-margin LayoutParams.
         // Replace them with margin-capable parameters rather than crashing
         // on startup; the original width and height are preserved.
-        if(!(initial instanceof ViewGroup.MarginLayoutParams)){
-            webView.setLayoutParams(new ViewGroup.MarginLayoutParams(initial));
-        }
-        final ViewGroup.MarginLayoutParams base=(ViewGroup.MarginLayoutParams)webView.getLayoutParams();
-        final int baseLeft=base.leftMargin, baseTop=base.topMargin;
-        final int baseRight=base.rightMargin, baseBottom=base.bottomMargin;
+        final ViewGroup.MarginLayoutParams base =
+            initial instanceof ViewGroup.MarginLayoutParams
+                ? (ViewGroup.MarginLayoutParams)initial : null;
+        final int baseLeft=base!=null?base.leftMargin:0;
+        final int baseTop=base!=null?base.topMargin:0;
+        final int baseRight=base!=null?base.rightMargin:0;
+        final int baseBottom=base!=null?base.bottomMargin:0;
         final boolean[] lastImeVisible={false};
         ViewCompat.setOnApplyWindowInsetsListener(webView,(view,windowInsets)->{
             Insets bars=windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
@@ -74,9 +75,12 @@ public class MainActivity extends BridgeActivity {
             }
             // Remove leftover padding from the earlier implementation.
             // Fixed elements must use the clipped WebView viewport.
-            if(view.getPaddingLeft()!=0||view.getPaddingTop()!=0||
-               view.getPaddingRight()!=0||view.getPaddingBottom()!=0){
-                view.setPadding(0,0,0,0);
+            int padLeft=base==null?safe.left:0, padTop=base==null?safe.top:0;
+            int padRight=base==null?safe.right:0, padBottom=base==null?safe.bottom:0;
+            if(view.getPaddingLeft()!=padLeft||view.getPaddingTop()!=padTop||
+               view.getPaddingRight()!=padRight||view.getPaddingBottom()!=padBottom){
+                // Fallback for unexpected OEM WebView parent layout params.
+                view.setPadding(padLeft,padTop,padRight,padBottom);
             }
             if(lastImeVisible[0]!=imeVisible){
                 lastImeVisible[0]=imeVisible;
