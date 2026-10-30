@@ -298,3 +298,11 @@ html.wave-native-android .wave-app-frame {
 /* A search result is outlined without changing the note font, ink or stored HTML. */
 .sn-tiptap .wave-find-hit {outline:1.5px solid var(--wave-find-contrast,#000);outline-offset:1px;border-radius:2px;}
 .sn-tiptap .wave-find-current {outline-width:2.5px;box-shadow:0 0 0 2px color-mix(in srgb,var(--wave-find-contrast,#000) 15%,transparent);}
+
+/* Editable locally saved checklist blocks, with square/circle/diamond symbols. */
+.sn-tiptap .wave-check-row {display:flex;align-items:flex-start;gap:8px;min-height:32px;padding:2px 0;}
+.sn-tiptap .wave-check-mark {display:inline-grid;place-items:center;flex:0 0 28px;width:28px;height:28px;border-radius:8px;color:inherit;font-size:22px;line-height:1;cursor:pointer;touch-action:manipulation;}
+.sn-tiptap .wave-check-row[data-shape="circle"] .wave-check-mark {border-radius:50%;}
+.sn-tiptap .wave-check-row[data-done="true"] .wave-check-mark {color:#15803d;}
+.sn-tiptap .wave-check-row[data-done="true"] .wave-check-content {opacity:.62;text-decoration:line-through;}
+.sn-tiptap .wave-check-content {flex:1;min-width:0;min-height:28px;padding:2px 0;white-space:pre-wrap;overflow-wrap:anywhere;}

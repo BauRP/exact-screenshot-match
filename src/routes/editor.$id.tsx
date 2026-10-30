@@ -26,6 +26,7 @@ import {
   X,
   ChevronUp,
   ChevronDown,
+  ListChecks,
 } from "lucide-react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -61,6 +62,7 @@ import { useT } from "@/lib/i18n";
 import { APP_FONTS, fontNameFromCss } from "@/lib/app-fonts";
 import { InNoteSearch, noteSearchKey, findWords } from "@/lib/in-note-search";
 import { readEditorPreferences } from "@/lib/editor-preferences";
+import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 
 export const Route = createFileRoute("/editor/$id")({
   head: () => ({ meta: [
@@ -126,6 +128,7 @@ function EditorPage() {
   const [findOpen,setFindOpen]=useState(false);
   const [findQuery,setFindQuery]=useState("");
   const [findActive,setFindActive]=useState(0);
+  const [checkShape,setCheckShape]=useState<CheckShape>("square");
   const [prefs]=useState(()=>readEditorPreferences());
 
   const [currentFontFamily, setCurrentFontFamily] = useState(FONTS[0].value);
@@ -199,6 +202,7 @@ function EditorPage() {
       AutoLinkExtras,
       AudioNote,
       InNoteSearch,
+      WaveChecklistItem,
     ],
     content: note?.body || "<p></p>",
     editorProps: {
@@ -580,6 +584,29 @@ function EditorPage() {
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
             <Search className="h-4 w-4"/>
           </button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" aria-label="Добавить список дел" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+                <ListChecks className="h-4 w-4"/>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" sideOffset={8} className="w-52 rounded-xl p-2">
+              <p className="px-2 pb-1 text-xs font-semibold">Форма отметок</p>
+              {([{shape:"square",label:"Квадрат",symbol:"□"},{shape:"circle",label:"Круг",symbol:"○"},
+                {shape:"diamond",label:"Ромб",symbol:"◇"},{shape:"check",label:"Галочка",symbol:"✓"}] as const).map(choice=>(
+                <button type="button" key={choice.shape} onMouseDown={event=>event.preventDefault()}
+                  onClick={()=>{
+                    setCheckShape(choice.shape);
+                    if(!editor)return;
+                    editor.chain().focus().insertContent({type:"waveChecklistItem",
+                      attrs:{shape:choice.shape,done:false},content:[{type:"text",text:" "}]}).run();
+                  }}
+                  className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-2 text-left text-sm hover:bg-secondary ${checkShape===choice.shape?"text-primary":""}`}>
+                  <span className="w-5 text-center text-lg">{choice.symbol}</span>{choice.label}
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
           <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
           {editor && (
             <>
