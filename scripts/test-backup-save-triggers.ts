@@ -41,7 +41,10 @@ assert.equal(events.length, 3);
 // The editor's onUpdate only refreshes its toolbar. It never persists drafts.
 const text = await Bun.file("src/routes/editor.$id.tsx").text();
 assert.match(text, /onUpdate:\s*\(\) => scheduleTick\(\)/);
-assert.match(text, /const handleDiscard = \(\) => navigate\(\{ to: "\/" \}\)/);
+assert.match(text, /const handleDiscard = async \(\) =>/);
+assert.match(text, /await cleanupNewAudio\(\);\s*navigate\(\{to:"\/"\}\)/);
+assert.match(text, /recordingWriteRef\.current\?\.catch\(\(\)=>undefined\)/);
+assert.match(text, /committedNoteRef\.current=true/);
 assert.match(text, /const handleSave = async \(\) =>/);
 assert.ok(text.indexOf("createNote({") > text.indexOf("const handleSave = async"));
 console.log("Backup commit triggers, revision guard, draft isolation and folder signals: passed.");
