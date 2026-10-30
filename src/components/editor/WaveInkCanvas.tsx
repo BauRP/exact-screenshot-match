@@ -65,9 +65,12 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
        className={`rounded-lg px-2 py-1 text-xs ${tool===item?"bg-primary text-primary-foreground":"bg-secondary"}`}
        onClick={()=>setTool(item)}>{item==="pen"?"Ручка":item==="marker"?"Маркер":"Ластик"}</button>)}
      {tool!=="eraser"&&<>
-       <input type="color" aria-label="Цвет пера" value={color}
-         onChange={e=>{const next=e.target.value;if(["#161b22","#e11d48","#2563eb","#16a34a","#f8fafc","#f59e0b"].includes(next))setColor(next);}}
-         className="h-7 w-8 rounded border border-border"/>
+       <div className="flex items-center gap-1" aria-label="Цвет пера">
+         {(["#161b22","#e11d48","#2563eb","#16a34a","#f8fafc","#f59e0b"] as const).map(ink=>
+           <button key={ink} type="button" aria-label={"Цвет "+ink} aria-pressed={color===ink}
+             onClick={()=>setColor(ink)} className="h-6 w-6 rounded-full border-2"
+             style={{backgroundColor:ink,borderColor:color===ink?"#64748b":"transparent"}}/>)}
+       </div>
        <select aria-label="Толщина линии" value={size} onChange={e=>setSize(Number(e.target.value))}
          className="rounded-lg bg-secondary px-1 py-1 text-xs">{[2,4,8,14,24].map(v=><option value={v} key={v}>{v}px</option>)}</select>
      </>}
