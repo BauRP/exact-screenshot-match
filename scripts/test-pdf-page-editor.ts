@@ -47,7 +47,9 @@ assert.equal(wrapPdfGlyphs(glyphs, 6).map(line => line.map(ch=>ch.text).join("")
 const runSource = await Bun.file("src/lib/pdf-runs.ts").text();
 assert.ok(runSource.includes("usesSource"));
 assert.ok(src.includes("sourceBaselinePct: unrotatedTx[5]"));
-assert.ok(src.includes("contentEditable={overlay.sourceFontExact !== false}"));
+// The original guard blocked the cursor when an embedded PDF font was missing.
+assert.ok(src.includes('contentEditable\n'), "cursor must be enabled for all detected text");
+assert.ok(!src.includes("contentEditable={overlay.sourceFontExact !== false}"), "unknown source fonts must not block input");
 assert.ok(src.includes("await getPdfOriginalFont(overlay)"));
 assert.ok(src.includes("overlay.sourceFontExact !== false && runs.length"), "unavailable embedded font must not block PDF export");
 assert.ok(src.includes("firstBaseline - lineNo * lineAdvance"));
