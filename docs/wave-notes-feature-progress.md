@@ -38,12 +38,19 @@ Current branch: `chatgpt/super-notes-stability-20261025`.
 | 30 | Дублирование заметки | 79% | 79% | +0 п.п. | 21% |
 | 31 | Перемещение в папку | 83% | 83% | +0 п.п. | 17% |
 | 32 | Отправка через другие приложения | 72% | 72% | +0 п.п. | 28% |
-| 33 | Экспорт PDF/TXT/Word/изображение | 25% | 25% | +0 п.п. | 75% |
+| 33 | Экспорт PDF/TXT/Word/изображение | 25% | 52% | +27 п.п. | 48% |
 | 34 | Разрешение конфликтов версий | 46% | 46% | +0 п.п. | 54% |
 | 35 | Контрастный курсор | 73% | 73% | +0 п.п. | 27% |
 | 36 | Запись аудио | 48% | 48% | +0 п.п. | 52% |
 | 37 | AI-помощник Copilot | 0% | 0% | +0 п.п. | 100% |
 
-**Overall baseline:** 47.2% → **47.9%**, change **+0.8 percentage points**, remaining **52.1%**.
+**Current report:** 47.9% → **48.6%**, change **+0.7 percentage points**, remaining **51.4%**. Original first baseline was 47.2%.
 
 Current iteration: offline notes search (UI, scope, filter implementation plus regression source test). Other unchanged rows must not be presented as progress gained today. Source checks are not Android runtime proof. Previous .wnote merge patch lacks a complete visual review on devices; its percentage remains unchanged. New APK/CI and real Vivo X200 tests not yet verified. Baseline percentages are professional estimates and should be revised when runtime evidence appears.
+
+
+## Iteration: offline note document export (31.10.2026)
+
+Added a **separate** export action for selected text notes: plain UTF-8 TXT, standalone sanitized HTML, and actual DOCX/OOXML ZIP with editable Word text, paragraphs, headings, simple inline bold/italic/underline, and text colors. These formats are not renamed copies of one file. Existing `.wnote` continues to carry editor structure, audio and PDF attachments. Android uses Capacitor file share; browsers offer local file download. PDF, image and attachment-rich Word export remain unimplemented. Native ads are hidden behind the open import, card color, move and export dialogs. Added source-level regression checks to the Android build workflow.
+
+Progress calculation: one of 37 directions moved 25%→52% (+27 points); overall +27/37 = +0.73 points, rounded 47.9→48.6. These figures are estimates, *not test coverage*. No new APK result or visual Android test has been confirmed, so 52% is an implementation-stage score only.
