@@ -1,7 +1,8 @@
 import {strict as assert} from "node:assert";
 import {readFileSync} from "node:fs";
 import {findWords} from "../src/lib/in-note-search";
-import {schema} from "@tiptap/pm/schema-basic";
+import {Schema} from "@tiptap/pm/model";
+const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{content:"text*",group:"block",toDOM:()=>["p",0],parseDOM:[{tag:"p"}]},text:{group:"inline"}}});
 const doc=schema.nodes.doc.create(null,[schema.nodes.paragraph.create(null,[schema.text("встреча завтра, встреча послезавтра")])]);
 assert.equal(findWords(doc,"встреча").length,2);
 assert.equal(findWords(doc,"ВСТРЕЧА").length,2);
