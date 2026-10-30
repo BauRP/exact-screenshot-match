@@ -8,6 +8,7 @@ import { audioIdsInHtml, loadAudioFile, saveNewAudioFile, deleteAudioFile } from
 import { loadPdfFile, saveNewPdfFile, deletePdfFile } from "./pdf-files";
 import { exportNotes, importBackupNotes, type Note } from "./notes-store";
 import { exportFolderBackup, restoreFolderBackup, rollbackFolderBackup, type Folder } from "./folders-store";
+import { equalDocumentBytes, hasDifferentSavedContent, recoveredVersionId, restoredNoteTitle } from "./backup-restore-plan";
 
 const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
 const MAX_ENTRY_BYTES = 100 * 1024 * 1024;
@@ -199,10 +200,12 @@ export async function restoreFullBackup(file: File): Promise<number> {
   // Reject backups that omit referenced binary attachments.
   for (const record of manifest.notes) {
     if (!record || typeof record !== "object" || typeof record.id !== "string" ||
+        !/^[\w-]{1,128}$/.test(record.id) ||
         typeof record.title !== "string" || typeof record.body !== "string") {
       throw new Error("В архиве найдена повреждённая заметка");
     }
-    if (record.kind === "pdf" && !pdfIds.includes(record.id)) {
+    if (record.kind === "pdf" && (!record.pdf || typeof record.pdf.fileName !== "string" ||
+        !pdfIds.includes(record.id))) {
       throw new Error("В архиве не указан PDF для заметки: " + record.id);
     }
     for (const id of audioIdsInHtml(record.body)) {
@@ -224,37 +227,62 @@ export async function restoreFullBackup(file: File): Promise<number> {
   }
   if (total > MAX_ARCHIVE_BYTES) throw new Error("Размер распакованных файлов превышает 100 МБ");
 
-  // Restore only truly new notes. Never replace existing notes or binary data.
-  const existingNotes = (JSON.parse(exportNotes()) as { notes: Note[] }).notes;
-  const existingIds = new Set(existingNotes.map((note) => note.id));
-  const incoming = manifest.notes.filter((note) => !existingIds.has(note.id));
-  const newPdfIds: string[] = [];
-  const newAudioIds: string[] = [];
-  const rewritten = new Map<string, string>();
+  // Never replace the user's current note. If an older snapshot has
+  // different text/PDF bytes, restore it as an independent, clearly named
+  // note. Stable recovered IDs also make repeated taps idempotent.
+  const existingNotes=(JSON.parse(exportNotes()) as {notes:Note[]}).notes;
+  const existing=new Map(existingNotes.map(note=>[note.id,note]));
+  const occupied=new Set(existing.keys());
+  const incoming:Array<{sourceId:string;note:Note}>=[];
+  for(const saved of manifest.notes){
+    const current=existing.get(saved.id);
+    let changed=!!current && hasDifferentSavedContent(current,saved);
+    const sourcePdf=saved.kind==="pdf"?entries["pdf/"+saved.id+".pdf"]:undefined;
+    if(current && !changed && sourcePdf){
+      // Identical metadata can hide different PDF document bytes.
+      changed=!equalDocumentBytes(
+        current.kind==="pdf"?await loadPdfFile(saved.id):null,
+        sourcePdf);
+    }
+    if(current && !changed)continue;
+    const destination=current?recoveredVersionId(saved,sourcePdf):saved.id;
+    // A previously restored copy is never overwritten or re-imported,
+    // even if the user subsequently edited that recovered copy.
+    if(occupied.has(destination))continue;
+    occupied.add(destination);
+    incoming.push({sourceId:saved.id,note:{
+      ...saved,
+      id:destination,
+      title:current?restoredNoteTitle(saved.title):saved.title,
+    }});
+  }
+  const newPdfIds:string[]=[];
+  const newAudioIds:string[]=[];
+  const rewritten=new Map<string,string>();
   const previousFolders=exportFolderBackup();
   let touchedFolders=false;
 
-  // Audio may be referenced by existing notes or orphan files. Always use
-  // new attachment IDs and rewrite only the imported notes' references.
-  const newNotes = incoming.map((note) => {
-    let body = note.body;
-    for (const id of audioIdsInHtml(body)) {
-      let replacement = rewritten.get(id);
-      if (!replacement) {
-        replacement = crypto.randomUUID();
-        rewritten.set(id, replacement);
+  // Clone every newly restored audio attachment with its own ID. Never
+  // reassign an existing/orphan ID and never overwrite a stored recording.
+  const newNotes=incoming.map(({note,sourceId})=>{
+    let body=note.body;
+    for(const id of audioIdsInHtml(body)){
+      let replacement=rewritten.get(id);
+      if(!replacement){
+        replacement=crypto.randomUUID();
+        rewritten.set(id,replacement);
       }
-      body = body.split("audiodb:" + id).join("audiodb:" + replacement);
+      body=body.split("audiodb:"+id).join("audiodb:"+replacement);
     }
-    return { ...note, body };
+    return {sourceId,note:{...note,body}};
   });
   try {
-    for (const note of newNotes) {
+    for (const {note,sourceId} of newNotes) {
       if (note.kind !== "pdf") continue;
-      const raw = entries["pdf/" + note.id + ".pdf"];
-      if (!raw) throw new Error("Отсутствует PDF: " + note.id);
-      // add() rejects duplicate keys, including orphan files not in notes.
-      await saveNewPdfFile(note.id, raw.slice().buffer);
+      const raw=entries["pdf/"+sourceId+".pdf"];
+      if (!raw) throw new Error("Отсутствует PDF: "+sourceId);
+      // Recovery copies get NEW binary IDs: the current PDF is untouched.
+      await saveNewPdfFile(note.id,raw.slice().buffer);
       newPdfIds.push(note.id);
     }
     for (const [sourceId, destinationId] of rewritten) {
@@ -267,7 +295,7 @@ export async function restoreFullBackup(file: File): Promise<number> {
     // Restore folder IDs ahead of note metadata to preserve their grouping.
     restoreFolderBackup(manifest.folders, manifest.hiddenSystem);
     touchedFolders=true;
-    return importBackupNotes(newNotes);
+    return importBackupNotes(newNotes.map(item=>item.note));
   } catch (error) {
     if (touchedFolders) {
       try { rollbackFolderBackup(previousFolders); }

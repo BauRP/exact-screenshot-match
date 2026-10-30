@@ -235,7 +235,7 @@ function SettingsPage() {
     setBackupBusy(true);
     try {
       const count = await restoreLocalBackup();
-      toast.success(count > 0 ? `Восстановлено заметок: ${count}` : "Резервная копия проверена. Новых заметок нет.");
+      toast.success(count > 0 ? `Восстановлено заметок: ${count}` : "Резервная копия проверена. Новых вариантов нет.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось восстановить резервную копию");
     } finally { setBackupBusy(false); }
