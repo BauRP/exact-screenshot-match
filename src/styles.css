@@ -264,6 +264,22 @@
 @supports (height:100dvh) {
   .wave-app-frame { height:100dvh; }
 }
+html.wave-native-android,
+html.wave-native-android body,
+html.wave-native-android #root {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+html.wave-native-android .wave-app-frame {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
 .wave-native-android {
   /* Android WindowInsets has already trimmed the physical WebView viewport.
      Never add the Android system bars again through CSS env() or padding. */
