@@ -48,6 +48,25 @@ assert.equal(restored, 1);
 assert.equal(notes.getNote(first.id)?.body, "Изменение");
 assert.equal(notes.getNote(second.id)?.body, "Другой текст");
 
+// A different saved version never overwrites the current note. Repeated
+// restore of the same internal snapshot never creates extra copies.
+const live=notes.createNote({title:"Мои планы",body:"Купить машину"});
+const versionBackup=await createFullBackup();
+notes.updateNote(live.id,{body:"Купить машину и квартиру"});
+const recovered=await restoreFullBackup(new File([versionBackup],"WaveNotes.backup"));
+assert.equal(recovered,1,"Only one older version should be restored");
+assert.equal(notes.getNote(live.id)?.body,"Купить машину и квартиру");
+const versionNotes=(JSON.parse(notes.exportNotes()) as {notes:Array<{id:string;title:string;body:string}>}).notes;
+const oldVersion=versionNotes.find(n=>n.id!==live.id&&n.body==="Купить машину"&&n.title.includes("восстановленная"));
+assert.ok(oldVersion,"Recovered version is separate and clearly named");
+assert.equal(await restoreFullBackup(new File([versionBackup],"WaveNotes.backup")),0,
+ "Repeated restore never duplicates a recovered version");
+assert.equal(notes.getNote(live.id)?.body,"Купить машину и квартиру");
+// A user-edited restored copy must not be overwritten by another restore.
+notes.updateNote(oldVersion!.id,{body:"Я исправил восстановленный текст"});
+assert.equal(await restoreFullBackup(new File([versionBackup],"WaveNotes.backup")),0);
+assert.equal(notes.getNote(oldVersion!.id)?.body,"Я исправил восстановленный текст");
+
 // A note deleted more than 24h ago expires from the next updated backup.
 notes.deleteNote(first.id);
 const { entries, manifest } = await read(copy4);
