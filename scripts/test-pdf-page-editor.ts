@@ -68,4 +68,28 @@ assert.ok(src.includes("const lines = wrapPdfGlyphs(glyphs, maxWidth, measureLin
 assert.ok(src.includes("if (draftOverlayRef.current && editingId) commitEditing()"));
 assert.ok(src.includes('const inserted = newline ? "\\n" : event.data!'));
 assert.ok(src.includes("const cancelEditing = useCallback"));
+
+// Shared font catalog and privacy-navigation regressions.
+const { APP_FONTS, FONT_BY_NAME, fontNameFromCss } = await import("../src/lib/app-fonts");
+const { PDF_FONTS, fontCss } = await import("../src/lib/pdf-fonts");
+assert.equal(APP_FONTS.length, 48);
+assert.equal(new Set(APP_FONTS.map(font=>font.name)).size, APP_FONTS.length);
+assert.deepEqual(PDF_FONTS.map(font=>font.name), APP_FONTS.map(font=>font.name));
+for (const font of APP_FONTS) {
+  assert.equal(fontCss(font.name), font.css);
+  assert.equal(fontNameFromCss(font.css), font.name);
+  assert.ok(font.css.length > 5 && font.actual);
+}
+const noteEditorSource = await Bun.file("src/routes/editor.$id.tsx").text();
+const appCss = await Bun.file("src/styles.css").text();
+const appPackage = await Bun.file("package.json").json();
+const settingsSource = await Bun.file("src/routes/settings.tsx").text();
+assert.ok(noteEditorSource.includes("APP_FONTS.map"), "notes use the exact PDF font catalog");
+assert.ok(settingsSource.includes("}}>Перейти</Btn>"), "short privacy action label");
+assert.ok(!settingsSource.includes("}}>Перейти на сайт</Btn>"));
+for (const slug of new Set(APP_FONTS.map(font=>font.slug))) {
+  assert.ok(appPackage.dependencies[`@fontsource/${slug}`], `Missing offline font dependency: ${slug}`);
+  assert.ok(appCss.includes(`@import "@fontsource/${slug}/400.css";`), `Missing offline font CSS: ${slug}`);
+}
+
 console.log("PDF tap no-op, 4 rotations, rotated text hitboxes and page-switch cleanup: PASS");
