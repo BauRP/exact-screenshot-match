@@ -15,6 +15,8 @@ import {
   Copy,
   Palette,
   FolderInput,
+  Share2,
+  FileInput,
   Plus,
   ListChecks,
   Table2,
@@ -74,6 +76,7 @@ import {
 import { useT } from "@/lib/i18n";
 import { pickPdfFile, savePdfFile } from "@/lib/pdf-files";
 import { toast } from "sonner";
+import {inspectWaveFile,receiveWaveNote,shareWaveNote} from "@/lib/note-transfer";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -114,6 +117,8 @@ function Index() {
   const [colorDialog,setColorDialog]=useState(false);
   const [moveDialog,setMoveDialog]=useState(false);
   const [copyBusy,setCopyBusy]=useState(false);
+  const [transferBusy,setTransferBusy]=useState(false);
+  const [incomingWave,setIncomingWave]=useState<{file:File;title:string;originId:string}|null>(null);
   const [folderDialog, setFolderDialog] = useState<FolderDialogState>(null);
   // The menu floats above the list without moving folders or ads.
   // Google renders native ads above WebView; temporarily hide that overlay
@@ -203,6 +208,34 @@ function Index() {
 
   const createChecklistInCurrentFolder=()=>{
     navigate({to:"/editor/$id",params:{id:"new"},search:{folder:activeFolder==="all"?"all":activeFolder,template:"checklist"}});
+  };
+  
+  const importWave=()=>{
+    const picker=document.createElement("input");picker.type="file";
+    picker.accept=".wnote,application/octet-stream";picker.style.display="none";
+    picker.addEventListener("change",()=>{
+      const file=picker.files?.[0];picker.remove();
+      if(!file)return;
+      void inspectWaveFile(file).then(info=>setIncomingWave({file,title:info.title,originId:info.originId}))
+        .catch(error=>toast.error(error instanceof Error?error.message:"Файл Wave Notes повреждён"));
+    });
+    document.body.appendChild(picker);picker.click();
+  };
+  const doImportWave=async()=>{
+    if(!incomingWave||transferBusy)return;
+    setTransferBusy(true);
+    try{
+      await receiveWaveNote(incomingWave.file,activeFolder==="all"?"all":activeFolder);
+      setIncomingWave(null);toast.success("Заметка получена как отдельная копия");
+    }catch(error){toast.error(error instanceof Error?error.message:"Не удалось получить заметку");}
+    finally{setTransferBusy(false);}
+  };
+  const doShareSelected=async()=>{
+    if(selectedNotes.length!==1||transferBusy)return;
+    setTransferBusy(true);
+    try{await shareWaveNote(selectedNotes[0]);setSelected(new Set());}
+    catch(error){toast.error(error instanceof Error?error.message:"Ошибка передачи файла");}
+    finally{setTransferBusy(false);}
   };
   
   const importPdf = async () => {
@@ -296,6 +329,10 @@ function Index() {
                     className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary hover:bg-secondary/70 disabled:opacity-40">
                     <Copy className="h-4 w-4"/>
                   </button>}
+                  {selected.size===1 && <button type="button" aria-label="Поделиться редактируемой заметкой" disabled={transferBusy}
+                    onClick={()=>void doShareSelected()} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary disabled:opacity-40">
+                    <Share2 className="h-4 w-4"/>
+                  </button>}
                   <button type="button" aria-label="Цвет карточки" onClick={()=>setColorDialog(true)}
                     className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary hover:bg-secondary/70"><Palette className="h-4 w-4"/></button>
                   <button type="button" aria-label="Переместить в папку" onClick={()=>setMoveDialog(true)}
@@ -319,6 +356,7 @@ function Index() {
                 onCreateChecklist={createChecklistInCurrentFolder}
                 onCreateFolder={() => setFolderDialog({ mode: "add", value: "" })}
                 onImportPdf={() => void importPdf()}
+                onImportWave={importWave}
               />
             </>
           }
@@ -363,6 +401,20 @@ function Index() {
         </main>
       )}
 
+      <Dialog open={Boolean(incomingWave)} onOpenChange={open=>{if(!open&&!transferBusy)setIncomingWave(null)}}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader><DialogTitle>Получить заметку Wave Notes</DialogTitle></DialogHeader>
+          <p className="text-sm">{incomingWave?.title}</p>
+          <p className="text-xs text-muted-foreground">
+            Даже если исходная заметка уже существует, полученный файл будет сохранён отдельно.
+            Никакие ваши старые заметки не будут перезаписаны.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" disabled={transferBusy} onClick={()=>setIncomingWave(null)}>Отмена</Button>
+            <Button disabled={transferBusy} onClick={()=>void doImportWave()}>Сохранить копию</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={colorDialog} onOpenChange={setColorDialog}>
         <DialogContent className="max-w-sm rounded-2xl">
           <DialogHeader><DialogTitle>Цвет карточки</DialogTitle></DialogHeader>
@@ -487,6 +539,7 @@ function TopContextMenu({
   onCreateChecklist,
   onCreateFolder,
   onImportPdf,
+  onImportWave,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -496,6 +549,7 @@ function TopContextMenu({
   onCreateChecklist: () => void;
   onCreateFolder: () => void;
   onImportPdf: () => void;
+  onImportWave: () => void;
 }) {
   const t = useT();
   const [expanded, setExpanded] = useState<"view" | "sort" | null>(null);
@@ -528,6 +582,10 @@ function TopContextMenu({
         <DropdownMenuItem onClick={onImportPdf} className="gap-2 py-2.5">
           <FileType2 className="h-4 w-4 text-destructive" />
           {t("add_pdf")}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onImportWave} className="gap-2 py-2.5">
+          <FileInput className="h-4 w-4 text-primary"/>
+          Получить заметку Wave Notes
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <button type="button" aria-expanded={expanded === "view"} aria-controls="wave-view-options"

@@ -71,6 +71,8 @@ export type Note = {
   folderId?: string;
   cardColor?: string;
   manualOrder?: number;
+  /** Original note ID in a transferred .wnote copy. */
+  originId?: string;
   kind?: NoteKind;
   pdf?: PdfMeta;
   style?: {
@@ -170,6 +172,7 @@ function normalizeNote(input: unknown): Note | null {
     folderId,
     cardColor: typeof input.cardColor === "string" && /^#[0-9a-f]{6}$/i.test(input.cardColor) ? input.cardColor : undefined,
     manualOrder: typeof input.manualOrder === "number" && Number.isSafeInteger(input.manualOrder) && input.manualOrder>=0 ? input.manualOrder : undefined,
+    originId: typeof input.originId === "string" && /^[\w-]{1,128}$/.test(input.originId) ? input.originId : undefined,
     kind: input.kind === "pdf" ? "pdf" : "note",
     pdf: isRecord(input.pdf)
       ? {
@@ -473,6 +476,7 @@ export function createNote(partial?: Partial<Note>): Note {
     folderId: partial?.folderId ?? "all",
     cardColor: partial?.cardColor,
     manualOrder: partial?.manualOrder,
+    originId: partial?.originId,
     kind: partial?.kind ?? "note",
     pdf: partial?.pdf,
     // Only brand-new text notes inherit yellow paper. Imported/older saved

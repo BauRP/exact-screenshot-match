@@ -103,6 +103,9 @@ jobs:
       - name: Verify separate page mood, palette and paper ruling
         run: bun scripts/test-wave-paper.ts
 
+      - name: Verify single-file Wave Notes transfer without overwrites
+        run: bun scripts/test-wave-transfer.ts
+
       - name: Verify note learning blocks and slash commands
         run: bun scripts/test-wave-blocks.ts
 
