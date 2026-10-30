@@ -20,7 +20,7 @@ import { chooseLocalOcrImagePath, reusableOcrImagePath, safeLocalOcrPreviewUrl }
 import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText, extractNativeTextAlternative, recoverNativeFullTextForReview, type OcrNativeTextAlternative } from "@/lib/ocr-text";
-import { ocrScanPlan, AUTO_SCAN_ORDER, visualOcrScanPlan, prioritizeRemainingOcrScripts, confidentOcrPrimaryScript, cyrillicLanguageForScan, type OcrScanRequest } from "@/lib/ocr-plan";
+import { ocrScanPlan, completeAutomaticOcrPlan, automaticOcrRequiresReview, prioritizeRemainingOcrScripts, confidentOcrPrimaryScript, cyrillicLanguageForScan, type OcrScanRequest } from "@/lib/ocr-plan";
 
 export const Route = createFileRoute("/camera")({
   head: () => ({ meta: [
@@ -135,7 +135,6 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       let nativeGeometryTruncated = false;
       let timeBudget: OcrTimeBudget | null = null;
       let fastDetected: OcrScript | null = null;
-      let visualFastPath = false;
       const timed = <T,>(start: () => Promise<T>, duration: number): Promise<T> => {
         if (!timeBudget) throw new Error("OCR budget was not initialized");
         return startOcrWithinBudget(timeBudget, duration, start, task => outstanding.push(task));
@@ -156,16 +155,15 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
             throw error;
           }
         }
-        // Image-first script hint can avoid running six OCR engines. Never
-        // trust a weak/unknown classifier; use the existing safe full plan.
-        if(mode==="auto"&&prepared?.detectedScript) {
-          const selected=visualOcrScanPlan(prepared.detectedScript);
-          if(selected) {
-            scanPlan.splice(0,scanPlan.length,...selected);
-            coverage = new OcrScanCoverage(scanPlan);
-            visualFastPath = true;
-            onProgress("Определена письменность: проверяем подходящую модель");
-          }
+        // Both image sources now use the SAME normalized photo and the
+        // SAME complete auto plan. Visual guesses ONLY reorder the models.
+        // A blurry camera capture must never skip Cyrillic just because the
+        // preliminary detector hallucinated another writing system.
+        if(mode==="auto") {
+          scanPlan.splice(0,scanPlan.length,...completeAutomaticOcrPlan(prepared?.detectedScript));
+          coverage = new OcrScanCoverage(scanPlan);
+          if(prepared?.detectedScript && prepared.detectedScript!=="unknown")
+            onProgress("Проверяем письменность: все языки остаются доступными");
         }
         timeBudget = new OcrTimeBudget(scanPlan.length > 1 ? 60000 : 25000);
         const scanPath = prepared?.path ?? path;
@@ -226,27 +224,12 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
           const item = scripts.find(item => item.id === script);
           if (item) await recognize(item, index + 1);
         }
-        // A misleading visual classification must NEVER make an image look
-        // blank. If its selected engines read nothing, widen the current
-        // session to every remaining bundled recognizer automatically.
-        if (mode === "auto" && visualFastPath && index === scanPlan.length-1 &&
-            results.length === 0 && !timedOut) {
-          const previouslyFailed = new Set(coverage.missingScripts());
-          scanPlan.push(...AUTO_SCAN_ORDER.filter(item=>!scanPlan.includes(item)));
-          coverage = new OcrScanCoverage(scanPlan);
-          // Preserve the completed/failed result of each earlier model.
-          for(const prior of scanPlan.slice(0,index+1)) {
-            if(previouslyFailed.has(prior))coverage.markFailed(prior);
-            else coverage.markCompleted(prior);
-          }
-          visualFastPath = false;
-          onProgress("Письменность не подтверждена — расширяем проверку");
-        }
         // Fast path: stop costly recognizers only on substantial single-script
         // evidence. Otherwise continue and preserve the mixed-language review.
         if (mode === "auto" && index >= 1 && coverage.isComplete() === false) {
           const confident=confidentOcrPrimaryScript(results);
-          if (confident && !nativeGeometryTruncated && !nativeAlternatives.length) {
+          if (confident && !nativeGeometryTruncated && !nativeAlternatives.length &&
+              !(prepared?.detectedScript==="cyrillic" && confident!=="cyrillic")) {
             fastDetected=confident;
             onProgress("Язык определён — завершаем распознавание");
             break;
@@ -296,10 +279,12 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       const text = tooManyLines
         ? mergeOversizedOcrForReview(results)
         : mode==="auto" ? mergeHybridOcr(results).text : mergeOcrCandidates(results);
-      // Camera mode is now always automatic. Save the selected text straight
-      // into one editable note, without asking for a second confirmation.
-      // Never concatenate the rival full-page readings of other engines.
-      if(mode==="auto" && text.trim()) return text;
+      // Normally save automatically. Exception: uncertain Cyrillic must be
+      // reviewed, not silently turned into a gibberish note on low-quality
+      // in-app camera photos. Gallery uses the exact same rule.
+      const questionableCyrillic=mode==="auto" &&
+        automaticOcrRequiresReview(results,text,prepared?.detectedScript);
+      if(mode==="auto" && text.trim() && !questionableCyrillic) return text;
       // Compute once, BEFORE any review exception: Han ambiguity, dense
       // layouts and missing scripts must all retain original full readings.
       const complete = recoverNativeFullTextForReview(
@@ -316,6 +301,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
       // A strong early decision is an optimization, not a formal proof that
       // a small secondary language is absent. Always show editable review.
       const reason: OcrReviewReason | null =
+        questionableCyrillic ? "recognition-quality" :
         tooManyLines ? "large-layout" :
         uncertainHan ? "ambiguous-han" :
         reviewText !== complete ? "script-omission" :
@@ -351,7 +337,9 @@ async function captureNativePhoto(source: CaptureSource): Promise<string> {
   const photo = await cameraBundle.Camera.getPhoto({
     source: source === "camera" ? cameraBundle.CameraSource.Camera : cameraBundle.CameraSource.Photos,
     resultType: cameraBundle.CameraResultType.Uri,
-    quality: 90,
+    // Preserve fine Kazakh diacritics and punctuation. Downsampling is
+    // performed ONCE by our shared offline native image decoder if needed.
+    quality: 100,
     correctOrientation: true,
     allowEditing: false,
     saveToGallery: false,

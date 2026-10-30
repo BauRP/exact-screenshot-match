@@ -1,7 +1,7 @@
 import type { OcrNativeTextAlternative } from "./ocr-text";
 import type { OcrScript } from "./ocr-merge";
 
-export type OcrReviewReason = "recovery" | "ambiguous-han" | "mixed-layout" | "limited-selection" | "native-text" | "large-layout" | "save-retry" | "script-omission";
+export type OcrReviewReason = "recovery" | "ambiguous-han" | "mixed-layout" | "limited-selection" | "native-text" | "large-layout" | "save-retry" | "script-omission" | "recognition-quality";
 
 export const OCR_SCRIPT_LABELS: Readonly<Record<OcrScript, string>> = {
   latin: "Латиница",
@@ -127,6 +127,9 @@ export function markRecoveredOcrText(
   const warning = reason === "ambiguous-han"
     ? "⚠️ Китайский и японский текст могли быть распознаны неоднозначно. " +
       "Проверьте иероглифы и порядок строк.\n\n"
+    : reason === "recognition-quality"
+      ? "⚠️ Текст на фотографии распознан неуверенно. Проверьте казахские и русские буквы, " +
+        "исправьте ошибки перед сохранением или сделайте более чёткий снимок.\\n\\n"
     : reason === "mixed-layout"
       ? "⚠️ Языки распознаны, но расположение строк на фотографии подтверждено не полностью. " +
         "Проверьте порядок абзацев и столбцов.\n\n"

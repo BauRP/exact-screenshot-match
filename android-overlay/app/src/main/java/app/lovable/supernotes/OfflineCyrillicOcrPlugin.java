@@ -60,7 +60,7 @@ public class OfflineCyrillicOcrPlugin extends Plugin {
                 purgeOldSnapshots();
                 target = new File(getContext().getCacheDir(), "wave-ocr-" + UUID.randomUUID() + ".jpg");
                 try (FileOutputStream out = new FileOutputStream(target)) {
-                    if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 92, out)) {
+                    if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 98, out)) {
                         throw new IllegalStateException("Could not prepare the photo");
                     }
                     out.getFD().sync();

@@ -65,6 +65,39 @@ export function prioritizeRemainingOcrScripts(
     .map(item => item.script);
 }
 
+/** Camera and gallery both run the SAME complete local OCR plan.
+ * The visual detector only moves promising models to the beginning; it
+ * cannot remove Russian/Kazakh or other scripts because a blurry phone
+ * capture can easily be misclassified as Latin/Korean/Japanese.
+ */
+export function completeAutomaticOcrPlan(detectedScript?:string):OcrScript[] {
+  const hint=visualOcrScanPlan(detectedScript??"");
+  if(!hint)return [...AUTO_SCAN_ORDER];
+  return [...new Set([...hint,...AUTO_SCAN_ORDER])];
+}
+
+/** A scan with likely Cyrillic text must not silently auto-save corrupted
+ * characters merely because a different OCR engine returned nonempty text.
+ * Low-confidence readings go to the existing editable OCR review, not to
+ * an unverified new note. This rule applies identically to both sources.
+ */
+export function automaticOcrRequiresReview(
+  readings: readonly {script:OcrScript;text:string;confidence?:number}[],
+  selectedText:string,
+  detectedScript?:string,
+):boolean {
+  const cyr=readings.find(item=>item.script==="cyrillic");
+  const count=(text:string)=>(text.match(/\\p{Script=Cyrillic}/gu)??[]).length;
+  const cyrLetters=count(cyr?.text??"");
+  const mergedLetters=count(selectedText);
+  if(cyrLetters>=12 && mergedLetters<Math.max(4,cyrLetters*0.25))return true;
+  if(cyr && cyrLetters>=12 && typeof cyr.confidence==="number" &&
+     Number.isFinite(cyr.confidence) && cyr.confidence<40)return true;
+  if(detectedScript==="cyrillic" && mergedLetters<4 &&
+     (selectedText.match(/\\p{L}/gu)??[]).length>=16)return true;
+  return false;
+}
+
 /** Manual native language selection, still exclusively from APK-bundled models.
  * Recovering an automatic failure uses both languages by default.
  */

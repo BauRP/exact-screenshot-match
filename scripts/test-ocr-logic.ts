@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { mergeHybridOcr } from "../src/lib/ocr-hybrid";
 import { ocrTextToEditorHtml, buildOcrNoteDraft, truncateOcrTitle } from "../src/lib/ocr-note";
 import { composeRecognizedText, hasConflictingNativeOcrText, extractNativeTextAlternative, recoverNativeFullTextForReview } from "../src/lib/ocr-text";
-import { ocrScanPlan, selectedOcrScanPlan, readOcrScanPreferences, saveOcrScanPreferences, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, confidentOcrPrimaryScript, visualOcrScanPlan, cyrillicLanguageForScan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
+import { ocrScanPlan, selectedOcrScanPlan, readOcrScanPreferences, saveOcrScanPreferences, AUTO_SCAN_ORDER, prioritizeRemainingOcrScripts, confidentOcrPrimaryScript, visualOcrScanPlan, completeAutomaticOcrPlan, automaticOcrRequiresReview, cyrillicLanguageForScan, CYRILLIC_OCR_LANGUAGES } from "../src/lib/ocr-plan";
 import { linesFromMlKit, linesFromMlKitBounded, mlKitReportedLanguages } from "../src/lib/ocr-geometry";
 import { OcrSessionGate } from "../src/lib/ocr-session";
 import { OcrScanCoverage } from "../src/lib/ocr-coverage";
@@ -923,6 +923,36 @@ assert.deepEqual(visualOcrScanPlan("latin"),["latin","cyrillic"]);
 assert.equal(visualOcrScanPlan("unknown"),null);
 assert.equal(visualOcrScanPlan(""),null);
 console.log("Image-first detector maps scripts to compatible bundled engines with fallback: passed.");
+
+// Camera and gallery MUST both run the same complete OCR plan. A noisy
+// snapshot cannot let one detector mistake bypass Kazakh/Cyrillic scanning.
+for(const hint of ["latin","cyrillic","korean","japanese","han","devanagari","unknown"]) {
+  const full=completeAutomaticOcrPlan(hint);
+  assert.equal(full.length,AUTO_SCAN_ORDER.length,"Every bundled script remains planned: "+hint);
+  assert.deepEqual(new Set(full),new Set(AUTO_SCAN_ORDER));
+  assert.ok(full.includes("cyrillic"),"Never exclude Kazakh on "+hint);
+}
+assert.deepEqual(completeAutomaticOcrPlan("korean").slice(0,3),["korean","latin","cyrillic"]);
+assert.deepEqual(completeAutomaticOcrPlan("cyrillic").slice(0,2),["cyrillic","latin"]);
+assert.deepEqual(completeAutomaticOcrPlan("unknown"),[...AUTO_SCAN_ORDER]);
+assert.equal(automaticOcrRequiresReview(
+  [{script:"cyrillic",text:"Қазақ тіліндегі маңызды сөйлем",confidence:28}],
+  "Қазақ тіліндегі маңызды сөйлем","cyrillic"),true);
+assert.equal(automaticOcrRequiresReview(
+  [{script:"cyrillic",text:"Қазақ тіліндегі маңызды сөйлем",confidence:83}],
+  "Қазақ тіліндегі маңызды сөйлем","cyrillic"),false);
+assert.equal(automaticOcrRequiresReview(
+  [{script:"cyrillic",text:"Қазақ тіліндегі маңызды сөйлем",confidence:85}],
+  "Random ASCII garbage printed here","cyrillic"),true);
+assert.equal(automaticOcrRequiresReview(
+  [{script:"latin",text:"English example"}],
+  "This is a normal clear English document","latin"),false);
+const cameraRouteCode=await Bun.file("src/routes/camera.tsx").text();
+assert.ok(cameraRouteCode.includes("completeAutomaticOcrPlan(prepared?.detectedScript)"));
+assert.ok(cameraRouteCode.includes("automaticOcrRequiresReview(results,text,prepared?.detectedScript)"));
+assert.ok(cameraRouteCode.includes("quality: 100"),"Both camera and gallery use lossless-leaning photo settings");
+assert.ok(!cameraRouteCode.includes("visualFastPath"),"No source can skip language models from one fuzzy hint");
+console.log("Camera/gallery parity: full plan, Kazakh OCR, suspicious-text review and capture quality: passed.");
 
 // Unknown visual hints must continue all six engines, not invent a detected script.
 assert.equal(visualOcrScanPlan("script-not-supported"),null);
