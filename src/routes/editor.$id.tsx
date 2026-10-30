@@ -35,6 +35,7 @@ import {
   EyeOff,
   CalendarDays,
   ImagePlus,
+  PenTool,
 } from "lucide-react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -60,6 +61,7 @@ import {
 import { AutoLinkExtras } from "@/lib/editor-extensions";
 import { AudioNote } from "@/components/editor/AudioNode";
 import { WaveImage } from "@/components/editor/WaveImage";
+import { WaveDrawing } from "@/components/editor/WaveDrawing";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import { useFolders, type Folder } from "@/lib/folders-store";
 import {
@@ -223,6 +225,7 @@ function EditorPage() {
       AutoLinkExtras,
       AudioNote,
       WaveImage,
+      WaveDrawing,
       InNoteSearch,
       WaveChecklistItem,
       WaveCallout,
@@ -691,6 +694,10 @@ function EditorPage() {
             aria-label={t("audio")}
           >
             {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+          </button>
+          <button type="button" onClick={()=>editor?.chain().focus().insertWaveDrawing().run()}
+            aria-label="Добавить рисунок" className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
+            <PenTool className="h-4 w-4"/>
           </button>
           <button type="button" onClick={addImage} aria-label="Добавить фотографию из галереи"
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
