@@ -1,4 +1,4 @@
-name: Offline OCR Android emulator smoke tests
+name: Wave Notes - Android emulator tests (not APK build)
 
 # Real Android execution is intentionally separate from APK publishing.
 # This suite checks bundled Russian/Kazakh models without a camera device.
@@ -28,7 +28,8 @@ on:
       - 'src/components/BottomNav.tsx'
       - 'src/styles.css'
       - 'scripts/run-android-emulator-tests.sh'
-      - 'scripts/disable-android-intro-for-ci.mjs'
+      - 'scripts/prepare-android-emulator.sh'
+      - 'scripts/test-launch-intro.ts'
       - 'scripts/write-capacitor-index.mjs'
       - 'src/routes/editor.$id.tsx'
       - 'src/routes/pdf.$id.tsx'
@@ -49,9 +50,10 @@ concurrency:
 
 jobs:
   emulator:
-    name: Android ${{ matrix.api-level }} (${{ matrix.display-size }}, ${{ matrix.display-density }} dpi) — OCR and layout ${{ matrix.intro_variant == 'disabled' && '[intro OFF diagnostic]' || '' }}
+    name: Android ${{ matrix.api-level }} (${{ matrix.display-size }}, ${{ matrix.display-density }} dpi) — OCR and layout
     strategy:
       fail-fast: false
+      max-parallel: 3
       matrix:
         # Screen profiles cover compact phones, taller OLEDs and tablets.
         # Android insets are measured at runtime; no device-name whitelist.
@@ -68,26 +70,12 @@ jobs:
           - api-level: 34
             display-size: 412x915
             display-density: 210
-            intro_variant: full
-          - api-level: 34
-            display-size: 412x915
-            display-density: 210
-            intro_variant: disabled
-            # Cross-check a second OS version for startup animation effects.
           - api-level: 34
             display-size: 800x1280
             display-density: 160
           - api-level: 36
             display-size: 480x1024
             display-density: 240
-            intro_variant: full
-            # Production intro is unchanged in this control run.
-          - api-level: 36
-            display-size: 480x1024
-            display-density: 240
-            intro_variant: disabled
-            # Diagnostic only: identical app without startup animation.
-            # NEVER publish this variant as the user APK.
           - api-level: '37.0'
             display-size: 1080x2400
             display-density: 420
@@ -130,6 +118,10 @@ jobs:
           sudo udevadm trigger --name-match=kvm
           ls -l /dev/kvm
 
+      # Avoid relying on a single download of the Android Emulator SDK ZIP.
+      - name: Preinstall Android Emulator with verified retries
+        run: bash scripts/prepare-android-emulator.sh
+
       - name: Cache verified build-time OCR language files
         uses: actions/cache@v4
         with:
@@ -143,11 +135,6 @@ jobs:
           node scripts/patch-admob-native-layout.mjs
           node scripts/verify-admob-native-layout.mjs
           bun run build
-          # Diagnostic A/B: remove only the startup animation from the local
-          # instrumented APK. Normal production APK and other jobs are untouched.
-          if [ "${{ matrix.intro_variant || 'full' }}" = 'disabled' ]; then
-            node scripts/disable-android-intro-for-ci.mjs
-          fi
           bash scripts/prepare-ocr-models.sh
           npx cap add android
           npx cap sync android
@@ -191,8 +178,10 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebugAndroidTest --no-daemon --stacktrace
 
-      - name: Verify single-process Android runner syntax
-        run: bash -n scripts/run-android-emulator-tests.sh
+      - name: Verify Android test scripts
+        run: |
+          bash -n scripts/run-android-emulator-tests.sh
+          bash -n scripts/prepare-android-emulator.sh
 
       - name: Android instrumented OCR tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
@@ -218,7 +207,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: wave-android-debug-${{ matrix.api-level }}-${{ matrix.display-size }}-${{ matrix.intro_variant || 'full' }}
+          name: wave-android-debug-${{ matrix.api-level }}-${{ matrix.display-size }}
           retention-days: 14
           if-no-files-found: warn
           path: |
