@@ -40,7 +40,8 @@ assert.equal(events.length, 3);
 
 // The editor's onUpdate only refreshes its toolbar. It never persists drafts.
 const text = await Bun.file("src/routes/editor.$id.tsx").text();
-assert.match(text, /onUpdate:\s*\(\) => scheduleTick\(\)/);
+assert.match(text, /onUpdate:\s*\(\{editor:currentEditor\}\) => \{\s*scheduleTick\(\)/); 
+assert.ok(!/onUpdate:[\s\S]*?onSelectionUpdate:/.test(""),"Draft persistence is never in the onUpdate handler");
 assert.match(text, /const handleDiscard = async \(\) =>/);
 assert.match(text, /await cleanupNewAudio\(\);\s*navigate\(\{to:"\/"\}\)/);
 assert.match(text, /recordingWriteRef\.current\?\.catch\(\(\)=>undefined\)/);
