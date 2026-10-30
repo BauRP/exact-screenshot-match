@@ -695,8 +695,8 @@ function PdfViewerScreen() {
         highest=Math.max(highest,run.fontSize*zoom);
         const css=runCss(run,zoom,source);
         ctx.font=`${css["font-style"]} ${css["font-weight"]} ${run.fontSize*zoom}px ${css["font-family"]}`;
-        for(const piece of run.text.split(/(\\r\\n|\\r|\\n)/)) {
-          if(piece==="\\n" || piece==="\\r" || piece==="\\r\\n") lineWidths.push(0);
+        for(const piece of run.text.split(/(\r\n|\r|\n)/)) {
+          if(piece==="\n" || piece==="\r" || piece==="\r\n") lineWidths.push(0);
           else lineWidths[lineWidths.length-1]+=ctx.measureText(piece).width;
         }
       }
@@ -1096,8 +1096,8 @@ function PdfViewerScreen() {
         const explicit: typeof glyphs[]=[[]];
         for(let i=0;i<glyphs.length;i++) {
           const char=glyphs[i].text;
-          if(char==="\\r" && glyphs[i+1]?.text==="\\n") {explicit.push([]);i++;}
-          else if(char==="\\r"||char==="\\n") explicit.push([]);
+          if(char==="\r" && glyphs[i+1]?.text==="\n") {explicit.push([]);i++;}
+          else if(char==="\r"||char==="\n") explicit.push([]);
           else explicit[explicit.length-1].push(glyphs[i]);
         }
         return explicit;
