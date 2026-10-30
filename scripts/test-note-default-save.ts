@@ -32,12 +32,14 @@ const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
 assert.match(editor,/editorBackground\(isNew,note\?\.style\?\.background\)/);
 assert.match(editor,/color:var\(--wave-note-ink/);
 assert.match(editor,/caret-color:var\(--wave-note-caret/);
-assert.match(editor,/className="block h-\\[22px\\] w-\\[22px\\] shrink-0 text-white"/,"White save pictogram is a true square");
-assert.match(editor,/preserveAspectRatio="xMidYMid meet"/,"Maintain original diskette proportions");
-assert.match(editor,/M5\\.5 3\\.5H16L20\\.5 8v11/,"Use the newly drawn outline");
-assert.match(editor,/M7\\.2 3\\.5v6\\.4h9\\.2V4/,"Upper diskette shutter must be recognizable");
-assert.doesNotMatch(editor,/<svg aria-hidden="true" className="h-\\[23px\\] w-\\[23px\\]"/,"Reject old yellow filled icon");
-assert.doesNotMatch(editor,/<Save aria-hidden="true"/,"Reject old thin icon");
+// Check exact markup as literal strings. Regex backslash escaping had incorrectly
+// rejected the valid white 1:1 diskette even though TypeScript passed.
+assert.ok(editor.includes('className="block h-[22px] w-[22px] shrink-0 text-white"'),"White diskette should be 22x22 and never stretched");
+assert.ok(editor.includes('preserveAspectRatio="xMidYMid meet"'),"Keep fixed icon proportions");
+assert.ok(editor.includes('M5.5 3.5H16L20.5 8v11'),"Require the new outline");
+assert.ok(editor.includes('M7.2 3.5v6.4h9.2V4'),"Require the new upper shutter");
+assert.ok(!editor.includes('<svg aria-hidden="true" className="h-[23px] w-[23px]"'),"Old filled icon must be absent");
+assert.ok(!editor.includes('<Save aria-hidden="true"'),"Old thin Save icon must be absent");
 assert.match(editor,/h-\[38px\] w-\[38px\]/, "A larger dark save surface must contain the icon clearly");
 assert.match(editor,/border border-border bg-secondary\/50 text-white/, "Dark button, white pictogram");
 assert.match(editor,/<LoaderCircle aria-hidden="true" className="h-\[22px\] w-\[22px\] animate-spin"/, "Saving state remains visible");
