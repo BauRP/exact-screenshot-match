@@ -4,6 +4,7 @@ import {
   ArrowDownAZ,
   X,
   CalendarClock,
+  ChevronDown,
   CalendarPlus,
   FolderPlus,
   LayoutGrid,
@@ -407,7 +408,9 @@ function TopContextMenu({
   onImportPdf: () => void;
 }) {
   const t = useT();
-
+  const [expanded, setExpanded] = useState<"view" | "sort" | null>(null);
+  useEffect(() => { if (!open) setExpanded(null); }, [open]);
+  
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
@@ -433,15 +436,30 @@ function TopContextMenu({
           {t("add_pdf")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{t("view")}</DropdownMenuLabel>
-        <ViewItem current={view} value="list" label={t("list")} icon={<List className="h-4 w-4" />} />
-        <ViewItem current={view} value="grid" label={t("grid")} icon={<LayoutGrid className="h-4 w-4" />} />
-        <ViewItem current={view} value="table" label={t("table")} icon={<Table2 className="h-4 w-4" />} />
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{t("sort")}</DropdownMenuLabel>
-        <SortItem current={sort} value="created" label={t("by_created")} icon={<CalendarPlus className="h-4 w-4" />} />
-        <SortItem current={sort} value="updated" label={t("by_updated")} icon={<CalendarClock className="h-4 w-4" />} />
-        <SortItem current={sort} value="alpha" label={t("alpha")} icon={<ArrowDownAZ className="h-4 w-4" />} />
+        <button type="button" aria-expanded={expanded === "view"} aria-controls="wave-view-options"
+          onClick={() => setExpanded(v => v === "view" ? null : "view")}
+          className="flex w-full items-center justify-between rounded-lg px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:bg-secondary/60">
+          {t("view")} <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform duration-150 ${expanded === "view" ? "rotate-180" : ""}`}/>
+        </button>
+        {expanded === "view" && (
+          <div id="wave-view-options" className="pl-2">
+            <ViewItem current={view} value="list" label={t("list")} icon={<List className="h-4 w-4" />} />
+            <ViewItem current={view} value="grid" label={t("grid")} icon={<LayoutGrid className="h-4 w-4" />} />
+            <ViewItem current={view} value="table" label={t("table")} icon={<Table2 className="h-4 w-4" />} />
+          </div>
+        )}
+        <button type="button" aria-expanded={expanded === "sort"} aria-controls="wave-sort-options"
+          onClick={() => setExpanded(v => v === "sort" ? null : "sort")}
+          className="flex w-full items-center justify-between rounded-lg px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:bg-secondary/60">
+          {t("sort")} <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform duration-150 ${expanded === "sort" ? "rotate-180" : ""}`}/>
+        </button>
+        {expanded === "sort" && (
+          <div id="wave-sort-options" className="pl-2">
+            <SortItem current={sort} value="created" label={t("by_created")} icon={<CalendarPlus className="h-4 w-4" />} />
+            <SortItem current={sort} value="updated" label={t("by_updated")} icon={<CalendarClock className="h-4 w-4" />} />
+            <SortItem current={sort} value="alpha" label={t("alpha")} icon={<ArrowDownAZ className="h-4 w-4" />} />
+          </div>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
