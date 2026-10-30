@@ -42,10 +42,13 @@ public class MainActivity extends BridgeActivity {
         // respect WebView padding on every OEM and Chromium version.
         // Keep initial layout margins so repeated insets never accumulate.
         final ViewGroup.LayoutParams initial=webView.getLayoutParams();
+        // Some OEM Capacitor containers provide non-margin LayoutParams.
+        // Replace them with margin-capable parameters rather than crashing
+        // on startup; the original width and height are preserved.
         if(!(initial instanceof ViewGroup.MarginLayoutParams)){
-            throw new IllegalStateException("Wave Notes WebView requires margin-capable layout parameters");
+            webView.setLayoutParams(new ViewGroup.MarginLayoutParams(initial));
         }
-        final ViewGroup.MarginLayoutParams base=(ViewGroup.MarginLayoutParams)initial;
+        final ViewGroup.MarginLayoutParams base=(ViewGroup.MarginLayoutParams)webView.getLayoutParams();
         final int baseLeft=base.leftMargin, baseTop=base.topMargin;
         final int baseRight=base.rightMargin, baseBottom=base.bottomMargin;
         final boolean[] lastImeVisible={false};
