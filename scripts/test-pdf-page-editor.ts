@@ -118,4 +118,7 @@ assert.equal(safeSourceRight(sourceRect,[sourceRect,{x:73,y:50,width:10,height:2
 assert.ok(sameSourceText({page:1,cover:true,xPct:12,yPct:22,widthPct:40,heightPct:2,
   eraseXPct:12,eraseYPct:22,eraseWidthPct:40,eraseHeightPct:2},sourceRect,1));
 assert.ok(!sameSourceText({page:2,cover:true,xPct:12,yPct:22,widthPct:40,heightPct:2},sourceRect,1));
+assert.ok(src.includes("const latest=getNote(id)?.pdf?.overlays ?? overlays"), "PDF export must use current store snapshot");
+assert.ok(src.includes("const changedDraft=draft && original && hasPdfDraftChanges(original,draft)"), "PDF export must include dirty active draft");
+assert.ok(src.includes("for (const overlay of exportOverlays)"), "PDF export must not silently drop active edit");
 console.log("PDF tap no-op, 4 rotations, rotated text hitboxes and page-switch cleanup: PASS");

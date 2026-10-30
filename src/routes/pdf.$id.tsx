@@ -983,7 +983,17 @@ function PdfViewerScreen() {
       return exactFont;
     };
     const pages = document.getPages();
-    for (const overlay of overlays) {
+    // Export the latest committed metadata and the active, nonempty draft.
+    // A user can tap Share/Print while the soft keyboard is still visible.
+    const latest=getNote(id)?.pdf?.overlays ?? overlays;
+    const draft=draftOverlayRef.current;
+    const original=draftStartRef.current;
+    const changedDraft=draft && original && hasPdfDraftChanges(original,draft)
+      && hasSaveablePdfContent(draft) ? draft : null;
+    const exportOverlays=changedDraft
+      ? [...latest.filter(item=>item.id!==changedDraft.id),changedDraft]
+      : latest;
+    for (const overlay of exportOverlays) {
       const target = pages[overlay.page - 1];
       if (!target) continue;
       const { width, height } = target.getSize();
@@ -1119,7 +1129,7 @@ function PdfViewerScreen() {
     }
 
     return document.save();
-  }, [bytes, overlays]);
+  }, [bytes, overlays, id, pdfDoc]);
 
   const shareFile = async () => {
     setBusy(true);
