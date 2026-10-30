@@ -27,6 +27,7 @@ on:
       - 'src/routes/__root.tsx'
       - 'src/components/BottomNav.tsx'
       - 'src/styles.css'
+      - 'scripts/run-android-emulator-tests.sh'
       - 'scripts/write-capacitor-index.mjs'
       - 'src/routes/editor.$id.tsx'
       - 'src/routes/pdf.$id.tsx'
@@ -170,6 +171,9 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebugAndroidTest --no-daemon --stacktrace
 
+      - name: Verify single-process Android runner syntax
+        run: bash -n scripts/run-android-emulator-tests.sh
+
       - name: Android instrumented OCR tests on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -186,26 +190,9 @@ jobs:
           # These tests no longer assert device network isolation. Bundled
           # model integrity is checked, while offline mode remains a separate
           # acceptance requirement; do not claim it passed from this workflow.
-          script: |
-            set -eu
-            echo WAVE_API_${{ matrix.api-level }}_BEGIN
-            adb shell getprop ro.build.version.sdk
-            adb shell wm size ${{ matrix.display-size }}
-            adb shell wm density ${{ matrix.display-density }}
-            echo WAVE_DISPLAY_PROFILE
-            adb shell wm size
-            adb shell wm density
-            echo WAVE_GRADLE_BEGIN
-            set +e
-            (cd android && test -x ./gradlew && ./gradlew :app:connectedDebugAndroidTest --no-daemon --no-parallel --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8" --stacktrace)
-            result=$?
-            set -e
-            if [ "$result" -ne 0 ]; then
-              echo WAVE_ANDROID_FAILURE_DIAGNOSTICS
-              adb logcat -d -v threadtime -t 7000 2>/dev/null | grep -E -A 15 -B 3 'FATAL EXCEPTION|AndroidRuntime|Process: app.lovable.supernotes|AssertionError|Unable to start activity|Caused by: java|WAVE_LAYOUT|WebView' | tail -n 300 || true
-              find android/app/build/outputs/androidTest-results -type f -name '*.xml' -print -exec sh -c 'sed -n "1,90p" "$1"' sh {} \; 2>/dev/null || true
-            fi
-            exit "$result"
+          # The action executes each script line as an individual /bin/sh -c call.
+          # Keep invocation on ONE line; control-flow belongs inside the bash file.
+          script: 'bash scripts/run-android-emulator-tests.sh "${{ matrix.api-level }}" "${{ matrix.display-size }}" "${{ matrix.display-density }}"'
 
       - name: Record actual Android OCR instrumentation results
         if: always()
