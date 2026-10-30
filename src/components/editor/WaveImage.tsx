@@ -48,7 +48,7 @@ export const WaveImage=Node.create({
   alt:{default:"Фото в заметке",parseHTML:el=>el.getAttribute("data-alt")||"Фото в заметке",renderHTML:a=>({"data-alt":a.alt})},
  };},
  parseHTML(){return [{tag:"div[data-wave-image]"}];},
- renderHTML({HTMLAttributes}){return ["div",mergeAttributes(HTMLAttributes,{"data-wave-image":"true"}),0];},
+ renderHTML({HTMLAttributes}){return ["div",mergeAttributes(HTMLAttributes,{"data-wave-image":"true"})];},
  addNodeView(){return ReactNodeViewRenderer(ImageView);},
  addCommands(){return {insertWaveImage:(id:string)=>({chain})=>chain().insertContent([{type:this.name,attrs:{imageId:id,width:320}},{type:"paragraph"}]).run()};},
 });
