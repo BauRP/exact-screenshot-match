@@ -23,6 +23,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(PdfPrinterPlugin.class);
         registerPlugin(PrivacyLinkPlugin.class);
+        registerPlugin(ExternalNoteLinkPlugin.class);
         registerPlugin(FeedbackEmailPlugin.class);
         registerPlugin(OfflineCyrillicOcrPlugin.class);
         registerPlugin(NativeAudioRecorderPlugin.class);

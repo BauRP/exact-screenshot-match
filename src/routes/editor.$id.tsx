@@ -72,6 +72,7 @@ import { readEditorPreferences } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
+import {openExternalUrl,isSafeExternalUrl} from "@/lib/external-links";
 
 export const Route = createFileRoute("/editor/$id")({
   head: () => ({ meta: [
@@ -225,6 +226,19 @@ function EditorPage() {
     ],
     content: note?.body || "<p></p>",
     editorProps: {
+      handleClick(_view,_pos,event){
+        const element=event.target instanceof Element?event.target:null;
+        const anchor=element?.closest("a[href]");
+        if(!anchor)return false;
+        const href=anchor.getAttribute("href");
+        if(!href || !isSafeExternalUrl(href))return false;
+        event.preventDefault();
+        void openExternalUrl(href).catch(error=>{
+          console.error("External browser failed",error);
+          toast.error("Не удалось открыть ссылку в браузере телефона");
+        });
+        return true;
+      },
       attributes: {
         class:
           "sn-tiptap min-h-full w-full whitespace-pre-wrap break-words outline-none",
