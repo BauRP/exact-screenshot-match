@@ -68,3 +68,13 @@ export function imageIdsInHtml(html:string):string[]{
  const ids=[...html.matchAll(/data-image-id=["']([a-zA-Z0-9_-]{1,128})["']/g)].map(m=>m[1]);
  return [...new Set(ids)];
 }
+
+/** Verify the actual bytes, rather than trusting MIME or extension in an imported ZIP. */
+export function imageBlobFromBytes(bytes:Uint8Array):Blob{
+ if(bytes.byteLength===0||bytes.byteLength>LIMIT)throw Error("Повреждённая или слишком большая фотография");
+ const png=bytes.length>=8&&bytes[0]===137&&bytes[1]===80&&bytes[2]===78&&bytes[3]===71&&bytes[4]===13&&bytes[5]===10&&bytes[6]===26&&bytes[7]===10;
+ const jpeg=bytes.length>=3&&bytes[0]===255&&bytes[1]===216&&bytes[2]===255;
+ const webp=bytes.length>=12&&String.fromCharCode(...bytes.slice(0,4))==="RIFF"&&String.fromCharCode(...bytes.slice(8,12))==="WEBP";
+ if(!png&&!jpeg&&!webp)throw Error("Формат изображения в архиве не поддерживается");
+ return new Blob([bytes.slice().buffer],{type:png?"image/png":jpeg?"image/jpeg":"image/webp"});
+}
