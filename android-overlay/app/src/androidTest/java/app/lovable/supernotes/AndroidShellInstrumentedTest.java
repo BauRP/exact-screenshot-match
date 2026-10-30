@@ -74,14 +74,18 @@ public class AndroidShellInstrumentedTest {
                     insets.getInsets(WindowInsetsCompat.Type.displayCutout());
                 int safeTop = Math.max(bars.top, cutout.top);
                 int safeBottom = Math.max(bars.bottom, cutout.bottom);
-                int contentTop = webPosition[1] + web.getPaddingTop();
-                int contentBottom = webPosition[1] + web.getHeight() - web.getPaddingBottom();
+                // Native margins, not WebView internal padding, bound the
+                // CSS viewport and fixed navigation bar on modern Android.
+                int contentTop = webPosition[1];
+                int contentBottom = webPosition[1] + web.getHeight();
+                assertEquals("WebView top inset must not be double-applied",0,web.getPaddingTop());
+                assertEquals("WebView bottom inset must not be double-applied",0,web.getPaddingBottom());
                 assertTrue("Status bar overlaps app content: top=" + contentTop
                     + " safeTop=" + safeTop + " viewY=" + webPosition[1]
-                    + " padding=" + web.getPaddingTop(), contentTop + 1 >= safeTop);
+                    + " margin should reserve top inset", contentTop + 1 >= safeTop);
                 assertTrue("System navigation overlaps app content: bottom=" + contentBottom
                     + " safeBottom=" + (screen.y - safeBottom)
-                    + " padding=" + web.getPaddingBottom(),
+                    + " margin should reserve bottom inset",
                     contentBottom <= screen.y - safeBottom + 1);
             });
             // Report independent measurements instead of a single opaque

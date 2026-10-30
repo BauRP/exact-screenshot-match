@@ -183,7 +183,10 @@ function RootComponent() {
 }
 
 
-/** Root frame: fills the screen and starts strictly below the system status bar. */
+/** The Android native WebView is already clipped to the safe window by
+ * MainActivity, so the web root must not add its own status/navigation insets.
+ * Browser/iOS use their CSS safe-area values as before.
+ */
 function SafeFrame({ children }: { children: ReactNode }) {
   const nativeAndroid = typeof window !== "undefined" && (window as Window & { Capacitor?: { getPlatform?: () => string } }).Capacitor?.getPlatform?.() === "android";
   const top = nativeAndroid ? "0px" : "env(safe-area-inset-top)";

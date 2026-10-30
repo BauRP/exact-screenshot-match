@@ -265,9 +265,12 @@
   .wave-app-frame { height:100dvh; }
 }
 .wave-native-android {
+  /* Android WindowInsets has already trimmed the physical WebView viewport.
+     Never add the Android system bars again through CSS env() or padding. */
   --wave-safe-bottom:0px;
   --wave-safe-top:0px;
 }
+.wave-native-android .wave-bottom-nav { bottom:0; }
 /* The Android IME has priority while editing. Never pin bottom tabs above
    the keyboard where they cover an editable note or a PDF text tool. */
 .wave-ime-open .wave-bottom-nav { display:none; }
