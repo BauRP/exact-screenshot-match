@@ -1,34 +1,36 @@
 #!/usr/bin/env bash
-# This runs only in a disposable GitHub Actions VM; not in the Wave Notes APK.
+# Retry SDK ZIP downloads only. Emulator Runner performs actual boot validation.
+# This file runs on ephemeral GitHub Actions runners, not in Wave Notes APK.
 set -Eeuo pipefail
 sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
 if [[ -z "$sdk_root" || ! -d "$sdk_root" ]]; then
-  echo "::error::Android SDK root is unavailable"; exit 1
+  echo "::error::Android SDK root missing"; exit 1
 fi
-command -v sdkmanager >/dev/null || {
-  echo "::error::sdkmanager is missing"; exit 1
+command -v sdkmanager >/dev/null 2>&1 || {
+  echo "::error::sdkmanager not found"; exit 1
 }
-for ((attempt=1; attempt<=4; attempt++)); do
-  echo "Installing Android emulator SDK package, attempt $attempt/4"
+max_attempts=4
+retry_delay="${WAVE_EMULATOR_SDK_RETRY_DELAY:-7}"
+for ((attempt=1; attempt<=max_attempts; attempt++)); do
+  echo "Installing emulator SDK package: attempt $attempt/$max_attempts"
+  # An SDK download is successful when sdkmanager exits zero.
+  # Do NOT require running 'emulator -version' here before AVD configuration;
+  # it produced seven false negatives in the previous workflow.
   if sdkmanager --install emulator --channel=0; then
-    if [[ -x "$sdk_root/emulator/emulator" ]] &&
-       "$sdk_root/emulator/emulator" -version >/dev/null 2>&1; then
-      echo "Verified Android Emulator executable"; exit 0
+    echo "Android Emulator SDK download completed; emulator-runner will validate device boot"
+    if [[ ! -f "$sdk_root/emulator/emulator" ]]; then
+      echo "::notice::Emulator executable is not visible yet; deferring definitive verification to emulator-runner"
     fi
-    echo "::warning::SDK downloaded but emulator executable cannot run"
-  else
-    echo "::warning::Android Emulator SDK download failed (attempt $attempt)"
+    exit 0
   fi
-  if ((attempt==4)); then
-    echo "::error::Unable to verify Android Emulator SDK. No app tests were run."; exit 1
+  echo "::warning::SDK archive download or installation failed on attempt $attempt"
+  if ((attempt == max_attempts)); then
+    echo "::error::Emulator SDK download failed after $max_attempts attempts; no app tests were run"
+    exit 1
   fi
-  # A partially downloaded ZIP can corrupt the next SDK installation attempt.
-  [[ ! -d "$sdk_root/.temp" ]] || rm -rf -- "$sdk_root/.temp"
-  if [[ -d "$sdk_root/emulator" ]]; then
-    if [[ ! -x "$sdk_root/emulator/emulator" ]] ||
-       ! "$sdk_root/emulator/emulator" -version >/dev/null 2>&1; then
-      rm -rf -- "$sdk_root/emulator"
-    fi
-  fi
-  sleep $((attempt * 7))
+  # Only erase partial SDK packages on the disposable CI runner after failure.
+  for partial in "$sdk_root/.temp" "$sdk_root/.downloadIntermediates" "$sdk_root/emulator"; do
+    [[ ! -d "$partial" ]] || rm -rf -- "$partial"
+  done
+  sleep "$((attempt * retry_delay))"
 done

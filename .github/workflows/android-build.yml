@@ -8,6 +8,13 @@ on:
       - main
       - chatgpt/external-apk-build-20261025
       - chatgpt/super-notes-stability-20261025
+    # Infrastructure-only commits should not produce yet another identical APK.
+    paths-ignore:
+      - '.github/workflows/android-ocr-emulator.yml'
+      - 'scripts/prepare-android-emulator.sh'
+      - 'scripts/test-android-emulator-sdk-retry.sh'
+      - 'scripts/run-android-emulator-tests.sh'
+      - 'scripts/disable-android-intro-for-ci.mjs'
 
 permissions:
   contents: write

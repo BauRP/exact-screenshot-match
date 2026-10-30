@@ -29,6 +29,7 @@ on:
       - 'src/styles.css'
       - 'scripts/run-android-emulator-tests.sh'
       - 'scripts/prepare-android-emulator.sh'
+      - 'scripts/test-android-emulator-sdk-retry.sh'
       - 'scripts/test-launch-intro.ts'
       - 'scripts/write-capacitor-index.mjs'
       - 'src/routes/editor.$id.tsx'
@@ -119,7 +120,13 @@ jobs:
           ls -l /dev/kvm
 
       # Avoid relying on a single download of the Android Emulator SDK ZIP.
-      - name: Preinstall Android Emulator with verified retries
+      - name: Verify SDK download recovery offline
+        run: |
+          bash -n scripts/prepare-android-emulator.sh
+          bash -n scripts/test-android-emulator-sdk-retry.sh
+          bash scripts/test-android-emulator-sdk-retry.sh
+
+      - name: Preinstall Android Emulator with SDK download retries
         run: bash scripts/prepare-android-emulator.sh
 
       - name: Cache verified build-time OCR language files
