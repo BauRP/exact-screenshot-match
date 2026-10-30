@@ -126,5 +126,3 @@ export async function receiveWaveNote(file:File,folderId:string):Promise<Note>{
   throw error;
  }
 }
-
-}
