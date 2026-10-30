@@ -22,6 +22,10 @@ import {
   Redo2,
   Mic,
   Square,
+  Search,
+  X,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -55,6 +59,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useT } from "@/lib/i18n";
 import { APP_FONTS, fontNameFromCss } from "@/lib/app-fonts";
+import { InNoteSearch, noteSearchKey, findWords } from "@/lib/in-note-search";
+import { readEditorPreferences } from "@/lib/editor-preferences";
 
 export const Route = createFileRoute("/editor/$id")({
   head: () => ({ meta: [
@@ -117,6 +123,10 @@ function EditorPage() {
   };
   const savingRef = useRef(false);
   const [saving,setSaving] = useState(false);
+  const [findOpen,setFindOpen]=useState(false);
+  const [findQuery,setFindQuery]=useState("");
+  const [findActive,setFindActive]=useState(0);
+  const [prefs]=useState(()=>readEditorPreferences());
 
   const [currentFontFamily, setCurrentFontFamily] = useState(FONTS[0].value);
   const [currentFontSize, setCurrentFontSize] = useState<number>(18);
@@ -188,6 +198,7 @@ function EditorPage() {
       }),
       AutoLinkExtras,
       AudioNote,
+      InNoteSearch,
     ],
     content: note?.body || "<p></p>",
     editorProps: {
@@ -195,6 +206,7 @@ function EditorPage() {
         class:
           "sn-tiptap min-h-full w-full whitespace-pre-wrap break-words outline-none",
         style: "color:var(--wave-note-ink,#FFFFFF);caret-color:var(--wave-note-caret,#FFFFFF);",
+        spellcheck: prefs.spellcheck ? "true" : "false",
       },
     },
     // Draft only: nothing is written to storage until the checkmark is tapped.
@@ -249,6 +261,17 @@ function EditorPage() {
   const handleFolder = (fid: string) => setFolderId(fid);
 
   const handleCanvasBg = (c: string) => setCanvasBg(c);
+  const hits=findOpen&&editor?findWords(editor.state.doc,findQuery,prefs.caseSensitive):[];
+  const setSearchDecoration=(query:string,active:number)=>{
+    if(editor)editor.view.dispatch(editor.state.tr.setMeta(noteSearchKey,{query,active,caseSensitive:prefs.caseSensitive}));
+  };
+  const dismissFind=()=>{setFindOpen(false);setFindQuery("");setFindActive(0);setSearchDecoration("",0);};
+  const stepFind=(step:number)=>{
+    if(!editor||!hits.length)return;
+    const at=(findActive+step+hits.length)%hits.length;
+    setFindActive(at);setSearchDecoration(findQuery,at);
+    requestAnimationFrame(()=>editor.view.dom.querySelector(".wave-find-current")?.scrollIntoView({block:"nearest"}));
+  };
 
   // Keep archive work out of the editor completely, even if a previous
   // committed edit was waiting to be archived. A checkmark navigates away
@@ -552,6 +575,11 @@ function EditorPage() {
             <Star className="h-4 w-4" fill={pinned ? "currentColor" : "none"} />
           </button>
 
+          <button type="button" onClick={()=>findOpen?dismissFind():setFindOpen(true)}
+            aria-label="Найти в заметке" aria-expanded={findOpen}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+            <Search className="h-4 w-4"/>
+          </button>
           <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
           {editor && (
             <>
@@ -570,6 +598,17 @@ function EditorPage() {
             </>
           )}
         </div>
+        {findOpen && <div role="search" aria-label="Поиск внутри заметки"
+          className="mt-2 flex min-w-0 items-center gap-1 rounded-xl border border-border bg-secondary/50 px-2 py-1.5">
+          <Search className="h-4 w-4 shrink-0 text-muted-foreground"/>
+          <input aria-label="Искать слово" autoFocus maxLength={100} placeholder="Найти слово…"
+            value={findQuery} onChange={e=>{const q=e.target.value;setFindQuery(q);setFindActive(0);setSearchDecoration(q,0);}}
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none"/>
+          <span aria-live="polite" className="shrink-0 text-[10px] text-muted-foreground">{findQuery?(hits.length?`${findActive+1}/${hits.length}`:"0/0"):"—"}</span>
+          <button type="button" disabled={!hits.length} onClick={()=>stepFind(-1)} aria-label="Предыдущее совпадение" className="grid h-8 w-8 shrink-0 place-items-center disabled:opacity-30"><ChevronUp className="h-4 w-4"/></button>
+          <button type="button" disabled={!hits.length} onClick={()=>stepFind(1)} aria-label="Следующее совпадение" className="grid h-8 w-8 shrink-0 place-items-center disabled:opacity-30"><ChevronDown className="h-4 w-4"/></button>
+          <button type="button" onClick={dismissFind} aria-label="Закрыть поиск" className="grid h-8 w-8 shrink-0 place-items-center"><X className="h-4 w-4"/></button>
+        </div>}
       </div>
 
       {/* ROW 3: Style bar — font / size / color / bg (always visible) */}
@@ -666,6 +705,7 @@ function EditorPage() {
         >
           <EditorContent editor={editor} style={{
             "--wave-note-caret": noteCaretColor(canvasBg),
+            "--wave-find-contrast": noteCaretColor(canvasBg),
             "--wave-note-ink": editorInk(isNew,note?.style?.color),
           } as React.CSSProperties} />
         </div>

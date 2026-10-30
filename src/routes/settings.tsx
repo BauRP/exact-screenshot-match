@@ -14,6 +14,8 @@ import {
   MessageSquarePlus,
   Download,
   Upload,
+  SpellCheck,
+  Search,
  } from "lucide-react";
 import { sendFeedback } from "@/lib/feedback.functions";
 import { AdMobDiagnosticsPanel } from "@/components/AdMobDiagnosticsPanel";
@@ -39,6 +41,7 @@ import {
   biometricAvailability,
 } from "@/lib/app-lock";
 import { pinIsValid } from "@/lib/pin-security";
+import { readEditorPreferences,saveEditorPreferences } from "@/lib/editor-preferences";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [
@@ -177,6 +180,8 @@ function SettingsPage() {
   const [fbSending, setFbSending] = useState(false);
   const [backupBusy, setBackupBusy] = useState(false);
   const [automaticBackup, setAutomaticBackup] = useState(false);
+  const [editorPrefs,setEditorPrefs]=useState(()=>readEditorPreferences());
+  const changePref=(patch:Partial<typeof editorPrefs>)=>{try{setEditorPrefs(saveEditorPreferences(patch));}catch(e){console.error(e);toast.error("Не удалось сохранить настройку");}};
   useEffect(()=>{setAutomaticBackup(isAutomaticBackupEnabled());},[]);
   const [adPrivacyAvailable, setAdPrivacyAvailable] = useState(false);
   const [adPrivacyLoading, setAdPrivacyLoading] = useState(false);
@@ -407,7 +412,16 @@ function SettingsPage() {
           </Row>
         </Section>
 
-        <Section title={t("security")} eyebrow="04">
+        <Section title="Редактор" eyebrow="04">
+          <Row icon={<SpellCheck className="h-4 w-4"/>} title="Подчёркивать возможные ошибки" hint="Проверка средствами телефона, без автоматического исправления слов">
+            <Toggle checked={editorPrefs.spellcheck} label="Проверка правописания" onChange={v=>changePref({spellcheck:v})}/>
+          </Row>
+          <div className="h-px bg-border"/>
+          <Row icon={<Search className="h-4 w-4"/>} title="Учитывать регистр в поиске" hint="Поиск только внутри открытой заметки">
+            <Toggle checked={editorPrefs.caseSensitive} label="Учитывать заглавные буквы" onChange={v=>changePref({caseSensitive:v})}/>
+          </Row>
+        </Section>
+        <Section title={t("security")} eyebrow="05">
           <Row
             icon={<Fingerprint className="h-4 w-4" />}
             title={t("biometrics")}
@@ -444,7 +458,7 @@ function SettingsPage() {
           </Row>
         </Section>
 
-        <Section title={t("data")} eyebrow="05">
+        <Section title={t("data")} eyebrow="06">
           <Row icon={<Download className="h-4 w-4" />} title="Автоматическая резервная копия"
             hint={automaticBackup
               ? "Включено. Копия обновляется после сохранения заметки или PDF галочкой."

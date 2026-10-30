@@ -294,3 +294,7 @@ html.wave-native-android .wave-app-frame {
   .wave-bottom-nav nav, .wave-bottom-nav a { min-width:0; }
   .wave-bottom-nav a { font-size:10px; }
 }
+
+/* A search result is outlined without changing the note font, ink or stored HTML. */
+.sn-tiptap .wave-find-hit {outline:1.5px solid var(--wave-find-contrast,#000);outline-offset:1px;border-radius:2px;}
+.sn-tiptap .wave-find-current {outline-width:2.5px;box-shadow:0 0 0 2px color-mix(in srgb,var(--wave-find-contrast,#000) 15%,transparent);}
