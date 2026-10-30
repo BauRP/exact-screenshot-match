@@ -26,9 +26,11 @@ export function pinIsValid(pin: string): boolean {
   for (let cycle=1; cycle<=Math.floor(pin.length/2); cycle++) {
     if (pin.length % cycle === 0 && pin === pin.slice(0,cycle).repeat(pin.length/cycle)) return false;
   }
-  // Also reject simple paired digit patterns like 112233 and 22334455.
-  if (/^(\\d)\\1(\\d)\\2(\\d)\\3$/.test(pin)) return false;
-  if (/^(\\d)\\1(\\d)\\2(\\d)\\3(\\d)\\4$/.test(pin)) return false;
+  // Reject paired digits such as 112233, 22334455, 110022.
+  // Use a digit-by-digit check rather than fragile regex backreferences.
+  if (pin.length % 2 === 0 && Array.from(pin).every(
+    (digit, index, digits) => index % 2 === 0 || digit === digits[index - 1],
+  )) return false;
   return true;
 }
 export async function createPinRecord(pin: string): Promise<string> {
