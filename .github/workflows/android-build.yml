@@ -109,6 +109,9 @@ jobs:
       - name: Verify single-file Wave Notes transfer without overwrites
         run: bun scripts/test-wave-transfer.ts
 
+      - name: Verify real offline TXT HTML and DOCX document export
+        run: bun scripts/test-wave-document-export.ts
+
       - name: Verify offline note search and scoped filters
         run: bun scripts/test-wave-note-search.ts
 
