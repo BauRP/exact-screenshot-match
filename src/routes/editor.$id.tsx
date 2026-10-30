@@ -485,10 +485,10 @@ function EditorPage() {
             aria-busy={saving}
             className="group ml-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-wait"
           >
-            <span className="grid h-[30px] w-[30px] place-items-center rounded-full bg-primary text-primary-foreground shadow-sm transition-transform duration-150 group-hover:scale-105 group-active:scale-95 group-disabled:scale-100 motion-reduce:transform-none">
+            <span className="grid h-[34px] w-[34px] place-items-center rounded-full border border-border bg-secondary/50 text-primary shadow-sm transition-colors duration-150 group-hover:bg-secondary group-active:bg-secondary/80 group-disabled:opacity-70 motion-reduce:transition-none">
               {saving
-                ? <LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" strokeWidth={2} />
-                : <Save aria-hidden="true" className="h-4 w-4" strokeWidth={2} />}
+                ? <LoaderCircle aria-hidden="true" className="h-[18px] w-[18px] animate-spin" strokeWidth={1.9} />
+                : <Save aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={1.9} />}
             </span>
           </button>
         </div>
