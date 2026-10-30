@@ -73,6 +73,10 @@ jobs:
           - api-level: 36
             display-size: 480x1024
             display-density: 240
+            # Android 16 emulator repeatedly disconnected while opening WebView.
+            # Test a supported software renderer and remove Vulkan as a variable.
+            gpu_options: -gpu software -feature -Vulkan
+            ram_size: 2560M
           - api-level: '37.0'
             display-size: 1080x2400
             display-density: 420
@@ -183,7 +187,9 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -no-metrics
+          # Other six already pass. Isolate the graphics workaround to API 36.
+          ram-size: ${{ matrix.ram_size || '2048M' }}
+          emulator-options: -no-window -no-audio -no-boot-anim ${{ matrix.gpu_options || '-gpu swiftshader_indirect' }} -no-snapshot -no-metrics
           # On Android 8, 'svc wifi disable' aborts with exit 137 and
           # AIRPLANE_MODE broadcasts are denied to the shell. Offline tests
           # should not be blocked by those device-management commands.

@@ -145,6 +145,24 @@ public class AndroidShellInstrumentedTest {
                 settings.getDouble("bottomEnd")<=settings.getDouble("viewportHeight")+2);
             assertTrue("Settings footer overlaps header: "+settings,
                 settings.getDouble("bottomTop")>=settings.getDouble("headerBottom"));
+            // Regression for the Vivo X200 report: the status bar looked safe
+            // initially but Settings content moved under it after a long swipe.
+            // The header must remain fixed while ONLY Settings <main> scrolls.
+            String scrolledRaw=evaluate(web,
+                "(function(){var m=document.querySelector('main');if(!m)return JSON.stringify({error:'main missing'});m.scrollTop=m.scrollHeight;var h=document.querySelector('header').getBoundingClientRect();var n=document.querySelector('.wave-bottom-nav').getBoundingClientRect();return JSON.stringify({scrollTop:m.scrollTop,scrollHeight:m.scrollHeight,clientHeight:m.clientHeight,headerTop:h.top,headerBottom:h.bottom,navTop:n.top,navBottom:n.bottom,windowScrollY:window.scrollY,documentScrollY:document.documentElement.scrollTop});})()");
+            JSONObject scrolled=new JSONObject((String)new JSONTokener(scrolledRaw).nextValue());
+            System.out.println("WAVE_SETTINGS_AFTER_SCROLL "+scrolled);
+            assertFalse("Settings scroll container missing: "+scrolled,scrolled.has("error"));
+            assertTrue("Settings must actually scroll: "+scrolled,
+                scrolled.getDouble("scrollHeight")>scrolled.getDouble("clientHeight") &&
+                scrolled.getDouble("scrollTop")>0);
+            assertTrue("Settings header went under status bar after scroll: "+scrolled,
+                scrolled.getDouble("headerTop")>=-2);
+            assertTrue("Bottom tabs overlap Settings header after scroll: "+scrolled,
+                scrolled.getDouble("navTop")>=scrolled.getDouble("headerBottom"));
+            assertTrue("Settings changed outer document scroll after swipe: "+scrolled,
+                Math.abs(scrolled.getDouble("windowScrollY"))<=2 &&
+                Math.abs(scrolled.getDouble("documentScrollY"))<=2);
         }
     }
 

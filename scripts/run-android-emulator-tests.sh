@@ -15,6 +15,11 @@ adb shell wm density "$density"
 echo WAVE_DISPLAY_PROFILE
 adb shell wm size
 adb shell wm density
+echo WAVE_DEVICE_PROPERTIES
+adb shell getprop ro.build.version.release || true
+adb shell getprop ro.build.version.sdk || true
+adb shell getprop ro.product.cpu.abi || true
+adb shell dumpsys package com.google.android.webview 2>/dev/null | grep -m 1 versionName || true
 
 # Stream diagnostics BEFORE launching the instrumentation test, since some
 # problematic Android emulators can disconnect before post-failure adb calls.
@@ -48,6 +53,11 @@ trap - EXIT
 
 if (( result != 0 )); then
   echo "WAVE_ANDROID_FAILURE_DIAGNOSTICS status=${result} api=${api}"
+  echo "--- Emulator connectivity at failure ---"
+  adb devices -l || true
+  ps -ef | grep -E '[e]mulator|[q]emu-system' | tail -n 16 || true
+  echo "--- Final logcat messages (even if emulator died before shutdown) ---"
+  tail -n 125 "$logfile" || true
   echo "--- Android crash and WebView evidence (captured before emulator shutdown) ---"
   grep -aE -A 16 -B 4 \
     'FATAL EXCEPTION|AndroidRuntime|Process: app.lovable.supernotes|AssertionError|Unable to start activity|Caused by: java|WAVE_LAYOUT|WebView|INSTRUMENTATION_STATUS|am_crash' \
