@@ -36,6 +36,7 @@ import {
   CalendarDays,
   ImagePlus,
   PenTool,
+  ListTree,
 } from "lucide-react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -62,6 +63,7 @@ import { AutoLinkExtras } from "@/lib/editor-extensions";
 import { AudioNote } from "@/components/editor/AudioNode";
 import { WaveImage } from "@/components/editor/WaveImage";
 import { WaveDrawing } from "@/components/editor/WaveDrawing";
+import {collectNoteOutline} from "@/lib/note-outline";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import { useFolders, type Folder } from "@/lib/folders-store";
 import {
@@ -144,6 +146,7 @@ function EditorPage() {
   const savingRef = useRef(false);
   const [saving,setSaving] = useState(false);
   const [findOpen,setFindOpen]=useState(false);
+  const [outlineOpen,setOutlineOpen]=useState(false);
   const [findQuery,setFindQuery]=useState("");
   const [findActive,setFindActive]=useState(0);
   const [checkShape,setCheckShape]=useState<CheckShape>("square");
@@ -319,6 +322,7 @@ function EditorPage() {
 
   const handleCanvasBg = (c: string) => {setCanvasBg(c);setPaperMood("solid");};
   const hits=findOpen&&editor?findWords(editor.state.doc,findQuery,prefs.caseSensitive):[];
+  const outline=outlineOpen&&editor?collectNoteOutline(editor.state.doc):[];
   const setSearchDecoration=(query:string,active:number)=>{
     if(editor)editor.view.dispatch(editor.state.tr.setMeta(noteSearchKey,{query,active,caseSensitive:prefs.caseSensitive}));
   };
@@ -714,6 +718,11 @@ function EditorPage() {
             <Star className="h-4 w-4" fill={pinned ? "currentColor" : "none"} />
           </button>
 
+          <button type="button" aria-label="Оглавление заметки" aria-expanded={outlineOpen}
+            onClick={()=>setOutlineOpen(open=>!open)}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+            <ListTree className="h-4 w-4"/>
+          </button>
           <button type="button" onClick={()=>findOpen?dismissFind():setFindOpen(true)}
             aria-label="Найти в заметке" aria-expanded={findOpen}
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
@@ -815,6 +824,21 @@ function EditorPage() {
               <span className="w-5 text-center">{item.icon}</span>{item.label}
             </button>)}
           </div>}
+        {outlineOpen&&<div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-border bg-card p-2"
+          role="navigation" aria-label="Оглавление заметки">
+          <p className="px-2 pb-1 text-xs text-muted-foreground">Заголовки и разделы</p>
+          {outline.length===0?<p className="px-2 py-3 text-xs text-muted-foreground">Добавьте заголовок или сворачиваемый раздел.</p>:
+            outline.map(item=><button key={item.pos} type="button"
+              className="block w-full truncate rounded-lg px-3 py-2 text-left text-xs hover:bg-secondary"
+              style={{paddingLeft:Math.min(item.depth,5)*8+8}}
+              onClick={()=>{
+                if(!editor)return;
+                editor.chain().focus().setTextSelection(item.pos+1).run();
+                editor.view.domAtPos(item.pos+1).node.parentElement?.scrollIntoView({block:"nearest",behavior:"smooth"});
+              }}>
+              {item.type==="fold"?"▸ ":"§ "}{item.title}
+            </button>)}
+        </div>}
         {findOpen && <div role="search" aria-label="Поиск внутри заметки"
           className="mt-2 flex min-w-0 items-center gap-1 rounded-xl border border-border bg-secondary/50 px-2 py-1.5">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground"/>
