@@ -6,7 +6,7 @@
 import {zip} from "fflate";
 import type {Note} from "./notes-store";
 
-export type NoteExportFormat="txt"|"html"|"docx";
+export type NoteExportFormat="txt"|"html"|"docx"|"png";
 type Exported={blob:Blob;name:string;mime:string};
 
 const escapeHtml=(s:string)=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -142,6 +142,54 @@ async function docxBlob(note:Note):Promise<Blob>{
   const packed=await new Promise<Uint8Array>((resolve,reject)=>zip(files,{level:6},(error,data)=>error?reject(error):resolve(data)));
   return new Blob([packed.slice().buffer],{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
 }
+/**
+ * Offline long-form image export. Capture a readable textual snapshot without
+ * pretending to preserve unsupported interactive blocks or binary attachments.
+ * Cap canvas height before allocation to avoid WebView OOM.
+ */
+async function pngBlob(note:Note):Promise<Blob>{
+  const lines=plainNoteText(note).replace(/\r/g,"").split("\n");
+  const width=1080, pad=60, font=32, lineHeight=48;
+  const canvas=document.createElement("canvas");
+  const ctx=canvas.getContext("2d");
+  if(!ctx)throw Error("Графический экспорт недоступен на устройстве");
+  ctx.font=font+"px sans-serif";
+  const wraps:string[]=[];
+  const maxWidth=width-2*pad;
+  for(const input of lines){
+    if(!input){wraps.push("");continue;}
+    let current="";
+    const parts=input.match(/\S+\s*|\s+/g)||[];
+    for(const part of parts){
+      const candidate=current+part;
+      if(current&&ctx.measureText(candidate).width>maxWidth){
+        wraps.push(current.trimEnd());current="";
+      }
+      // Break extremely long words without losing characters.
+      for(const ch of part){
+        if(ctx.measureText(current+ch).width>maxWidth&&current){
+          wraps.push(current);current="";
+        }
+        current+=ch;
+      }
+      if(wraps.length>1100)throw Error("Заметка слишком длинная для изображения. Используйте TXT, HTML или Word");
+    }
+    wraps.push(current.trimEnd());
+  }
+  const height=Math.max(320,pad*2+wraps.length*lineHeight);
+  if(height>12000)throw Error("Заметка слишком длинная для PNG. Используйте HTML или Word");
+  canvas.width=width;canvas.height=height;
+  const c=canvas.getContext("2d");if(!c)throw Error("Не удалось создать изображение");
+  const bg=note.style?.background;
+  const ink=note.style?.color;
+  c.fillStyle=bg&&isColor(bg)?bg:"#ffffff";
+  c.fillRect(0,0,width,height);
+  c.fillStyle=ink&&isColor(ink)?ink:"#20242b";
+  c.font=font+"px sans-serif";
+  c.textBaseline="top";
+  wraps.forEach((text,i)=>{if(text)c.fillText(text,pad,pad+i*lineHeight);});
+  return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error("PNG не удалось сохранить")),"image/png"));
+}
 function filename(title:string,format:NoteExportFormat):string {
   const name=title.replace(/[<>:"/\\|?*\u0000-\u001f]/g,"").replace(/\s+/g," ").trim().slice(0,70);
   return (name||"Wave Notes")+"-"+Date.now()+"."+format;
@@ -149,10 +197,10 @@ function filename(title:string,format:NoteExportFormat):string {
 export async function buildNoteExport(note:Note,format:NoteExportFormat):Promise<Exported>{
   if(note.kind==="pdf")throw Error("Для PDF используйте исходный PDF либо .wnote");
   if(note.body.length>2_000_000)throw Error("Заметка слишком велика для этого экспорта");
-  const mime=format==="txt"?"text/plain;charset=utf-8":format==="html"?"text/html;charset=utf-8":
+  const mime=format==="txt"?"text/plain;charset=utf-8":format==="html"?"text/html;charset=utf-8":format==="png"?"image/png":
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   const blob=format==="txt"?new Blob(["\uFEFF"+plainNoteText(note)],{type:mime}):
-    format==="html"?new Blob([noteHtmlDocument(note)],{type:mime}):await docxBlob(note);
+    format==="html"?new Blob([noteHtmlDocument(note)],{type:mime}):format==="png"?await pngBlob(note):await docxBlob(note);
   return {blob,mime,name:filename(note.title,format)};
 }
 export async function shareNoteExport(note:Note,format:NoteExportFormat):Promise<void>{
