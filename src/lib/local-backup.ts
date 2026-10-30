@@ -1,6 +1,6 @@
 /**
  * Single private, auto-updated backup for Wave Notes on Android.
- * - First "Save" creates it; subsequent committed edits update the SAME file.
+ * - The Settings switch creates the first copy; confirmed saves update it.
  * - Editor keystrokes do not write the archive; back arrow cancels drafts.
  * - Work is serialized and coalesced; the archive is packed asynchronously.
  * - A staged file protects recovery when an update is interrupted.
@@ -11,7 +11,30 @@ import { clearBackupDirtyRevision, getBackupDirtyRevision } from "./backup-signa
 
 const BACKUP_FILE = "WaveNotes.backup";
 const STAGING_FILE = "WaveNotes.backup.pending";
+const ENABLED_KEY = "sn.backup.auto-enabled.v1";
 let queue: Promise<unknown> = Promise.resolve();
+
+export function isAutomaticBackupEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  try { return window.localStorage.getItem(ENABLED_KEY)==="1"; }
+  catch { return false; }
+}
+
+/** Create/validate the internal snapshot BEFORE advertising an enabled switch.
+ * Turning off preserves the existing copy for manual restoration.
+ */
+export async function setAutomaticBackupEnabled(enabled:boolean):Promise<void> {
+  if(typeof window==="undefined")throw new Error("Настройки резервирования недоступны");
+  if(!enabled){
+    window.localStorage.setItem(ENABLED_KEY,"0");
+    window.dispatchEvent(new Event("wave-notes-backup-mode-changed"));
+    return;
+  }
+  if(!isAutomaticBackupEnabled()) await saveLocalBackup();
+  window.localStorage.setItem(ENABLED_KEY,"1");
+  window.dispatchEvent(new Event("wave-notes-backup-mode-changed"));
+}
+
 
 function serialized<T>(task: () => Promise<T>): Promise<T> {
   const next = queue.then(task, task);
@@ -117,7 +140,7 @@ export function saveLocalBackup(): Promise<void> {
 export function restoreLocalBackup(): Promise<number> {
   return serialized(async () => {
     const copy = await readBackupOrNull();
-    if (!copy) throw new Error("Резервная копия ещё не создана. Сначала нажмите «Сохранить».");
+    if (!copy) throw new Error("Резервная копия ещё не создана. Включите «Автоматическая резервная копия» в настройках.");
     return restoreFullBackup(new File([copy], BACKUP_FILE, { type: "application/zip" }));
   });
 }
@@ -130,18 +153,19 @@ export function startLocalBackupAutoSync(): () => void {
   const cap = (window as Window & {Capacitor?: {getPlatform?: () => string}}).Capacitor;
   if (cap?.getPlatform?.() !== "android") return () => {};
 
-  let editing = /\/editor(?:\/|$)/.test(window.location.pathname);
+  // Capacitor SPA uses hash routing, not pathname, for editor URLs.
+  let editing = /#\/editor(?:\/|$)/.test(window.location.hash);
   let timer: ReturnType<typeof setTimeout> | null = null;
   let disposed = false;
 
   const flush = () => {
-    if (disposed || editing || !getBackupDirtyRevision()) return;
+    if (disposed || editing || !isAutomaticBackupEnabled() || !getBackupDirtyRevision()) return;
     void serialized(async () => {
-      if (editing || disposed) return;
+      if (editing || disposed || !isAutomaticBackupEnabled()) return;
       const rev = getBackupDirtyRevision();
       if (!rev) return;
       const old = await readBackupOrNull();
-      if (!old) return; // User has not enabled private backup.
+      if (!old) return; // Do not create/reset the archive without opt-in.
       const next = await createFullBackup(old);
       await writeBackup(next);
       clearBackupDirtyRevision(rev);
@@ -149,7 +173,7 @@ export function startLocalBackupAutoSync(): () => void {
   };
 
   const schedule = () => {
-    if (disposed || editing || !getBackupDirtyRevision()) return;
+    if (disposed || editing || !isAutomaticBackupEnabled() || !getBackupDirtyRevision()) return;
     if (timer !== null) clearTimeout(timer);
     timer = setTimeout(() => { timer = null; flush(); }, 1800);
   };
@@ -165,7 +189,9 @@ export function startLocalBackupAutoSync(): () => void {
     if (document.visibilityState === "visible") schedule();
   };
 
+  const onModeChanged=()=>{if(timer!==null){clearTimeout(timer);timer=null;}schedule();};
   window.addEventListener("wave-notes-data-changed", onDataChanged);
+  window.addEventListener("wave-notes-backup-mode-changed",onModeChanged);
   window.addEventListener("wave-notes-editor-opened", onOpened);
   window.addEventListener("wave-notes-editor-closed", onClosed);
   document.addEventListener("visibilitychange", onVisible);
@@ -174,6 +200,7 @@ export function startLocalBackupAutoSync(): () => void {
     disposed = true;
     if (timer !== null) clearTimeout(timer);
     window.removeEventListener("wave-notes-data-changed", onDataChanged);
+    window.removeEventListener("wave-notes-backup-mode-changed",onModeChanged);
     window.removeEventListener("wave-notes-editor-opened", onOpened);
     window.removeEventListener("wave-notes-editor-closed", onClosed);
     document.removeEventListener("visibilitychange", onVisible);

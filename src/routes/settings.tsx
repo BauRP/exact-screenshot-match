@@ -17,8 +17,7 @@ import {
  } from "lucide-react";
 import { sendFeedback } from "@/lib/feedback.functions";
 import { AdMobDiagnosticsPanel } from "@/components/AdMobDiagnosticsPanel";
-import { saveLocalBackup, restoreLocalBackup } from "@/lib/local-backup";
-import { createFullBackup, restoreFullBackup, shareFullBackup } from "@/lib/backup";
+import { isAutomaticBackupEnabled, setAutomaticBackupEnabled, restoreLocalBackup } from "@/lib/local-backup";
 import { invalidateConsentForSession, requestConsentForSession } from "@/lib/admob-session";
 import { AppHeader } from "@/components/AppHeader";
 import { LanguagePickerSheet } from "@/components/LanguagePickerSheet";
@@ -177,6 +176,8 @@ function SettingsPage() {
   const [fbText, setFbText] = useState("");
   const [fbSending, setFbSending] = useState(false);
   const [backupBusy, setBackupBusy] = useState(false);
+  const [automaticBackup, setAutomaticBackup] = useState(false);
+  useEffect(()=>{setAutomaticBackup(isAutomaticBackupEnabled());},[]);
   const [adPrivacyAvailable, setAdPrivacyAvailable] = useState(false);
   const [adPrivacyLoading, setAdPrivacyLoading] = useState(false);
 
@@ -214,49 +215,19 @@ function SettingsPage() {
     }
   };
 
-  const makeBackup = async () => {
-    if (backupBusy) return;
+  const changeAutomaticBackup=async(enabled:boolean)=>{
+    if(backupBusy)return;
     setBackupBusy(true);
-    try {
-      await saveLocalBackup();
-      toast.success("Резервная копия сохранена внутри приложения");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось сохранить резервную копию");
-    } finally { setBackupBusy(false); }
-  };
-
-  const exportExternalBackup = async () => {
-    if (backupBusy) return;
-    setBackupBusy(true);
-    try {
-      // The user must choose a destination outside app-private storage.
-      const zip=await createFullBackup();
-      await shareFullBackup(zip);
-      toast.info("Сохраните ZIP в папку телефона или облако вне Wave Notes.");
-    } catch(error) {
-      toast.error(error instanceof Error ? error.message : "Не удалось экспортировать архив");
-    } finally { setBackupBusy(false); }
-  };
-
-  const importExternalBackup = () => {
-    if (backupBusy) return;
-    const input=document.createElement("input");
-    input.type="file";
-    input.accept=".zip,application/zip,application/x-zip-compressed";
-    input.style.display="none";
-    document.body.appendChild(input);
-    input.addEventListener("change",()=>{ 
-      const file=input.files?.[0];
-      input.remove();
-      if (!file) return;
-      setBackupBusy(true);
-      void restoreFullBackup(file).then(count=>{
-        toast.success(count ? "Восстановлено заметок: "+count : "Новых заметок в архиве нет");
-      }).catch(error=>{
-        toast.error(error instanceof Error ? error.message : "Не удалось восстановить ZIP");
-      }).finally(()=>setBackupBusy(false));
-    },{once:true});
-    input.click();
+    try{
+      await setAutomaticBackupEnabled(enabled);
+      setAutomaticBackup(isAutomaticBackupEnabled());
+      toast.success(enabled
+        ? "Автокопирование включено. Первая копия сохранена внутри приложения."
+        : "Автокопирование выключено. Последняя копия сохранена.");
+    }catch(error){
+      setAutomaticBackup(isAutomaticBackupEnabled());
+      toast.error(error instanceof Error?error.message:"Не удалось изменить резервное копирование");
+    }finally{setBackupBusy(false);}
   };
 
   const restoreBackup = async () => {
@@ -473,22 +444,21 @@ function SettingsPage() {
         </Section>
 
         <Section title={t("data")} eyebrow="05">
-          <Row icon={<Download className="h-4 w-4" />} title="Создать резервную копию" hint="Сохраняет все данные приложения в резервную копию">
-            <Btn disabled={backupBusy} onClick={() => void makeBackup()}>Сохранить</Btn>
+          <Row icon={<Download className="h-4 w-4" />} title="Автоматическая резервная копия"
+            hint={automaticBackup
+              ? "Включено. Копия обновляется после сохранения заметки или PDF галочкой."
+              : "Выключено. Включите, чтобы создать внутреннюю копию и обновлять её после сохранения."}>
+            <div className="flex shrink-0 flex-col items-center gap-1">
+              <Toggle checked={automaticBackup} onChange={value=>void changeAutomaticBackup(value)}
+                label="Автоматическое резервное копирование" />
+              <span className={`text-[10px] font-semibold ${automaticBackup?"text-primary":"text-muted-foreground"}`}>
+                {backupBusy?"Подождите":automaticBackup?"Включено":"Выключено"}
+              </span>
+            </div>
           </Row>
           <div className="h-px bg-border" />
-          <Row icon={<Upload className="h-4 w-4" />} title="Восстановить резервную копию" hint="Восстанавливает данные из последней сохранённой резервной копии">
+          <Row icon={<Upload className="h-4 w-4" />} title="Восстановить резервную копию" hint="Автоматически находит последнюю внутреннюю копию. Выбирать файл не нужно.">
             <Btn disabled={backupBusy} onClick={() => void restoreBackup()}>Восстановить</Btn>
-          </Row>
-          <div className="h-px bg-border" />
-          <Row icon={<Download className="h-4 w-4" />} title="Сохранить копию вне приложения"
-            hint="Экспорт ZIP, который сохранится даже после удаления Wave Notes">
-            <Btn disabled={backupBusy} onClick={()=>void exportExternalBackup()}>Экспорт ZIP</Btn>
-          </Row>
-          <div className="h-px bg-border" />
-          <Row icon={<Upload className="h-4 w-4" />} title="Восстановить из ZIP"
-            hint="Выберите ранее сохранённую копию с телефона">
-            <Btn disabled={backupBusy} onClick={importExternalBackup}>Выбрать ZIP</Btn>
           </Row>
           <div className="h-px bg-border" />
           <Row icon={<Shield className="h-4 w-4" />} title={t("privacy_policy")}>
