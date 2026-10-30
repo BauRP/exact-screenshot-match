@@ -87,6 +87,10 @@ export function NoteCard({
     ? `PDF · ${note.pdf?.pageCount ?? 0} стр. · ${formatBytes(note.pdf?.size ?? 0)}`
     : stripHtml(note.body).slice(0, 180) || "Пусто…";
 
+  const cardBg = /^#[0-9a-f]{6}$/i.test(note.cardColor??"")?note.cardColor:undefined;
+  const light = cardBg ? (parseInt(cardBg.slice(1,3),16)*.2126+parseInt(cardBg.slice(3,5),16)*.7152+parseInt(cardBg.slice(5,7),16)*.0722)>145 : false;
+  const ink = cardBg?(light?"#18181B":"#FFFFFF"):undefined;
+  const muted = cardBg?(light?"#3F3F46":"#E5E7EB"):undefined;
   return (
     <div
       role="checkbox"
@@ -99,7 +103,7 @@ export function NoteCard({
       onPointerCancel={clearPress}
       onPointerLeave={clearPress}
       onContextMenu={(e) => e.preventDefault()}
-      style={{ WebkitTouchCallout: "none" }}
+      style={{ WebkitTouchCallout: "none",backgroundColor:cardBg,color:ink } as React.CSSProperties}
       onKeyDown={(e) => {
         if (e.key === " ") { e.preventDefault(); onToggle(); }
         if (e.key === "Enter") onOpen();
@@ -124,9 +128,9 @@ export function NoteCard({
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="truncate font-semibold">{note.title}</h3>
-              <p className="truncate text-xs text-muted-foreground">{preview}</p>
+              <p className="truncate text-xs text-muted-foreground" style={{color:muted}}>{preview}</p>
             </div>
-            <span className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+            <span style={{color:muted}} className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
               {formatDate(note.updatedAt)}
             </span>
           </>
@@ -146,6 +150,7 @@ export function NoteCard({
             </div>
 
             <p
+              style={{color:muted}}
               className={`text-sm text-muted-foreground ${
                 view === "grid" ? "line-clamp-6 flex-1" : "line-clamp-2"
               }`}

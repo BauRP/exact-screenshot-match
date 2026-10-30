@@ -12,6 +12,8 @@ import {
   MoreVertical,
   FileType2,
   Pencil,
+  Palette,
+  FolderInput,
   Plus,
   Table2,
   Trash2,
@@ -106,6 +108,8 @@ function Index() {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [renameValue, setRenameValue] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [colorDialog,setColorDialog]=useState(false);
+  const [moveDialog,setMoveDialog]=useState(false);
   const [folderDialog, setFolderDialog] = useState<FolderDialogState>(null);
   // The menu floats above the list without moving folders or ads.
   // Google renders native ads above WebView; temporarily hide that overlay
@@ -242,6 +246,10 @@ function Index() {
                       <Pencil className="h-4 w-4" />
                     </button>
                   )}
+                  <button type="button" aria-label="Цвет карточки" onClick={()=>setColorDialog(true)}
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary hover:bg-secondary/70"><Palette className="h-4 w-4"/></button>
+                  <button type="button" aria-label="Переместить в папку" onClick={()=>setMoveDialog(true)}
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary hover:bg-secondary/70"><FolderInput className="h-4 w-4"/></button>
                   <button
                     type="button"
                     aria-label={t("delete")}
@@ -303,6 +311,34 @@ function Index() {
         </main>
       )}
 
+      <Dialog open={colorDialog} onOpenChange={setColorDialog}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader><DialogTitle>Цвет карточки</DialogTitle></DialogHeader>
+          <p className="text-xs text-muted-foreground">Изменяется только карточка снаружи, цвет листа внутри заметки остаётся прежним.</p>
+          <div className="grid grid-cols-5 gap-3">
+            {["", "#FDE68A", "#DCE8E1", "#DCE6F3", "#FFE1D7", "#EDE0F7", "#303947", "#293D33", "#3A3046", "#EFE8DF"].map(color=>
+              <button type="button" key={color} aria-label={color?"Выбрать цвет "+color:"Вернуть стандартный цвет"}
+                onClick={()=>{
+                  try{selectedNotes.forEach(note=>updateNote(note.id,{cardColor:color||undefined}));setSelected(new Set());setColorDialog(false);toast.success("Цвет карточки изменён");}
+                  catch(error){toast.error(error instanceof Error?error.message:"Не удалось изменить цвет");}
+                }}
+                className="h-11 rounded-xl border border-border shadow-sm"
+                style={{backgroundColor:color||"#1D222B"}}>{!color&&<span className="text-xs text-white">Сброс</span>}</button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={moveDialog} onOpenChange={setMoveDialog}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader><DialogTitle>Переместить заметку</DialogTitle></DialogHeader>
+          <div className="max-h-64 space-y-1 overflow-y-auto">
+            {folders.map(folder=><button type="button" key={folder.id} onClick={()=>{
+              try{selectedNotes.forEach(note=>updateNote(note.id,{folderId:folder.id}));setSelected(new Set());setMoveDialog(false);toast.success("Заметки перемещены");}
+              catch(error){toast.error(error instanceof Error?error.message:"Не удалось переместить");}
+            }} className="flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm hover:bg-secondary">{localizedFolderName(folder)}</button>)}
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={!!folderDialog} onOpenChange={(open) => !open && setFolderDialog(null)}>
         <DialogContent className="max-w-sm rounded-2xl">
           <DialogHeader>

@@ -68,6 +68,7 @@ export type Note = {
   updatedAt: number;
   pinned?: boolean;
   folderId?: string;
+  cardColor?: string;
   kind?: NoteKind;
   pdf?: PdfMeta;
   style?: {
@@ -161,6 +162,7 @@ function normalizeNote(input: unknown): Note | null {
     updatedAt,
     pinned: input.pinned === true,
     folderId,
+    cardColor: typeof input.cardColor === "string" && /^#[0-9a-f]{6}$/i.test(input.cardColor) ? input.cardColor : undefined,
     kind: input.kind === "pdf" ? "pdf" : "note",
     pdf: isRecord(input.pdf)
       ? {
@@ -446,6 +448,7 @@ export function createNote(partial?: Partial<Note>): Note {
     updatedAt: partial?.updatedAt ?? now,
     pinned: partial?.pinned ?? false,
     folderId: partial?.folderId ?? "all",
+    cardColor: partial?.cardColor,
     kind: partial?.kind ?? "note",
     pdf: partial?.pdf,
     // Only brand-new text notes inherit yellow paper. Imported/older saved
