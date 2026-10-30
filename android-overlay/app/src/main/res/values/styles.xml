@@ -15,7 +15,7 @@
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/splash_background</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/wave_splash_logo</item>
+        <item name="windowSplashScreenAnimatedIcon">@null</item>
         <item name="postSplashScreenTheme">@style/AppTheme</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowFullscreen">false</item>
