@@ -624,8 +624,8 @@ function CameraPage() {
       await finishWithText(text);
       if (shouldClearPendingDraft("note-saved")) markDraftFinished();
     } catch (caught) {
-      // A completed or partially completed reading goes directly to a
-      // normal editable note; no user-facing technical confirmation.
+      // Other partial scans may open a normal note. Uncertain Kazakh and
+      // Russian MUST be reviewed, not silently saved as corrupted text.
       const usableText = !previousPhotoPath ? usableTextFromOcrWarning(caught) : null;
       if (usableText) {
         recognizedBeforeSave = usableText;
@@ -688,6 +688,11 @@ function CameraPage() {
           nativeAlternativesRef.current,newNativeEvidence);
         setReviewEdited(false);
         retainUnfinishedResult(combined, reason,nativeEvidence,hanEvidence);
+        if(reason==="recognition-quality"){
+          setReviewDraft(combined.text);
+          latestReviewRef.current={text:combined.text,edited:false};
+          setReviewOpen(true);
+        }
       }
       if (caught instanceof OcrIncompleteScanError) {
         const recovery = pendingRecoveryRef.current;
@@ -834,6 +839,7 @@ function CameraPage() {
 
   const saveRecoveredDraft=async()=>{
     if(inFlightRef.current || !partialOcrText?.trim())return;
+    if(reviewReason==="recognition-quality"){showReview();return;}
     inFlightRef.current=true;
     setStatus("preparing");
     try{
@@ -853,10 +859,11 @@ function CameraPage() {
   // into a normal note. No separate OCR decision screen.
   useEffect(()=>{
     if(!restoredDraft || !partialOcrText?.trim() ||
-       restoredAutoSaveRef.current || status==="preparing")return;
+       restoredAutoSaveRef.current || status==="preparing" ||
+       reviewReason==="recognition-quality")return;
     restoredAutoSaveRef.current=true;
     void saveRecoveredDraft();
-  },[restoredDraft,partialOcrText]);
+  },[restoredDraft,partialOcrText,reviewReason,status]);
 
   const openPreviouslySavedNote = async () => {
     if (!savedNoteId || inFlightRef.current) return;
@@ -885,6 +892,8 @@ function CameraPage() {
     ? "Повторить сохранение распознанного текста"
     : partialMissingScripts.length
     ? "Сохранить найденный текст (неполный)"
+    : reviewReason === "recognition-quality"
+      ? "Проверить распознанный текст"
     : reviewReason === "ambiguous-han"
       ? "Сохранить после проверки иероглифов"
       : "Сохранить объединённый текст (проверить)";
@@ -951,13 +960,13 @@ function CameraPage() {
 
         <Button
           type="button"
-          onClick={() => savedNoteId ? void openPreviouslySavedNote() : partialOcrText ? void saveRecoveredDraft() : setModalOpen(true)}
+          onClick={() => savedNoteId ? void openPreviouslySavedNote() : partialOcrText && reviewReason==="recognition-quality" ? showReview() : partialOcrText ? void saveRecoveredDraft() : setModalOpen(true)}
           size="lg"
           disabled={busy}
           className="mt-6 h-11 rounded-xl bg-gradient-to-r from-primary to-primary-glow px-6 text-sm text-primary-foreground shadow-xl hover:opacity-95"
         >
           <ImagePlus className="mr-2 h-5 w-5" />
-          {savedNoteId ? "Открыть заметку" : partialOcrText ? "Открыть восстановленный текст" : "Добавить фото"}
+          {savedNoteId ? "Открыть заметку" : partialOcrText && reviewReason==="recognition-quality" ? "Проверить распознанный текст" : partialOcrText ? "Открыть восстановленный текст" : "Добавить фото"}
         </Button>
       </main>
 
@@ -1088,9 +1097,9 @@ function CameraPage() {
             ) : (
             <>
             {partialOcrText && <Button type="button" disabled={busy}
-              onClick={() => void saveRecoveredDraft()}
+              onClick={() => reviewReason==="recognition-quality" ? showReview() : void saveRecoveredDraft()}
               className="h-10 rounded-xl text-xs font-semibold">
-              Открыть восстановленный текст
+              {reviewReason==="recognition-quality" ? "Проверить распознанный текст" : "Открыть восстановленный текст"}
             </Button>}
             <Button
               type="button"

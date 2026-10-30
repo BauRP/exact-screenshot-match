@@ -1,3 +1,5 @@
+import { OcrCombinedReviewError } from "./ocr-partial";
+
 /**
  * A user leaving the camera or gallery is not an OCR failure.
  * Capacitor's legacy getPhoto API returns human-readable messages; the
@@ -31,6 +33,10 @@ export function readableOcrFailure(error: unknown): string {
   }
   if (error instanceof Error && error.message === "OCR_SCAN_BUSY") {
     return "Предыдущее сканирование ещё завершается. Повторите попытку после его окончания.";
+  }
+  if (error instanceof OcrCombinedReviewError && error.reason === "recognition-quality") {
+    return "Казахский или русский текст распознан неуверенно. Сравните его с фотографией, " +
+      "исправьте ошибки и подтвердите сохранение заметки.";
   }
   if (error instanceof Error && error.message === "OCR_COMBINED_REVIEW") {
     return "Текст распознан, но несколько проверок требуют внимания. " +

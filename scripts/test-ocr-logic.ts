@@ -1009,6 +1009,16 @@ assert.equal(plainOcrNoteText(legacyNote),"こんにちは、元気ですか？"
 assert.equal(plainOcrNoteText("こんにちは、元気ですか？\n\nПривет мир"),"こんにちは、元気ですか？\n\nПривет мир");
 assert.equal(plainOcrNoteText("⚠️ Это предупреждение написал пользователь\n\nЗаметка"),"⚠️ Это предупреждение написал пользователь\n\nЗаметка");
 assert.equal(usableTextFromOcrWarning(new OcrCombinedReviewError("日本語", "mixed-layout")),"日本語");
+const uncertainKazakh=new OcrCombinedReviewError("Кәзәқ тілі қателері","recognition-quality");
+assert.equal(usableTextFromOcrWarning(uncertainKazakh),null,
+  "Low-confidence Kazakh must never silently create a gibberish note");
+assert.match(readableOcrFailure(uncertainKazakh),/Казахский/);
+assert.ok(cameraRouteCode.includes('reviewReason==="recognition-quality"){showReview();return;}'),
+  "Restored draft button must never bypass low-confidence review");
+assert.ok(cameraRouteCode.includes('reviewReason==="recognition-quality")return;'),
+  "WebView restart must not auto-save unverified Kazakh OCR");
+assert.ok(cameraRouteCode.includes('setReviewOpen(true);'),
+  "OCR quality warning should open editable review dialog");
 assert.equal(usableTextFromOcrWarning(new OcrIncompleteScanError("Қазақ тілі",["japanese"])),"Қазақ тілі");
 assert.equal(usableTextFromOcrWarning(new Error("OCR_NOTE_SAVE_FAILED")),null);
 console.log("One-tap OCR recovers usable text without adding technical warnings.");

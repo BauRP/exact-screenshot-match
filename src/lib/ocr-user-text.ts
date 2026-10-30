@@ -5,8 +5,12 @@ import {
   OcrNativeTextReviewError, OcrOmittedScriptReviewError,
 } from "./ocr-partial";
 
-/** Readable OCR text is a note; internal uncertainty is never a UI task. */
+/** Partial OCR may automatically open a note, but uncertain Kazakh/Russian
+ * readings must not bypass review just because a warning contains text.
+ */
 export function usableTextFromOcrWarning(error:unknown):string|null {
+  if(error instanceof OcrCombinedReviewError && error.reason==="recognition-quality")
+    return null;
   if(error instanceof OcrIncompleteScanError)
     return error.partialText.trim()?error.partialText:null;
   if(error instanceof OcrCombinedReviewError ||
