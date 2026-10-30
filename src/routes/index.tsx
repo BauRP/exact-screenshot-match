@@ -208,14 +208,17 @@ function Index() {
     const value = folderDialog.value.trim();
     if (!value) return;
 
-    if (folderDialog.mode === "add") {
-      const folder = addFolder(value);
-      setActiveFolder(folder.id);
-    } else if (folderDialog.id) {
-      renameFolder(folderDialog.id, value);
+    try {
+      if (folderDialog.mode === "add") {
+        addFolder(value,true);
+      } else if (folderDialog.id) {
+        renameFolder(folderDialog.id, value);
+      }
+      setFolderDialog(null);
+    } catch(error) {
+      // Don't close the rename/create dialog if Android storage is full.
+      toast.error(error instanceof Error ? error.message : "Не удалось сохранить папку");
     }
-
-    setFolderDialog(null);
   };
 
   return (

@@ -23,20 +23,26 @@ let hiddenSystem: string[] = [];
 let activeId: string = "all";
 let hydrated = false;
 
-function persist(nextFolders: Folder[] = customFolders, nextHidden: string[] = hiddenSystem) {
+function persist(nextFolders: Folder[] = customFolders, nextHidden: string[] = hiddenSystem, nextActive?:string) {
   // Write before exposing changes in React. A full disk must never show
   // a folder as saved when localStorage refused the write.
   const oldFolders=localStorage.getItem(FOLDERS_KEY);
   const oldHidden=localStorage.getItem(HIDDEN_KEY);
+  const oldActive=nextActive!==undefined?localStorage.getItem(ACTIVE_KEY):null;
   try {
     localStorage.setItem(FOLDERS_KEY, JSON.stringify(nextFolders));
     localStorage.setItem(HIDDEN_KEY, JSON.stringify(nextHidden));
+    if(nextActive!==undefined)localStorage.setItem(ACTIVE_KEY,nextActive);
   } catch (error) {
     try {
       if (oldFolders===null) localStorage.removeItem(FOLDERS_KEY);
       else localStorage.setItem(FOLDERS_KEY,oldFolders);
       if (oldHidden===null) localStorage.removeItem(HIDDEN_KEY);
       else localStorage.setItem(HIDDEN_KEY,oldHidden);
+      if(nextActive!==undefined){
+        if(oldActive===null)localStorage.removeItem(ACTIVE_KEY);
+        else localStorage.setItem(ACTIVE_KEY,oldActive);
+      }
     } catch (rollbackError) { console.error("Unable to roll back folder storage",rollbackError); }
     throw new Error("Не удалось сохранить папки: хранилище недоступно или заполнено.",{cause:error});
   }
@@ -101,12 +107,15 @@ export function setActiveFolder(id: string) {
   emit();
 }
 
-export function addFolder(name: string): Folder {
+export function addFolder(name: string,activate=false): Folder {
   hydrate();
   const f: Folder = { id: crypto.randomUUID(), name: name.trim() || "Folder" };
   const next=[...customFolders, f];
-  persist(next,hiddenSystem);
-  customFolders=next; emit();
+  // Creating and selecting a new folder is one UI operation; persist both.
+  persist(next,hiddenSystem,activate?f.id:undefined);
+  customFolders=next;
+  if(activate) activeId=f.id;
+  emit();
   return f;
 }
 
@@ -123,12 +132,9 @@ export function deleteFolder(id: string) {
   if (id === "all") return;
   const nextHidden=isSystemFolder(id) && !hiddenSystem.includes(id) ? [...hiddenSystem,id] : hiddenSystem;
   const nextFolders=customFolders.filter((f) => f.id !== id);
-  persist(nextFolders,nextHidden);
-  if (activeId===id) {
-    // The deleted selection must not be restored at the next cold start.
-    localStorage.setItem(ACTIVE_KEY,"all");
-    activeId="all";
-  }
+  const changeSelection=activeId===id;
+  persist(nextFolders,nextHidden,changeSelection?"all":undefined);
+  if(changeSelection) activeId="all";
   customFolders=nextFolders; hiddenSystem=nextHidden; emit();
 }
 
