@@ -65,15 +65,14 @@ export function prioritizeRemainingOcrScripts(
     .map(item => item.script);
 }
 
-/** Camera and gallery both run the SAME complete local OCR plan.
- * The visual detector only moves promising models to the beginning; it
- * cannot remove Russian/Kazakh or other scripts because a blurry phone
- * capture can easily be misclassified as Latin/Korean/Japanese.
+/** Camera and gallery must use the SAME stable OCR execution order.
+ * Visual classification is an unverified hint (not ground truth), and even
+ * a different JPEG encoding of the SAME photograph can change the hint.
+ * Do not let the source/picker or detector change the engines' order.
+ * Full-language fallback remains available through AUTO_SCAN_ORDER.
  */
-export function completeAutomaticOcrPlan(detectedScript?:string):OcrScript[] {
-  const hint=visualOcrScanPlan(detectedScript??"");
-  if(!hint)return [...AUTO_SCAN_ORDER];
-  return [...new Set([...hint,...AUTO_SCAN_ORDER])];
+export function completeAutomaticOcrPlan(_detectedScript?:string):OcrScript[] {
+  return [...AUTO_SCAN_ORDER];
 }
 
 /** A scan with likely Cyrillic text must not silently auto-save corrupted

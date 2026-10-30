@@ -147,6 +147,49 @@ public class OcrLocalImageInstrumentedTest {
         }
     }
 
+    /**
+     * The user's regression: THE SAME photo picked from gallery versus
+     * opened from the camera's local path must have identical OCR pixels,
+     * dimensions and orientation. This uses the production decoder, not a
+     * test stub and not two separately photographed images.
+     */
+    @Test
+    public void identicalCameraAndGalleryPhotoDecodeToIdenticalOcrPixels() throws Exception {
+        Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File photo=makePhoto(800,480);
+        Bitmap fromCamera=null,fromGallery=null,fromFileUri=null;
+        try {
+            // EXIF rotation must remain identical in every content access path.
+            ExifInterface exif=new ExifInterface(photo.getAbsolutePath());
+            exif.setAttribute(ExifInterface.TAG_ORIENTATION,
+                String.valueOf(ExifInterface.ORIENTATION_ROTATE_90));
+            exif.saveAttributes();
+            Uri content=androidx.core.content.FileProvider.getUriForFile(
+                context,context.getPackageName()+".fileprovider",photo);
+            fromCamera=loadWithActualPlugin(photo.getAbsolutePath());
+            fromGallery=loadWithActualPlugin(content.toString());
+            fromFileUri=loadWithActualPlugin(Uri.fromFile(photo).toString());
+            assertEquals("Expected EXIF-corrected width",480,fromCamera.getWidth());
+            assertEquals("Expected EXIF-corrected height",800,fromCamera.getHeight());
+            assertEquals(fromCamera.getWidth(),fromGallery.getWidth());
+            assertEquals(fromCamera.getHeight(),fromGallery.getHeight());
+            assertEquals(fromCamera.getWidth(),fromFileUri.getWidth());
+            assertEquals(fromCamera.getHeight(),fromFileUri.getHeight());
+            int n=fromCamera.getWidth()*fromCamera.getHeight();
+            int[] original=new int[n],gallery=new int[n],fileUri=new int[n];
+            fromCamera.getPixels(original,0,fromCamera.getWidth(),0,0,fromCamera.getWidth(),fromCamera.getHeight());
+            fromGallery.getPixels(gallery,0,fromGallery.getWidth(),0,0,fromGallery.getWidth(),fromGallery.getHeight());
+            fromFileUri.getPixels(fileUri,0,fromFileUri.getWidth(),0,0,fromFileUri.getWidth(),fromFileUri.getHeight());
+            assertArrayEquals("Same photo must decode identically from content:// gallery",original,gallery);
+            assertArrayEquals("Same photo must decode identically from file:// camera",original,fileUri);
+        } finally {
+            if(fromCamera!=null)fromCamera.recycle();
+            if(fromGallery!=null)fromGallery.recycle();
+            if(fromFileUri!=null)fromFileUri.recycle();
+            assertTrue(photo.delete());
+        }
+    }
+
     @Test
     public void galleryExifRotationIsAppliedBeforeOcr() throws Exception {
         File photo = makePhoto(640, 320);

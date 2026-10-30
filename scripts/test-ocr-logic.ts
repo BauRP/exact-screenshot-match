@@ -932,9 +932,13 @@ for(const hint of ["latin","cyrillic","korean","japanese","han","devanagari","un
   assert.deepEqual(new Set(full),new Set(AUTO_SCAN_ORDER));
   assert.ok(full.includes("cyrillic"),"Never exclude Kazakh on "+hint);
 }
-assert.deepEqual(completeAutomaticOcrPlan("korean").slice(0,3),["korean","latin","cyrillic"]);
-assert.deepEqual(completeAutomaticOcrPlan("cyrillic").slice(0,2),["cyrillic","latin"]);
+assert.deepEqual(completeAutomaticOcrPlan("korean"),[...AUTO_SCAN_ORDER]);
+assert.deepEqual(completeAutomaticOcrPlan("cyrillic"),[...AUTO_SCAN_ORDER]);
 assert.deepEqual(completeAutomaticOcrPlan("unknown"),[...AUTO_SCAN_ORDER]);
+assert.deepEqual(completeAutomaticOcrPlan("latin"),completeAutomaticOcrPlan("cyrillic"),
+ "Same photographed text through gallery/camera cannot change OCR model order");
+assert.deepEqual(completeAutomaticOcrPlan("han"),completeAutomaticOcrPlan("korean"),
+ "Even unrelated incorrect visual guesses cannot change OCR model order");
 assert.equal(automaticOcrRequiresReview(
   [{script:"cyrillic",text:"Қазақ тіліндегі маңызды сөйлем",confidence:28}],
   "Қазақ тіліндегі маңызды сөйлем","cyrillic"),true);

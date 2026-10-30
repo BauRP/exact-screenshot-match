@@ -162,8 +162,9 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         if(mode==="auto") {
           scanPlan.splice(0,scanPlan.length,...completeAutomaticOcrPlan(prepared?.detectedScript));
           coverage = new OcrScanCoverage(scanPlan);
-          if(prepared?.detectedScript && prepared.detectedScript!=="unknown")
-            onProgress("Проверяем письменность: все языки остаются доступными");
+          // Preliminary visual script guesses are advisory only; do not
+          // change execution order or truncate the language scan plan.
+          onProgress("Проверяем текст одинаковым способом для камеры и галереи");
         }
         timeBudget = new OcrTimeBudget(scanPlan.length > 1 ? 60000 : 25000);
         const scanPath = prepared?.path ?? path;
@@ -228,8 +229,7 @@ async function initializeOcrEngine(): Promise<OcrEngine> {
         // evidence. Otherwise continue and preserve the mixed-language review.
         if (mode === "auto" && index >= 1 && coverage.isComplete() === false) {
           const confident=confidentOcrPrimaryScript(results);
-          if (confident && !nativeGeometryTruncated && !nativeAlternatives.length &&
-              !(prepared?.detectedScript==="cyrillic" && confident!=="cyrillic")) {
+          if (confident && !nativeGeometryTruncated && !nativeAlternatives.length) {
             fastDetected=confident;
             onProgress("Язык определён — завершаем распознавание");
             break;
