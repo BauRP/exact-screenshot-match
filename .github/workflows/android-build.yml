@@ -103,6 +103,9 @@ jobs:
       - name: Verify separate page mood, palette and paper ruling
         run: bun scripts/test-wave-paper.ts
 
+      - name: Verify note learning blocks and slash commands
+        run: bun scripts/test-wave-blocks.ts
+
       - name: Verify checklist markup, persistence and note editor compatibility
         run: bun scripts/test-wave-checklist.ts
 

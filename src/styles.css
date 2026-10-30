@@ -306,3 +306,16 @@ html.wave-native-android .wave-app-frame {
 .sn-tiptap .wave-check-row[data-done="true"] .wave-check-mark {color:#15803d;}
 .sn-tiptap .wave-check-row[data-done="true"] .wave-check-content {opacity:.62;text-decoration:line-through;}
 .sn-tiptap .wave-check-content {flex:1;min-width:0;min-height:28px;padding:2px 0;white-space:pre-wrap;overflow-wrap:anywhere;}
+
+/* All new blocks preserve ink from the existing note; no standalone page scroll. */
+.sn-tiptap .wave-callout {border-left:3px solid #2563eb;border-radius:8px;padding:9px 12px;margin:10px 0;background:rgba(105,145,210,.12);color:inherit;}
+.sn-tiptap .wave-callout[data-kind="tip"] {border-left-color:#15803d;background:rgba(63,157,92,.12);}
+.sn-tiptap .wave-callout[data-kind="warning"] {border-left-color:#b45309;background:rgba(212,145,43,.13);}
+.sn-tiptap .wave-callout[data-kind="important"] {border-left-color:#7c3aed;background:rgba(124,58,237,.11);}
+.sn-tiptap .wave-callout > p:first-child {margin-top:0;}
+.sn-tiptap .wave-fold {border:1px solid rgba(100,110,130,.3);border-radius:8px;padding:8px;margin:8px 0;color:inherit;}
+.sn-tiptap .wave-fold-heading {display:block;width:100%;text-align:left;font-size:1rem;font-weight:650;min-height:36px;padding:5px 6px;border-radius:6px;color:inherit;touch-action:manipulation;}
+.sn-tiptap .wave-fold-body {padding:4px 6px 6px;}
+.sn-tiptap .wave-fold-body[hidden] {display:none;}
+.sn-tiptap .wave-tape {background:#303a51;color:transparent!important;border-radius:3px;box-decoration-break:clone;-webkit-box-decoration-break:clone;cursor:pointer;text-shadow:none!important;min-width:12px;}
+.sn-tiptap .wave-tape.wave-tape-open {background:rgba(70,80,100,.16);color:inherit!important;}

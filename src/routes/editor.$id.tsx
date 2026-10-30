@@ -29,6 +29,11 @@ import {
   ListChecks,
   WandSparkles,
   Grid3X3,
+  Blocks,
+  Quote,
+  BookOpen,
+  EyeOff,
+  CalendarDays,
 } from "lucide-react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -66,6 +71,7 @@ import { InNoteSearch, noteSearchKey, findWords } from "@/lib/in-note-search";
 import { readEditorPreferences } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
+import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
 
 export const Route = createFileRoute("/editor/$id")({
   head: () => ({ meta: [
@@ -135,6 +141,7 @@ function EditorPage() {
   const [findActive,setFindActive]=useState(0);
   const [checkShape,setCheckShape]=useState<CheckShape>("square");
   const [prefs]=useState(()=>readEditorPreferences());
+  const [slashText,setSlashText]=useState<string|null>(null);
 
   const [currentFontFamily, setCurrentFontFamily] = useState(FONTS[0].value);
   const [currentFontSize, setCurrentFontSize] = useState<number>(18);
@@ -212,6 +219,9 @@ function EditorPage() {
       AudioNote,
       InNoteSearch,
       WaveChecklistItem,
+      WaveCallout,
+      WaveFold,
+      WaveTape,
     ],
     content: note?.body || "<p></p>",
     editorProps: {
@@ -223,7 +233,12 @@ function EditorPage() {
       },
     },
     // Draft only: nothing is written to storage until the checkmark is tapped.
-    onUpdate: () => scheduleTick(),
+    onUpdate: ({editor:currentEditor}) => {
+      scheduleTick();
+      const {$from}=currentEditor.state.selection;
+      const before=$from.parent.textBetween(0,$from.parentOffset);
+      setSlashText(/^\\/[\\p{L}\\p{N} -]{0,22}$/u.test(before) ? before.slice(1) : null);
+    },
     onSelectionUpdate: ({ editor }) => {
       const { from, to } = editor.state.selection;
       selectionRef.current = { from, to };
@@ -293,6 +308,44 @@ function EditorPage() {
     requestAnimationFrame(()=>editor.view.dom.querySelector(".wave-find-current")?.scrollIntoView({block:"nearest"}));
   };
 
+  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator",callout:CalloutKind="important")=>{
+    if(!editor)return;
+    const {$from}=editor.state.selection;
+    const textBefore=$from.parent.textBetween(0,$from.parentOffset);
+    const slashLength=/^\\/[\\p{L}\\p{N} -]{0,22}$/u.test(textBefore)?textBefore.length:0;
+    let chain=editor.chain().focus();
+    if(slashLength)chain=chain.deleteRange({from:$from.pos-slashLength,to:$from.pos});
+    setSlashText(null);
+    if(kind==="quote"){chain.toggleBlockquote().run();return;}
+    if(kind==="tape"){
+      if(editor.state.selection.empty){toast("Сначала выделите слова, которые нужно скрыть");return;}
+      chain.setMark("waveTape").run();return;
+    }
+    if(kind==="date"){chain.insertContent(new Date().toLocaleDateString("ru-RU")).run();return;}
+    if(kind==="separator"){chain.setHorizontalRule().run();return;}
+    const node=kind==="fold"
+      ? {type:"waveFold",attrs:{title:"Новый раздел",collapsed:false},content:[{type:"paragraph"}]}
+      : {type:"waveCallout",attrs:{kind:callout},content:[{type:"paragraph"}]};
+    chain.insertContent(node).run();
+  };
+  const blockChoices=[
+    {id:"callout",label:"Важно",icon:"!"},
+    {id:"tip",label:"Совет",icon:"✦"},
+    {id:"warning",label:"Предупреждение",icon:"⚠"},
+    {id:"info",label:"Информация",icon:"i"},
+    {id:"quote",label:"Цитата",icon:"❝"},
+    {id:"fold",label:"Сворачиваемый раздел",icon:"▸"},
+    {id:"tape",label:"Скрыть выбранный ответ",icon:"▰"},
+    {id:"date",label:"Вставить дату",icon:"◷"},
+    {id:"separator",label:"Разделитель",icon:"—"},
+  ] as const;
+  const chooseBlock=(id:typeof blockChoices[number]["id"])=>{
+    if(id==="callout")insertWaveBlock("callout","important");
+    else if(id==="tip"||id==="warning"||id==="info")insertWaveBlock("callout",id);
+    else insertWaveBlock(id);
+  };
+  const visibleSlashChoices=slashText===null?[]:blockChoices.filter(item=>item.label.toLocaleLowerCase().includes(slashText.toLocaleLowerCase()));
+  
   // Keep archive work out of the editor completely, even if a previous
   // committed edit was waiting to be archived. A checkmark navigates away
   // after saving; the backup runs only once the editor is closed.
@@ -653,6 +706,23 @@ function EditorPage() {
               </button>)}
             </PopoverContent>
           </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" aria-label="Вставить блок" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+                <Blocks className="h-4 w-4"/>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" sideOffset={8} onOpenAutoFocus={e=>e.preventDefault()}
+              className="max-h-[min(23rem,65dvh)] w-56 overflow-y-auto rounded-xl p-2">
+              <p className="px-2 pb-1 text-xs font-semibold">Вставить в заметку</p>
+              {blockChoices.map(item=><button type="button" key={item.id}
+                onPointerDown={e=>e.preventDefault()} onMouseDown={e=>e.preventDefault()}
+                onClick={()=>chooseBlock(item.id)}
+                className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2 text-left text-sm hover:bg-secondary">
+                <span className="w-5 text-center">{item.icon}</span>{item.label}
+              </button>)}
+            </PopoverContent>
+          </Popover>
           <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
           {editor && (
             <>
@@ -671,6 +741,14 @@ function EditorPage() {
             </>
           )}
         </div>
+        {slashText!==null && visibleSlashChoices.length>0 && <div className="mt-2 max-h-44 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-lg"
+            role="listbox" aria-label="Быстрое меню вставки">
+            {visibleSlashChoices.map(item=><button type="button" key={item.id}
+              onMouseDown={event=>event.preventDefault()} onClick={()=>chooseBlock(item.id)}
+              className="flex min-h-9 w-full items-center gap-2 rounded-lg px-3 text-left text-xs hover:bg-secondary">
+              <span className="w-5 text-center">{item.icon}</span>{item.label}
+            </button>)}
+          </div>}
         {findOpen && <div role="search" aria-label="Поиск внутри заметки"
           className="mt-2 flex min-w-0 items-center gap-1 rounded-xl border border-border bg-secondary/50 px-2 py-1.5">
           <Search className="h-4 w-4 shrink-0 text-muted-foreground"/>
