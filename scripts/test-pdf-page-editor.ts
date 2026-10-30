@@ -31,17 +31,15 @@ assert.ok(src.includes("displayToSourceRect("));
 assert.ok(src.includes('WebkitTextFillColor:'));
 assert.ok(src.includes("setEditingId(null);"),"Page change exits editor");
 const layoutSrc = await Bun.file("src/lib/pdf-text-layout.ts").text();
-const editorSrc = await Bun.file("src/components/pdf/PdfMarginRuler.tsx").text();
 assert.ok(layoutSrc.includes("wrapPdfGlyphs"));
-assert.ok(editorSrc.includes("setPointerCapture"));
-assert.ok(editorSrc.includes("touch-none"));
-assert.ok(src.includes("PdfMarginRuler value={margins}"));
+assert.ok(!src.includes("PdfMarginRuler"));
+assert.ok(!src.includes("commitMargins"));
+assert.ok(!src.includes("normalizePdfMargins"));
 assert.ok(src.includes("draftStartRef.current = overlay"));
 assert.ok(src.includes("eraseWidthPct"));
-const { normalizePdfMargins, wrapPdfGlyphs, displayPdfFontSize } = await import("../src/lib/pdf-text-layout");
+const { wrapPdfGlyphs, displayPdfFontSize } = await import("../src/lib/pdf-text-layout");
+const { sameSourceText, safeSourceRight, sourceLineFits } = await import("../src/lib/pdf-text-safety");
 const { replaceAt, baseStyle, getRuns } = await import("../src/lib/pdf-runs");
-assert.deepEqual(normalizePdfMargins(-10, 150), {left: 0, right: 100});
-assert.deepEqual(normalizePdfMargins(95, 96), {left: 95, right: 99});
 const glyphs = Array.from("hello world", text => ({text,width:1}));
 assert.equal(wrapPdfGlyphs(glyphs, 6).map(line => line.map(ch=>ch.text).join("")).join("/"),"hello /world");
 const runSource = await Bun.file("src/lib/pdf-runs.ts").text();
@@ -99,18 +97,25 @@ for (const slug of new Set(APP_FONTS.map(font=>font.slug))) {
   assert.ok(appCss.includes(`@import "@fontsource/${slug}/400.css";`), `Missing offline font CSS: ${slug}`);
 }
 
-// Regression: tapping any PDF line must never move the user-set ruler.
-assert.equal(displayPdfFontSize(11.0000000001), 11);
-assert.equal(displayPdfFontSize(11.999999), 12);
-assert.equal(displayPdfFontSize(Number.NaN), 11);
-assert.equal(displayPdfFontSize(1), 1);
-const rulerCode = await Bun.file("src/components/pdf/PdfMarginRuler.tsx").text();
-assert.ok(!src.includes('setMargins(suggested)'));
-assert.ok(!src.includes('setMargins(normalizePdfMargins(existing.xPct'));
-assert.ok(!src.includes('setMargins({ left: 8, right: 92 })'));
-assert.ok(!src.includes('Исходный PDF-шрифт недоступен. Выберите замену в панели перед вводом.'));
-assert.ok(src.includes('contentEditable\n'));
-assert.ok(rulerCode.includes('Math.abs(deltaX)<4'), "ruler does not jump on a simple tap");
-assert.ok(rulerCode.includes("onCommit?.(currentRef.current)"));
-assert.ok(src.includes('rulerLeftPct: next.left') && src.includes('rulerRightPct: next.right'));
+// Regression: removing the ruler must remove its UI, positioning and persistence.
+assert.equal(displayPdfFontSize(11.0000000001),11);
+assert.equal(displayPdfFontSize(11.999999),12);
+assert.ok(!src.includes("PdfMarginRuler"));
+assert.ok(!src.includes("margins.right"));
+assert.ok(!src.includes("rulerLeftPct"));
+assert.ok(!src.includes("setMargins"));
+assert.ok(src.includes("sourceEditFits"));
+assert.ok(src.includes("if (overlay.cover && lines.length > 1)"));
+assert.ok(src.includes("const latestOverlays=getNote(id)?.pdf?.overlays"));
+assert.ok(src.includes("sameSourceText(item,sourceBox,page)"));
+assert.ok(!src.includes("Исходный PDF-шрифт недоступен. Выберите замену в панели перед вводом."));
+assert.equal(sourceLineFits("hello",40,s=>s.length*5),true);
+assert.equal(sourceLineFits("hello world",40,s=>s.length*5),false);
+assert.equal(sourceLineFits("hello\\nworld",100,s=>s.length*5),false);
+const sourceRect={x:12,y:22,width:40,height:2};
+assert.equal(safeSourceRight(sourceRect,[sourceRect,{x:73,y:22,width:10,height:2}]),72.7);
+assert.equal(safeSourceRight(sourceRect,[sourceRect,{x:73,y:50,width:10,height:2}]),98);
+assert.ok(sameSourceText({page:1,cover:true,xPct:12,yPct:22,widthPct:40,heightPct:2,
+  eraseXPct:12,eraseYPct:22,eraseWidthPct:40,eraseHeightPct:2},sourceRect,1));
+assert.ok(!sameSourceText({page:2,cover:true,xPct:12,yPct:22,widthPct:40,heightPct:2},sourceRect,1));
 console.log("PDF tap no-op, 4 rotations, rotated text hitboxes and page-switch cleanup: PASS");

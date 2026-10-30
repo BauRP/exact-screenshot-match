@@ -27,9 +27,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { hasPdfDraftChanges, hasSaveablePdfContent } from "@/lib/pdf-edit-guard";
-import { PdfMarginRuler, type PdfMargins } from "@/components/pdf/PdfMarginRuler";
-import { normalizePdfMargins, wrapPdfGlyphs, pdfBaselineTopPx, displayPdfFontSize } from "@/lib/pdf-text-layout";
+import { wrapPdfGlyphs, pdfBaselineTopPx, displayPdfFontSize } from "@/lib/pdf-text-layout";
 import { displayToSourceRect, pdfTextBounds, sourceOverlayTransform } from "@/lib/pdf-page-geometry";
+import { safeSourceRight, sameSourceText, sourceLineFits } from "@/lib/pdf-text-safety";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ColorGrid, PALETTE } from "@/components/ColorGrid";
 import {
@@ -174,9 +174,6 @@ function PdfViewerScreen() {
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [textTool, setTextTool] = useState(false);
-  // Ruler is page-relative, independent of zoom, scroll position and viewport pixels.
-  const [margins, setMargins] = useState<PdfMargins>(() =>
-    normalizePdfMargins(note?.pdf?.rulerLeftPct ?? 8, note?.pdf?.rulerRightPct ?? 92));
   // Original source text is kept separately from the mutable editing draft.
   const draftStartRef = useRef<PdfTextOverlay | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -458,18 +455,27 @@ function PdfViewerScreen() {
     const draft = draftOverlayRef.current;
     const original = draftStartRef.current;
     if (draft && original && hasPdfDraftChanges(original, draft) && hasSaveablePdfContent(draft)) {
-      persistOverlays([...overlays.filter((item) => item.id !== draft.id), draft]);
+      // React closures may contain the previous page of overlays after a tap.
+      // Read the latest store snapshot so switching text never drops an edit.
+      const currentNote=getNote(id);
+      if (currentNote?.pdf) updateNote(id, {
+        pdf: { ...currentNote.pdf, overlays: [
+          ...(currentNote.pdf.overlays ?? []).filter(item => item.id !== draft.id), draft,
+        ] },
+      });
     }
     if (draft) setDraftOverlay(null);
     draftStartRef.current = null;
     const current = editingId ? overlays.find((item) => item.id === editingId) : null;
     if (current && !current.text.trim() && !current.cover) {
-      persistOverlays(overlays.filter((item) => item.id !== current.id));
+      const currentNote=getNote(id);
+      if (currentNote?.pdf) updateNote(id,{pdf:{...currentNote.pdf,
+        overlays:(currentNote.pdf.overlays??[]).filter(item=>item.id!==current.id)}});
     }
     editingNodeRef.current = null;
     setEditingId(null);
     setFontMenuOpen(false);
-  }, [editingId, overlays, persistOverlays, setDraftOverlay]);
+  }, [editingId, overlays, id, setDraftOverlay]);
 
   const cancelEditing = useCallback(() => {
     // Cancel is lossless for an untouched or modified source draft.
@@ -503,7 +509,6 @@ function PdfViewerScreen() {
     setEditingId(null);
     editingNodeRef.current = null;
     setTextBoxes([]);
-    // Ruler bounds are owned by the user, not page/rotation/caret movements.
   }, [page, rotation, id, setDraftOverlay]);
 
   /* ---------------- Scoped rich-text formatting for the active box -------- */
@@ -669,6 +674,23 @@ function PdfViewerScreen() {
     }
   }, [editingId]);
 
+  const sourceEditFits = (overlay: PdfTextOverlay, content: string): boolean => {
+    if (!overlay.cover) return true;
+    const width=(overlay.widthPct / 100)*unrotatedPageSize.width;
+    const font=(overlay.fontSize ?? DEFAULT_PDF_FONT_SIZE)*viewScaleRef.current;
+    const canvas=canvasRef.current;
+    const ctx=canvas?.getContext("2d");
+    if (!ctx) return !/[\r\n]/.test(content);
+    ctx.save();
+    ctx.font=`${overlay.italic ? "italic " : ""}${overlay.bold ? "bold " : ""}${font}px ${overlay.sourceFontCss ?? fontCss(overlay.fontFamily)}`;
+    const measured=(text:string)=>ctx.measureText(text).width;
+    // A substitute font can be slightly wider than the real PDF font.
+    const baseline=Math.max(width,measured(draftStartRef.current?.text ?? overlay.text));
+    const fits=sourceLineFits(content,baseline,measured);
+    ctx.restore();
+    return fits;
+  };
+
   const mountEditor = useCallback(
     (node: HTMLSpanElement | null, overlay: PdfTextOverlay) => {
       if (!node || editingNodeRef.current === node) return;
@@ -733,11 +755,19 @@ function PdfViewerScreen() {
           const at = styleAt(current, offsets.start, base);
           if (at.color.toLowerCase() !== sticky.toLowerCase()) pending = { offset: offsets.start, style: { ...at, color: sticky } };
         }
-        if (!pending && !newline) return;
-        event.preventDefault();
+        // Always own ordinary insertions; uncontrolled mobile browser edits
+        // otherwise bypass the collision and draft checks on later taps.
+        if (event.isComposing) return;
         const inserted = newline ? "\n" : event.data!;
         const style = pending?.style ?? styleAt(current, offsets.start, base);
         const next = replaceAt(current, offsets.start, offsets.end, inserted, style);
+        const source=editingOverlayRef.current ?? overlay;
+        if (!sourceEditFits(source, runsText(next))) {
+          event.preventDefault();
+          toast.error("Новая строка пересечёт другой текст PDF. Сократите текст или уменьшите шрифт.",{id:"pdf-source-overflow"});
+          return;
+        }
+        event.preventDefault();
         const caret = offsets.start + inserted.length;
         pendingRef.current = { offset: caret, style };
         const liveFace = editingOverlayRef.current ?? overlay;
@@ -758,23 +788,6 @@ function PdfViewerScreen() {
 
   const ui = editingOverlay ? (activeStyle ?? baseStyle(editingOverlay)) : textTool ? draftStyle : null;
 
-  const changeMargins = (next: PdfMargins) => {
-    // This callback is called ONLY by a deliberate handle drag/keyboard action.
-    // Never derive the ruler position from a tapped PDF line or cursor.
-    setMargins(normalizePdfMargins(next.left, next.right));
-  };
-  const commitMargins = (value: PdfMargins) => {
-    const next = normalizePdfMargins(value.left, value.right);
-    setMargins(next);
-    const latest = getNote(id);
-    if (latest?.pdf) updateNote(id, {
-      pdf: { ...latest.pdf, rulerLeftPct: next.left, rulerRightPct: next.right },
-    });
-    // A deliberate ruler edit changes the paragraph bounds. Mere selection does not.
-    if (editingId) patchOverlay(editingId, {
-      xPct: next.left, widthPct: next.right - next.left,
-    });
-  };
 
   const onCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!textTool) {
@@ -791,12 +804,17 @@ function PdfViewerScreen() {
     // Tap elsewhere ends the active draft. Previously this silently dropped
     // typing and also prevented opening a second source line.
     if (draftOverlayRef.current && editingId) commitEditing();
-    const existing = overlays.filter(item => item.page === page).find(
+    const latestOverlays=getNote(id)?.pdf?.overlays ?? [];
+    const existing = latestOverlays.filter(item => item.page === page).find(
       (item) =>
-        sourcePoint.x >= item.xPct &&
-        sourcePoint.x <= item.xPct + item.widthPct &&
-        sourcePoint.y >= item.yPct &&
-        sourcePoint.y <= item.yPct + item.heightPct,
+        sourcePoint.x >= (item.cover ? item.eraseXPct ?? item.xPct : item.xPct) &&
+        sourcePoint.x <= (item.cover
+          ? (item.eraseXPct ?? item.xPct) + (item.eraseWidthPct ?? item.widthPct)
+          : item.xPct + item.widthPct) &&
+        sourcePoint.y >= (item.cover ? item.eraseYPct ?? item.yPct : item.yPct) &&
+        sourcePoint.y <= (item.cover
+          ? (item.eraseYPct ?? item.yPct) + (item.eraseHeightPct ?? item.heightPct)
+          : item.yPct + item.heightPct),
     );
     if (existing) {
       if (draftOverlayRef.current?.id !== existing.id) setDraftOverlay(null);
@@ -822,11 +840,22 @@ function PdfViewerScreen() {
         x:hit.leftPct,y:hit.topPct,width:hit.widthPct,height:hit.heightPct,
       },rotation);
       const heightPx = (sourceBox.height / 100) * unrotatedPageSize.height;
+      // Do not stack multiple replacement overlays over the same source item.
+      const prior=latestOverlays.find(item=>sameSourceText(item,sourceBox,page));
+      if(prior) {
+        pendingTapRef.current={x:event.clientX,y:event.clientY};
+        editingNodeRef.current=null;
+        setEditingId(prior.id);
+        return;
+      }
       const startX = clamp(sourceBox.x, 0, 96);
-      // Keep the source text at its original x position, but constrain new
-      // wrapping to the user-set right ruler marker (without changing the marker).
-      const suggestedWidth = Math.max(4, Math.min(100 - startX, margins.right - startX));
-      const suggested = { left: startX, right: startX + suggestedWidth };
+      // Original PDF text never inherits margins from unrelated text or tap locations.
+      // Find the next glyph box on the same line so typing cannot cover it.
+      const safeRight = safeSourceRight(sourceBox, textBoxes.map((box) =>
+        displayToSourceRect({
+          x: box.leftPct, y: box.topPct, width: box.widthPct, height: box.heightPct,
+        }, rotation)));
+      const suggested = { left: startX, right: Math.max(startX + sourceBox.width, safeRight) };
       const overlay: PdfTextOverlay = {
         id: createOverlayId(),
         page,
@@ -868,9 +897,9 @@ function PdfViewerScreen() {
     const overlay: PdfTextOverlay = {
       id: createOverlayId(),
       page,
-      xPct: clamp(sourcePoint.x, margins.left, margins.right - 4),
+      xPct: clamp(sourcePoint.x, 0, 96),
       yPct: clamp(sourcePoint.y, 0, 96),
-      widthPct: margins.right - clamp(sourcePoint.x, margins.left, margins.right - 4),
+      widthPct: Math.max(4, 98 - clamp(sourcePoint.x, 0, 96)),
       heightPct: Math.max(((draftStyle.fontSize * viewScale * 1.35) / Math.max(unrotatedPageSize.height, 1)) * 100, 2),
       text: "",
       cover: false,
@@ -1030,6 +1059,11 @@ function PdfViewerScreen() {
         return total;
       };
       const lines = wrapPdfGlyphs(glyphs, maxWidth, measureLine);
+      if (overlay.cover && lines.length > 1) {
+        // An original PDF text item may be adjacent to independent text boxes.
+        // Reflowing it over those boxes corrupts the document.
+        throw new Error("Замена не помещается в исходной строке PDF. Сократите текст или уменьшите шрифт.");
+      }
       const lineAdvance = maxSize * 1.2;
       const firstBaseline = overlay.sourceBaselinePct !== undefined
         ? height - overlay.sourceBaselinePct / 100 * height
@@ -1611,7 +1645,6 @@ function PdfViewerScreen() {
               <Check className="h-4 w-4" />
             </button>
           </div>
-          <PdfMarginRuler value={margins} onChange={changeMargins} onCommit={commitMargins} />
         </div>
       )}
 
@@ -1682,12 +1715,14 @@ function PdfViewerScreen() {
                       setEditingId(overlay.id);
                     }
                   }}
-                  className="absolute overflow-visible whitespace-pre-wrap break-words text-left"
+                  className="absolute whitespace-pre-wrap break-words text-left"
                   style={{
                     left: `${overlay.xPct}%`,
                     top: baselineTop === null ? `${overlay.yPct}%` : `${baselineTop}px`,
                     width: `${overlay.widthPct}%`,
                     minHeight: `${overlay.heightPct}%`,
+                    maxHeight: overlay.cover ? `${(overlay.eraseHeightPct ?? overlay.heightPct) / 100 * unrotatedPageSize.height + 6}px` : undefined,
+                    overflow: overlay.cover ? "hidden" : "visible",
                     pointerEvents: "auto",
                     fontSize: `${sizePx}px`,
                     lineHeight: 1.2,
@@ -1712,7 +1747,7 @@ function PdfViewerScreen() {
                       contentEditable
                       suppressContentEditableWarning
                       spellCheck={false}
-                      className="relative block w-full min-h-[1em] whitespace-pre-wrap break-words bg-transparent outline-none"
+                      className={`relative block w-full min-h-[1em] bg-transparent outline-none ${overlay.cover ? "whitespace-pre" : "whitespace-pre-wrap break-words"}`}
                       style={{
                         caretColor: overlay.color ?? DEFAULT_PDF_TEXT_COLOR,
                         // Preserve the exact glyphs from the original PDF on tap;
@@ -1720,8 +1755,24 @@ function PdfViewerScreen() {
                         WebkitTextFillColor: untouchedSource ? "transparent" : undefined,
                       }}
                       onInput={(event) => {
-                        const runs = readRunsFromDom(event.currentTarget, renderedRunsRef.current, baseStyle(overlay));
-                        saveRuns(overlay.id, runs);
+                        const node=event.currentTarget;
+                        const runs=readRunsFromDom(node, renderedRunsRef.current, baseStyle(overlay));
+                        const source=editingOverlayRef.current ?? overlay;
+                        if (!sourceEditFits(source, runsText(runs))) {
+                          // Android IME, paste and dictation can bypass beforeinput.
+                          // Restore the last safe draft instead of saving overlap.
+                          const previous=renderedRunsRef.current;
+                          const caret=selRef.current?.start ?? runsText(previous).length;
+                          renderRunsInto(node,previous,viewScaleRef.current,{
+                            fontFamily:source.fontFamily,cssFamily:source.sourceFontCss,
+                            bold:source.bold,italic:source.italic,
+                          });
+                          setSelectionOffsets(node,caret,caret);
+                          toast.error("Текст не помещается в исходной строке PDF.",{id:"pdf-source-overflow"});
+                          return;
+                        }
+                        renderedRunsRef.current=runs;
+                        saveRuns(overlay.id,runs);
                       }}
                       onKeyDown={(event) => {
                         event.stopPropagation();
@@ -1738,7 +1789,7 @@ function PdfViewerScreen() {
                       }}
                     />
                   ) : (
-                    <span className="relative block w-full whitespace-pre-wrap break-words">
+                    <span className={`relative block w-full ${overlay.cover ? "whitespace-pre" : "whitespace-pre-wrap break-words"}`}>
                       {getRuns(overlay).map((run, index) => (
                         <span key={index} style={cssToReact(runCss(run, viewScale, {
                           fontFamily: overlay.fontFamily, cssFamily: overlay.sourceFontCss,

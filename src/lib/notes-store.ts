@@ -55,9 +55,6 @@ export type PdfMeta = {
   createdAt?: number;
   favorite?: boolean;
   overlays?: PdfTextOverlay[];
-  /** User-set paragraph limits; tapping PDF text must never rewrite these. */
-  rulerLeftPct?: number;
-  rulerRightPct?: number;
 };
 
 export type Note = {
@@ -171,10 +168,6 @@ function normalizeNote(input: unknown): Note | null {
           producer: typeof input.pdf.producer === "string" ? input.pdf.producer : undefined,
           createdAt: typeof input.pdf.createdAt === "number" ? input.pdf.createdAt : undefined,
           favorite: input.pdf.favorite === true,
-          rulerLeftPct: typeof input.pdf.rulerLeftPct === "number" && Number.isFinite(input.pdf.rulerLeftPct)
-            ? input.pdf.rulerLeftPct : undefined,
-          rulerRightPct: typeof input.pdf.rulerRightPct === "number" && Number.isFinite(input.pdf.rulerRightPct)
-            ? input.pdf.rulerRightPct : undefined,
           overlays: Array.isArray(input.pdf.overlays)
             ? (input.pdf.overlays as PdfTextOverlay[]).filter((item) => isRecord(item))
             : [],

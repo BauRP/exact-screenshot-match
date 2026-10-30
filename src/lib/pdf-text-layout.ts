@@ -2,12 +2,6 @@
 export function displayPdfFontSize(points: number): number {
   return Number.isFinite(points) ? Math.max(1, Math.min(96, Math.round(points))) : 11;
 }
-/** Values always refer to the original PDF page, not the viewport. */
-export function normalizePdfMargins(left: number, right: number) {
-  const l = Math.max(0, Math.min(96, Number.isFinite(left) ? left : 8));
-  const r = Math.max(l + 4, Math.min(100, Number.isFinite(right) ? right : 92));
-  return { left: Number(l.toFixed(3)), right: Number(r.toFixed(3)) };
-}
 
 /** Exact PDF baseline in page coordinates, adjusted for browser font metrics. */
 export function pdfBaselineTopPx(baselinePct: number, pageHeightPx: number, fontSizePx: number, cssFamily: string): number {
