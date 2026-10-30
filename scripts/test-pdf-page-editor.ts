@@ -77,7 +77,11 @@ assert.equal(new Set(APP_FONTS.map(font=>font.name)).size, APP_FONTS.length);
 assert.deepEqual(PDF_FONTS.map(font=>font.name), APP_FONTS.map(font=>font.name));
 for (const font of APP_FONTS) {
   assert.equal(fontCss(font.name), font.css);
-  assert.equal(fontNameFromCss(font.css), font.name);
+  // Compatibility aliases (Impact/Oswald etc.) can share the same local font
+  // and CSS stack. The CSS alone cannot identify which menu label was chosen.
+  const resolved = fontNameFromCss(font.css);
+  assert.ok(APP_FONTS.some(candidate => candidate.name === resolved && candidate.css === font.css),
+    `Unrecognized shared font CSS: ${font.name}`);
   assert.ok(font.css.length > 5 && font.actual);
 }
 const noteEditorSource = await Bun.file("src/routes/editor.$id.tsx").text();
