@@ -47,11 +47,34 @@ concurrency:
 
 jobs:
   emulator:
-    name: Android ${{ matrix.api-level }} — bundled OCR engine integration
+    name: Android ${{ matrix.api-level }} (${{ matrix.display-size }}, ${{ matrix.display-density }} dpi) — OCR and layout
     strategy:
       fail-fast: false
       matrix:
-        api-level: [24, 26, 29, 34, 36, '37.0']
+        # Screen profiles cover compact phones, taller OLEDs and tablets.
+        # Android insets are measured at runtime; no device-name whitelist.
+        include:
+          - api-level: 24
+            display-size: 320x568
+            display-density: 160
+          - api-level: 26
+            display-size: 360x740
+            display-density: 180
+          - api-level: 29
+            display-size: 393x851
+            display-density: 210
+          - api-level: 34
+            display-size: 412x915
+            display-density: 210
+          - api-level: 34
+            display-size: 800x1280
+            display-density: 160
+          - api-level: 36
+            display-size: 480x1024
+            display-density: 240
+          - api-level: '37.0'
+            display-size: 1080x2400
+            display-density: 420
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -163,7 +186,7 @@ jobs:
           # These tests no longer assert device network isolation. Bundled
           # model integrity is checked, while offline mode remains a separate
           # acceptance requirement; do not claim it passed from this workflow.
-          script: 'set -eu; echo WAVE_API_${{ matrix.api-level }}_BEGIN; adb shell getprop ro.build.version.sdk; echo WAVE_GRADLE_BEGIN; cd android && test -x ./gradlew && ./gradlew :app:connectedDebugAndroidTest --no-daemon --no-parallel --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8" --stacktrace'
+          script: 'set -eu; echo WAVE_API_${{ matrix.api-level }}_BEGIN; adb shell getprop ro.build.version.sdk; adb shell wm size ${{ matrix.display-size }}; adb shell wm density ${{ matrix.display-density }}; echo WAVE_DISPLAY_PROFILE; adb shell wm size; adb shell wm density; echo WAVE_GRADLE_BEGIN; cd android && test -x ./gradlew && ./gradlew :app:connectedDebugAndroidTest --no-daemon --no-parallel --max-workers=2 -Dorg.gradle.jvmargs="-Xmx1536m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8" --stacktrace'
 
       - name: Record actual Android OCR instrumentation results
         if: always()

@@ -82,13 +82,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Оптимизация под экраны современных телефонов -->
-            <meta-data
-                android:name="android.max_aspect"
-                android:value="2.4" />
-            <meta-data
-                android:name="android.min_aspect"
-                android:value="1.0" />
         </activity>
 
         <!-- Провайдер файлов для работы с медиа и экспортом -->

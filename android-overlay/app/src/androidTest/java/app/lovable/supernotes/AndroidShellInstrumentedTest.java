@@ -127,12 +127,14 @@ public class AndroidShellInstrumentedTest {
             boolean settingsReady=false;
             for(int attempt=0;attempt<20;attempt++){
                 if("true".equals(evaluate(web,
-                    "(function(){var h=document.querySelector('header');return !!h && /settings/.test(location.pathname) && h.getBoundingClientRect().height>0})()"))){
+                    "(function(){var h=document.querySelector('header');var hash=location.hash;return !!h && /^#\\/settings(?:[/?#]|$)/.test(hash) && h.getBoundingClientRect().height>0})()"))){
                     settingsReady=true;break;
                 }
                 Thread.sleep(300);
             }
-            assertTrue("Settings route failed to mount",settingsReady);
+            assertTrue("Settings route failed to mount; location and header="+
+                evaluate(web,"(function(){return JSON.stringify({path:location.pathname,hash:location.hash,headers:Array.from(document.querySelectorAll('header')).map(h=>({text:h.innerText.slice(0,80),height:h.getBoundingClientRect().height}))});})()"),
+                settingsReady);
             String settingsRaw=evaluate(web,
                 "(function(){var h=document.querySelector('header').getBoundingClientRect();var b=document.querySelector('.wave-bottom-nav').getBoundingClientRect();return JSON.stringify({headerTop:h.top,headerBottom:h.bottom,bottomTop:b.top,bottomEnd:b.bottom,viewportHeight:innerHeight});})()");
             JSONObject settings=new JSONObject((String)new JSONTokener(settingsRaw).nextValue());
