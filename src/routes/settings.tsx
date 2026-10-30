@@ -36,7 +36,9 @@ import {
   useLockConfig,
   verifyBiometric,
   verifyPin,
+  biometricAvailability,
 } from "@/lib/app-lock";
+import { pinIsValid } from "@/lib/pin-security";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [
@@ -162,6 +164,8 @@ function SettingsPage() {
   const { pinEnabled, bioEnabled } = useLockConfig();
   const [pinDialog, setPinDialog] = useState(false);
   const [pinValue, setPinValue] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
+  const [securityBusy, setSecurityBusy] = useState(false);
   const [enableBioAfterPin, setEnableBioAfterPin] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [authPin, setAuthPin] = useState("");
@@ -234,6 +238,7 @@ function SettingsPage() {
   const openPinSetup = (enableBiometricsAfterwards: boolean) => {
     setEnableBioAfterPin(enableBiometricsAfterwards);
     setPinValue("");
+    setPinConfirm("");
     setPinDialog(true);
   };
 
@@ -248,13 +253,7 @@ function SettingsPage() {
     setAuthError(false);
     setAuthOpen(true);
     if (bioEnabled) {
-      void verifyBiometric().then((ok) => {
-        if (ok) {
-          setAuthOpen(false);
-          setPendingAction(null);
-          action();
-        }
-      });
+      // System fingerprint prompt is requested only by the explicit button; PIN always works.
     }
   };
 
@@ -313,15 +312,46 @@ function SettingsPage() {
     }
   };
 
+  const enableBiometrics = async () => {
+    if (securityBusy) return;
+    if (!pinEnabled) { openPinSetup(true); return; }
+    setSecurityBusy(true);
+    try {
+      const status = await biometricAvailability();
+      if (!status.available) { toast.error(status.reason); return; }
+      if (!await verifyBiometric()) { toast.error("Отпечаток не подтверждён. PIN продолжает работать."); return; }
+      setBiometrics(true);
+      toast.success("Биометрия включена. PIN остаётся резервным.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось включить биометрию");
+    } finally { setSecurityBusy(false); }
+  };
+
   const savePin = async () => {
-    const v = pinValue.trim();
-    if (v.length < 4) return;
-    await setPin(v);
-    if (enableBioAfterPin) setBiometrics(true);
-    setEnableBioAfterPin(false);
-    setPinValue("");
-    setPinDialog(false);
-    toast.success(t("saved"));
+    const value = pinValue.trim();
+    if (!pinIsValid(value)) { toast.error("Укажите PIN из 6–8 цифр, без простой последовательности."); return; }
+    if (value !== pinConfirm.trim()) { toast.error("PIN и повторный ввод не совпадают."); return; }
+    if (securityBusy) return;
+    setSecurityBusy(true);
+    try {
+      await setPin(value);
+      const wantBio=enableBioAfterPin;
+      setEnableBioAfterPin(false);
+      setPinValue("");
+      setPinConfirm("");
+      setPinDialog(false);
+      toast.success("PIN установлен. Сохраните его для резервного входа.");
+      if (wantBio) {
+        const status=await biometricAvailability();
+        if (!status.available) toast.info(status.reason);
+        else if (await verifyBiometric()) {
+          setBiometrics(true);
+          toast.success("Отпечаток подтверждён. PIN остаётся резервным.");
+        } else toast.info("Отпечаток не подтверждён; защита PIN включена.");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось установить PIN");
+    } finally { setSecurityBusy(false); }
   };
 
   return (
@@ -382,7 +412,7 @@ function SettingsPage() {
               onChange={(next) => {
                 if (next) {
                   // Enabling biometrics always requires a backup PIN first.
-                  if (pinEnabled) setBiometrics(true);
+                  if (pinEnabled) void enableBiometrics();
                   else openPinSetup(true);
                 } else {
                   // Disabling requires a successful biometric scan or the PIN.
@@ -470,7 +500,7 @@ function SettingsPage() {
             <Btn variant="ghost" onClick={() => setPinDialog(false)}>
               {t("cancel")}
             </Btn>
-            <Btn variant="primary" onClick={savePin} disabled={pinValue.length < 4}>
+            <Btn variant="primary" onClick={savePin} disabled={securityBusy || !pinIsValid(pinValue) || pinValue !== pinConfirm}>
               {t("save")}
             </Btn>
           </>
@@ -482,9 +512,16 @@ function SettingsPage() {
           autoFocus
           value={pinValue}
           onChange={(e) => setPinValue(e.target.value.replace(/\D/g, "").slice(0, 8))}
-          placeholder={t("pin_placeholder")}
+          placeholder="Новый PIN: 6–8 цифр"
+          autoComplete="new-password"
           className="h-9 w-full rounded-xl border border-border bg-secondary/40 px-3 text-sm outline-none focus:border-primary"
         />
+        <input type="password" inputMode="numeric" autoComplete="new-password"
+          aria-label="Повторите PIN" value={pinConfirm}
+          onChange={event=>setPinConfirm(event.target.value.replace(/\D/g,"").slice(0,8))}
+          placeholder="Повторите PIN"
+          className="mt-2 h-9 w-full rounded-xl border border-border bg-secondary/40 px-3 text-sm outline-none focus:border-primary" />
+        <p className="mt-2 text-xs text-muted-foreground">PIN необходим для входа, если отпечаток пальца недоступен.</p>
       </Modal>
 
       {/* Authentication gate (biometric scan or current PIN) */}
