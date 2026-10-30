@@ -29,6 +29,8 @@ assert.ok(home.includes("useOneTimeDedication(\n    notes.length, hydrated && st
 assert.ok(home.includes('<NativeAdCard slotKey="home-first" />\n          {activeFolder === "all" && showOneTimeDedication && <OneTimeDedication />}'));
 assert.ok(component.includes("Любимой маме от сына"));
 assert.ok(component.includes("Мухановой Айслу"));
+assert.ok(component.indexOf("Мухановой Айслу") < component.indexOf("Любимой маме от сына"),
+  "Dedicated mother name must be first and dedication phrase second");
 assert.ok(component.includes("Дай пожалуйста корiмдiк"));
 assert.ok(component.includes(">560</span>"));
 assert.ok(component.includes(">тенге</span>"));

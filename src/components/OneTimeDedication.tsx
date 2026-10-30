@@ -73,10 +73,10 @@ export function OneTimeDedication() {
       className="pointer-events-none flex min-h-[280px] w-full flex-1 select-none flex-col items-center justify-center gap-3 px-3 py-8 text-center"
     >
       <p className="text-xl font-semibold leading-snug text-foreground">
-        Любимой маме от сына
+        Мухановой Айслу
       </p>
       <p className="text-lg font-medium leading-snug text-foreground">
-        Мухановой Айслу
+        Любимой маме от сына
       </p>
       <p className="mt-2 text-xl font-semibold leading-snug text-primary">
         Дай пожалуйста корiмдiк
