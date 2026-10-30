@@ -78,6 +78,7 @@ import { useT } from "@/lib/i18n";
 import { pickPdfFile, savePdfFile } from "@/lib/pdf-files";
 import { toast } from "sonner";
 import {inspectWaveFile,receiveWaveNote,shareWaveNote} from "@/lib/note-transfer";
+import {findReturnedOriginal,combineReturnedBodies,replacementBackup} from "@/lib/wave-note-conflicts";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -119,7 +120,7 @@ function Index() {
   const [moveDialog,setMoveDialog]=useState(false);
   const [copyBusy,setCopyBusy]=useState(false);
   const [transferBusy,setTransferBusy]=useState(false);
-  const [incomingWave,setIncomingWave]=useState<{file:File;title:string;originId:string}|null>(null);
+  const [incomingWave,setIncomingWave]=useState<{file:File;title:string;originId:string;kind:"note"|"pdf"}|null>(null);
   const [folderDialog, setFolderDialog] = useState<FolderDialogState>(null);
   // The menu floats above the list without moving folders or ads.
   // Google renders native ads above WebView; temporarily hide that overlay
@@ -217,17 +218,38 @@ function Index() {
     picker.addEventListener("change",()=>{
       const file=picker.files?.[0];picker.remove();
       if(!file)return;
-      void inspectWaveFile(file).then(info=>setIncomingWave({file,title:info.title,originId:info.originId}))
+      void inspectWaveFile(file).then(info=>setIncomingWave({file,title:info.title,originId:info.originId,kind:info.kind}))
         .catch(error=>toast.error(error instanceof Error?error.message:"Файл Wave Notes повреждён"));
     });
     document.body.appendChild(picker);picker.click();
   };
-  const doImportWave=async()=>{
+  const returnedOriginal=incomingWave?findReturnedOriginal(notes,incomingWave.originId,incomingWave.kind):undefined;
+  const doImportWave=async(mode:"copy"|"replace"|"combine"="copy")=>{
     if(!incomingWave||transferBusy)return;
+    const original=findReturnedOriginal(notes,incomingWave.originId,incomingWave.kind);
+    if(mode!=="copy"&&(!original||original.kind==="pdf"||incomingWave.kind==="pdf")){
+      toast.error("Для PDF или без исходной заметки можно сохранить отдельную копию");return;
+    }
     setTransferBusy(true);
     try{
-      await receiveWaveNote(incomingWave.file,activeFolder==="all"?"all":activeFolder);
-      setIncomingWave(null);toast.success("Заметка получена как отдельная копия");
+      // Import to a fresh ID first. Original remains intact if attachment
+      // extraction, storage or archive validation fails.
+      const incoming=await receiveWaveNote(incomingWave.file,activeFolder==="all"?"all":activeFolder);
+      if(mode==="copy"){
+        toast.success("Заметка получена как отдельная копия");
+      }else if(original){
+        if(mode==="replace"){
+          // Never replace a user's only copy: the backup is a real note,
+          // saved before changing the original.
+          createNote(replacementBackup(original,crypto.randomUUID()));
+          updateNote(original.id,{body:incoming.body,style:incoming.style,title:incoming.title.replace(/ — получено$/,"")});
+          toast.success("Исходная версия сохранена как резервная заметка");
+        }else{
+          updateNote(original.id,{body:combineReturnedBodies(original,incoming)});
+          toast.success("Обе версии объединены. Полученная копия также сохранена");
+        }
+      }
+      setIncomingWave(null);
     }catch(error){toast.error(error instanceof Error?error.message:"Не удалось получить заметку");}
     finally{setTransferBusy(false);}
   };
@@ -418,12 +440,15 @@ function Index() {
           <DialogHeader><DialogTitle>Получить заметку Wave Notes</DialogTitle></DialogHeader>
           <p className="text-sm">{incomingWave?.title}</p>
           <p className="text-xs text-muted-foreground">
-            Даже если исходная заметка уже существует, полученный файл будет сохранён отдельно.
-            Никакие ваши старые заметки не будут перезаписаны.
+            {returnedOriginal ? "Найдена исходная заметка. Можно сохранить копию, объединить обе версии или заменить исходную с созданием резервной копии." : "Исходная заметка не найдена. Полученный файл будет сохранён отдельно; другие заметки не изменятся."}
           </p>
           <DialogFooter>
             <Button variant="outline" disabled={transferBusy} onClick={()=>setIncomingWave(null)}>Отмена</Button>
-            <Button disabled={transferBusy} onClick={()=>void doImportWave()}>Сохранить копию</Button>
+            <Button disabled={transferBusy} onClick={()=>void doImportWave("copy")}>Сохранить копию</Button>
+            {returnedOriginal?.kind!=="pdf"&&returnedOriginal&&<>
+              <Button variant="outline" disabled={transferBusy} onClick={()=>void doImportWave("combine")}>Объединить</Button>
+              <Button variant="destructive" disabled={transferBusy} onClick={()=>void doImportWave("replace")}>Заменить с резервной копией</Button>
+            </>}
           </DialogFooter>
         </DialogContent>
       </Dialog>
