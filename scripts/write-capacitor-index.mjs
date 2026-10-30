@@ -131,36 +131,35 @@ ${cssLinks}
         display: flex; align-items: center; justify-content: center;
         background: #050609; color: #fff; isolation: isolate;
         font-family: system-ui, -apple-system, Roboto, Arial, sans-serif;
-        opacity: 1; transition: opacity .30s ease-out;
+        opacity: 1; transition: opacity 420ms cubic-bezier(.22,1,.36,1);
       }
       #wave-intro.wave-intro-leave { opacity: 0; pointer-events: none; }
       #wave-intro-atmosphere, #wave-intro-beam {
         position: absolute; inset: 0; opacity: 0; pointer-events: none;
-        will-change: opacity;
+        /* Static full-viewport gradients: animate alpha, not paint geometry. */
       }
       #wave-intro-atmosphere {
         background:
-          linear-gradient(180deg, rgba(27,44,67,.37) 0%,
-            rgba(17,30,48,.22) 45%, rgba(8,16,30,.10) 75%, transparent 100%),
-          radial-gradient(ellipse 125% 90% at 50% 15%,
-            rgba(158,188,220,.22), rgba(80,112,145,.11) 54%, transparent 96%);
+          linear-gradient(180deg, rgba(24,39,58,.20) 0%,
+            rgba(17,29,45,.15) 46%, rgba(9,17,28,.07) 78%, transparent 100%),
+          radial-gradient(ellipse 145% 110% at 50% 7%,
+            rgba(101,130,166,.17) 0%, rgba(62,88,121,.12) 52%, transparent 96%);
       }
       #wave-intro-beam {
+        /* No white spotlight: low-energy blue mist distributed edge to edge. */
         background:
-          radial-gradient(ellipse 100% 97% at 50% -6%,
-            rgba(243,249,255,.35), rgba(177,211,240,.17) 36%,
-            rgba(86,116,151,.06) 74%, transparent 100%),
-          linear-gradient(90deg, rgba(112,145,182,.02) 0%,
-            rgba(170,204,235,.07) 25%, rgba(240,248,255,.17) 50%,
-            rgba(170,204,235,.07) 75%, rgba(112,145,182,.02) 100%);
+          radial-gradient(ellipse 130% 115% at 50% -11%,
+            rgba(141,172,207,.14) 0%, rgba(98,133,172,.085) 48%,
+            transparent 96%),
+          linear-gradient(90deg, rgba(31,49,72,.035) 0%,
+            rgba(75,101,130,.085) 50%, rgba(31,49,72,.035) 100%);
       }
       #wave-intro-glow {
-        position: absolute; left: 50%; top: 44%;
-        width: min(86vw, 350px); height: min(46vw, 200px);
-        transform: translate(-50%,-50%); opacity: 0; pointer-events: none;
-        border-radius: 50%;
-        background: radial-gradient(ellipse,
-          rgba(247,251,255,.28), rgba(183,211,240,.10) 45%, transparent 77%);
+        /* Replace the visible circular halo with broad, barely visible fog. */
+        position: absolute; inset: 0; opacity: 0; pointer-events: none;
+        background: radial-gradient(ellipse 105% 78% at 50% 45%,
+          rgba(89,118,151,.075) 0%, rgba(71,99,134,.035) 51%,
+          transparent 100%);
       }
       #wave-intro-content {
         position: relative; z-index: 1; width: min(94vw, 390px);
@@ -197,36 +196,35 @@ ${cssLinks}
         animation: wave-beam 4.14s ease-in-out both;
       }
       #wave-intro.wave-intro-play #wave-intro-glow {
-        animation: wave-halo 2.8s ease-in-out .38s both;
+        animation: wave-halo 3.0s ease-in-out .12s both;
       }
       #wave-intro.wave-intro-play #wave-intro-logo {
-        animation: wave-mark-arrive 1.85s cubic-bezier(.17,.76,.26,1) .22s both;
+        animation: wave-mark-arrive 1.73s cubic-bezier(.22,.7,.25,1) .07s both;
       }
       #wave-intro.wave-intro-play .wave-intro-outline {
-        animation: wave-contour 1.35s ease-in-out .35s both;
+        animation: wave-contour 1.32s ease-in-out .13s both;
       }
       #wave-intro.wave-intro-play .wave-intro-solid {
-        animation: wave-mark-fill .93s ease-out 1.17s both;
+        animation: wave-mark-fill .88s ease-out 1.02s both;
       }
       #wave-intro.wave-intro-play #wave-intro-title {
-        animation: wave-words .72s ease-out 1.90s both;
+        animation: wave-words .78s ease-out 1.73s both;
       }
       #wave-intro.wave-intro-play #wave-intro-subtitle {
-        animation: wave-words .72s ease-out 2.24s both;
+        animation: wave-words .78s ease-out 2.08s both;
       }
       @keyframes wave-atmosphere {
-        0% { opacity: .04; } 12% { opacity: .55; }
-        34% { opacity: .9; } 65% { opacity: .7; } 100% { opacity: .46; }
+        0% { opacity: .15; } 12% { opacity: .45; }
+        34% { opacity: .72; } 65% { opacity: .63; } 100% { opacity: .49; }
       }
       @keyframes wave-beam {
-        0% { opacity: 0; } 11% { opacity: .38; }
-        28% { opacity: .88; } 51% { opacity: .65; }
-        74% { opacity: .78; } 100% { opacity: .31; }
+        0% { opacity: .025; } 12% { opacity: .21; }
+        32% { opacity: .60; } 58% { opacity: .48; }
+        78% { opacity: .53; } 100% { opacity: .31; }
       }
       @keyframes wave-halo {
-        0% { opacity: 0; transform: translate(-50%,-50%) scale(.84); }
-        42% { opacity: .78; } 76% { opacity: .48; }
-        100% { opacity: .18; transform: translate(-50%,-50%) scale(1.04); }
+        0% { opacity: 0; } 42% { opacity: .34; }
+        76% { opacity: .27; } 100% { opacity: .16; }
       }
       @keyframes wave-mark-arrive {
         0% { transform: translateY(12px) scale(.925); }
@@ -248,8 +246,8 @@ ${cssLinks}
         #wave-intro *, #wave-intro *::before, #wave-intro *::after {
           animation: none !important;
         }
-        #wave-intro-atmosphere { opacity: .46 !important; }
-        #wave-intro-beam { opacity: .3 !important; }
+        #wave-intro-atmosphere { opacity: .49 !important; }
+        #wave-intro-beam { opacity: .31 !important; }
         #wave-intro-glow { opacity: .16 !important; }
         #wave-intro-logo { transform: none !important; }
         #wave-intro-logo .wave-intro-outline { opacity: 0 !important; }
@@ -277,13 +275,15 @@ ${cssLinks}
       </div>
     </div>
     <script>
-      /* Begin on first WebView frame instead of waiting for React boot.
-         Capacitor's later begin() call is idempotent and cannot restart this
-         ~4.6 second studio intro. A 5.2s watchdog prevents a blocked startup. */
+      /* Start light immediately on the first WebView frame; on slower devices
+         the Android system layer is kept brief and uses the identical dark
+         background. Never restart the animation when React subsequently mounts. */
       (function () {
         var intro = document.getElementById("wave-intro");
         if (!intro) return;
-        var born = Date.now(), started = false, closed = false, finishTimer, safety;
+        var born = Date.now(), started = false, closed = false;
+        var finishTimer, safety, exitStarted = false;
+
         function finish() {
           if (closed) return;
           closed = true;
@@ -293,13 +293,28 @@ ${cssLinks}
           window.__waveNotesIntro = null;
           setTimeout(function () {
             if (intro.parentNode) intro.parentNode.removeChild(intro);
-          }, 325);
+          }, 460);
+        }
+        function appHasPainted() {
+          var root = document.getElementById("root");
+          return !!(root && root.childElementCount);
+        }
+        function exitWhenReady() {
+          if (exitStarted || closed) return;
+          // A nearly complete React mount can otherwise cause a black flash
+          // between the branding frame and the first usable app frame.
+          if (!appHasPainted() && Date.now() - born < 4900) {
+            finishTimer = setTimeout(exitWhenReady, 80);
+            return;
+          }
+          exitStarted = true;
+          finish();
         }
         function begin() {
           if (started || closed) return;
           started = true;
           intro.classList.add("wave-intro-play");
-          finishTimer = setTimeout(finish, Math.max(0, 4320 - (Date.now() - born)));
+          finishTimer = setTimeout(exitWhenReady, Math.max(0, 4210 - (Date.now() - born)));
         }
         safety = setTimeout(finish, 5200);
         window.__waveNotesIntro = { begin: begin, finish: finish };
