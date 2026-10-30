@@ -74,6 +74,8 @@ jobs:
 
       - name: Verify PDF text editing preserves original on taps and rotates with page
         run: bun scripts/test-pdf-page-editor.ts
+      - name: Verify backup PIN, migration and Android biometric gate
+        run: bun scripts/test-app-lock.ts
 
       - name: Verify diagnostic screen separation and cross-route retry
         run: bun scripts/test-admob-diagnostics.ts
