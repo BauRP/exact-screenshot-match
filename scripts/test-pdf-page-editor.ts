@@ -111,7 +111,7 @@ assert.ok(src.includes("sameSourceText(item,sourceBox,page)"));
 assert.ok(!src.includes("Исходный PDF-шрифт недоступен. Выберите замену в панели перед вводом."));
 assert.equal(sourceLineFits("hello",40,s=>s.length*5),true);
 assert.equal(sourceLineFits("hello world",40,s=>s.length*5),false);
-assert.equal(sourceLineFits("hello\\nworld",100,s=>s.length*5),false);
+assert.equal(sourceLineFits("hello\nworld",100,s=>s.length*5),false);
 const sourceRect={x:12,y:22,width:40,height:2};
 assert.equal(safeSourceRight(sourceRect,[sourceRect,{x:73,y:22,width:10,height:2}]),72.7);
 assert.equal(safeSourceRight(sourceRect,[sourceRect,{x:73,y:50,width:10,height:2}]),98);
