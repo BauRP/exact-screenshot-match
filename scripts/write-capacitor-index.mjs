@@ -152,9 +152,11 @@ ${cssLinks}
         background: radial-gradient(ellipse, rgba(244,250,255,.22), transparent 67%);
         filter: blur(21px); pointer-events: none;
       }
-      #wave-intro.wave-intro-play #wave-intro-atmosphere,
+      #wave-intro.wave-intro-play #wave-intro-atmosphere {
+        animation: wave-atmosphere 3.1s ease-out both;
+      }
       #wave-intro.wave-intro-play #wave-intro-glow {
-        animation: wave-light 3.1s ease-out both;
+        animation: wave-halo 2.7s ease-out .4s both;
       }
       #wave-intro-content {
         position: relative; z-index: 1; width: min(94vw, 360px);
@@ -169,20 +171,20 @@ ${cssLinks}
         opacity: 0; filter: drop-shadow(0 0 6px rgba(255,255,255,.7));
       }
       #wave-intro-logo .wave-intro-solid {
-        fill: #fff; opacity: 1;
+        fill: #fff; opacity: 0;
         filter: drop-shadow(0 0 8px rgba(235,245,255,.28));
       }
       #wave-intro-title {
         margin-top: 12px; font-weight: 700;
         font-size: clamp(19px, 5.45vw, 25px); line-height: 1.2;
-        white-space: nowrap; letter-spacing: .1px;
+        white-space: nowrap; letter-spacing: .1px; opacity: 0;
         text-shadow: 0 0 14px rgba(246,250,255,.22);
       }
       #wave-intro-subtitle {
         margin-top: 8px; padding-left: 4px;
         color: rgba(241,245,252,.78);
         font-size: 10px; font-weight: 500; letter-spacing: 4px;
-        line-height: 1.3; white-space: nowrap;
+        line-height: 1.3; white-space: nowrap; opacity: 0;
       }
       #wave-intro.wave-intro-play #wave-intro-beam {
         animation: wave-light 2.8s ease-out both;
@@ -198,6 +200,14 @@ ${cssLinks}
       }
       #wave-intro.wave-intro-play #wave-intro-subtitle {
         animation: wave-words .70s ease-out 2.07s both;
+      }
+      @keyframes wave-atmosphere {
+        0% { opacity: 0; } 35% { opacity: .68; } 100% { opacity: .2; }
+      }
+      @keyframes wave-halo {
+        0% { opacity: 0; transform: translate(-50%,-50%) scale(.7); }
+        40% { opacity: .62; }
+        100% { opacity: .12; transform: translate(-50%,-50%) scale(1.18); }
       }
       @keyframes wave-light {
         0% { opacity: 0; transform: translateX(-50%) scaleY(.65); }
@@ -221,6 +231,7 @@ ${cssLinks}
       @media (prefers-reduced-motion: reduce) {
         #wave-intro *, #wave-intro *::before, #wave-intro *::after { animation: none !important; }
         #wave-intro-beam { opacity: .08 !important; }
+        #wave-intro-atmosphere, #wave-intro-glow { opacity: .1 !important; }
         #wave-intro-logo .wave-intro-outline { opacity: 0 !important; }
         #wave-intro-logo .wave-intro-solid, #wave-intro-title, #wave-intro-subtitle { opacity: 1 !important; }
       }
