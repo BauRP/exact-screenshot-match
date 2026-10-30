@@ -68,6 +68,12 @@ jobs:
           - api-level: 34
             display-size: 412x915
             display-density: 210
+            intro_variant: full
+          - api-level: 34
+            display-size: 412x915
+            display-density: 210
+            intro_variant: disabled
+            # Cross-check a second OS version for startup animation effects.
           - api-level: 34
             display-size: 800x1280
             display-density: 160

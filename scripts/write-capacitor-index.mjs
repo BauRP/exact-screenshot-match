@@ -136,10 +136,9 @@ ${cssLinks}
       #wave-intro-beam {
         position: absolute; top: -9%; left: 50%;
         width: 140vw; max-width: 900px; height: 108%;
-        transform: translateX(-50%); opacity: .1;
-        background: linear-gradient(90deg, transparent 2%, rgba(200,222,246,.025) 28%, rgba(227,239,255,.28) 50%, rgba(200,222,246,.025) 72%, transparent 98%);
-        clip-path: polygon(43% 0,57% 0,100% 100%,0 100%);
-        filter: blur(24px);
+        transform: translateX(-50%); opacity: 0;
+        background: linear-gradient(90deg, transparent 2%, rgba(200,222,246,.035) 24%, rgba(227,239,255,.20) 50%, rgba(200,222,246,.035) 76%, transparent 98%);
+        /* Full-width gradient lighting: no expensive clipped blur layer. */
       }
       #wave-intro-atmosphere {
         position: absolute; inset: -5% -20%; opacity: 0;
@@ -150,7 +149,7 @@ ${cssLinks}
         position: absolute; top: 50%; left: 50%; width: 100vw; height: 40vh;
         transform: translate(-50%,-50%); opacity: 0;
         background: radial-gradient(ellipse, rgba(244,250,255,.22), transparent 67%);
-        filter: blur(21px); pointer-events: none;
+        pointer-events: none;
       }
       #wave-intro.wave-intro-play #wave-intro-atmosphere {
         animation: wave-atmosphere 3.1s ease-out both;
@@ -167,18 +166,16 @@ ${cssLinks}
       #wave-intro-logo .wave-intro-outline {
         fill: none; stroke: #f8fbff; stroke-width: 2;
         stroke-linejoin: round; stroke-linecap: round;
-        stroke-dasharray: 1000; stroke-dashoffset: 0;
-        opacity: 0; filter: drop-shadow(0 0 6px rgba(255,255,255,.7));
+        opacity: 0;
       }
       #wave-intro-logo .wave-intro-solid {
         fill: #fff; opacity: 0;
-        filter: drop-shadow(0 0 8px rgba(235,245,255,.28));
       }
       #wave-intro-title {
         margin-top: 12px; font-weight: 700;
         font-size: clamp(19px, 5.45vw, 25px); line-height: 1.2;
         white-space: nowrap; letter-spacing: .1px; opacity: 0;
-        text-shadow: 0 0 14px rgba(246,250,255,.22);
+        /* Contrast comes from white text and the light behind it. */
       }
       #wave-intro-subtitle {
         margin-top: 8px; padding-left: 4px;
@@ -215,10 +212,10 @@ ${cssLinks}
         100% { opacity: .09; transform: translateX(-50%) scaleY(1); }
       }
       @keyframes wave-stroke {
-        0% { opacity: 0; stroke-dashoffset: 1000; }
-        15% { opacity: 1; }
-        85% { opacity: 1; stroke-dashoffset: 0; }
-        100% { opacity: 0; stroke-dashoffset: 0; }
+        0% { opacity: 0; }
+        25% { opacity: .95; }
+        80% { opacity: .75; }
+        100% { opacity: 0; }
       }
       @keyframes wave-fill {
         from { opacity: 0; transform: translateY(7px) scale(.97); transform-origin: center; }
