@@ -20,6 +20,7 @@ import {
   FileInput,
   Plus,
   ListChecks,
+  Search,
   Table2,
   Trash2,
 } from "lucide-react";
@@ -79,6 +80,7 @@ import { pickPdfFile, savePdfFile } from "@/lib/pdf-files";
 import { toast } from "sonner";
 import {inspectWaveFile,receiveWaveNote,shareWaveNote} from "@/lib/note-transfer";
 import {findReturnedOriginal,combineReturnedBodies,replacementBackup} from "@/lib/wave-note-conflicts";
+import {noteMatchesSearch,type NoteSearchFilter} from "@/lib/note-search";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -118,6 +120,10 @@ function Index() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [colorDialog,setColorDialog]=useState(false);
   const [moveDialog,setMoveDialog]=useState(false);
+  const [searchOpen,setSearchOpen]=useState(false);
+  const [searchTerm,setSearchTerm]=useState("");
+  const [searchAllFolders,setSearchAllFolders]=useState(false);
+  const [searchFilter,setSearchFilter]=useState<NoteSearchFilter>("all");
   const [copyBusy,setCopyBusy]=useState(false);
   const [transferBusy,setTransferBusy]=useState(false);
   const [incomingWave,setIncomingWave]=useState<{file:File;title:string;originId:string;kind:"note"|"pdf"}|null>(null);
@@ -194,10 +200,10 @@ function Index() {
   };
 
 
-  const filteredNotes = useMemo(() => {
-    if (activeFolder === "all") return notes;
-    return notes.filter((note) => (note.folderId ?? "all") === activeFolder);
-  }, [activeFolder, notes]);
+  const filteredNotes = useMemo(() => notes.filter((note) => {
+    const inScope=searchOpen&&searchAllFolders||activeFolder==="all"||(note.folderId??"all")===activeFolder;
+    return inScope && (!searchOpen || noteMatchesSearch(note,searchTerm,searchFilter));
+  }),[activeFolder,notes,searchOpen,searchAllFolders,searchTerm,searchFilter]);
 
   // Opens an in-memory draft: nothing is stored until the checkmark is tapped.
   const createNoteInCurrentFolder = () => {
@@ -336,6 +342,11 @@ function Index() {
           title={t("general")}
           right={
             <>
+              <button type="button" aria-label="Поиск по заметкам" aria-expanded={searchOpen}
+                onClick={()=>setSearchOpen(value=>!value)}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary text-foreground hover:bg-secondary/70">
+                <Search className="h-4 w-4"/>
+              </button>
               {selected.size > 0 && (
                 <div className="flex items-center gap-1.5 animate-in fade-in duration-150">
                   {selected.size === 1 && (
@@ -412,6 +423,28 @@ function Index() {
             }
           }}
         />
+        {searchOpen && <div className="mx-3 mt-2 rounded-xl border border-border bg-secondary/40 p-2" role="search">
+          <div className="flex items-center gap-2">
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground"/>
+            <Input aria-label="Поиск по названию и содержимому" autoComplete="off" value={searchTerm}
+              onChange={event=>setSearchTerm(event.target.value)} placeholder="Найти заметку или @todo..." className="h-10 min-w-0 flex-1"/>
+            <button type="button" aria-label="Очистить поиск" className="h-10 shrink-0 px-2 text-xs text-muted-foreground"
+              onClick={()=>{setSearchTerm("");setSearchFilter("all")}}>Сброс</button>
+          </div>
+          <div className="no-scrollbar mt-2 flex gap-2 overflow-x-auto pb-1">
+            {([["all","Все"],["todo","Задачи"],["images","Фото"],["locked","Защищённые"]] as const).map(([value,label])=>
+              <button key={value} type="button" aria-pressed={searchFilter===value}
+                onClick={()=>setSearchFilter(value)}
+                className={`min-h-9 shrink-0 rounded-full border px-3 text-xs ${searchFilter===value?"border-primary bg-primary text-primary-foreground":"border-border bg-background"}`}>{label}</button>
+            )}
+            {activeFolder!=="all"&&<button type="button" aria-pressed={searchAllFolders}
+              onClick={()=>setSearchAllFolders(value=>!value)}
+              className={`min-h-9 shrink-0 rounded-full border px-3 text-xs ${searchAllFolders?"border-primary bg-primary text-primary-foreground":"border-border bg-background"}`}>
+              {searchAllFolders?"По всем папкам":"Только эта папка"}
+            </button>}
+          </div>
+          {searchFilter==="locked"&&<p className="px-1 text-xs text-muted-foreground">Защита отдельных заметок пока не добавлена.</p>}
+        </div>}
 
       </div>
 
@@ -420,7 +453,7 @@ function Index() {
           className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-4 [-webkit-overflow-scrolling:touch]"
           style={{ marginBottom: "var(--wave-bottom-nav-occlusion, 104px)" }}
         >
-          <NativeAdCard slotKey="home-first" />
+          {searchOpen ? <p className="py-8 text-center text-sm text-muted-foreground">Совпадений не найдено</p> : <NativeAdCard slotKey="home-first" />}
         </main>
       ) : (
         <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-4 [-webkit-overflow-scrolling:touch]" style={{ marginBottom: "var(--wave-bottom-nav-occlusion, 104px)" }}>
