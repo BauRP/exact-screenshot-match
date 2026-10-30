@@ -7,7 +7,7 @@ import { zip, unzip, strToU8, strFromU8 } from "fflate";
 import {audioIdsInHtml,loadAudioFile,saveNewAudioFile,deleteAudioFile} from "./audio-files";
 import {loadPdfFile,saveNewPdfFile,deletePdfFile} from "./pdf-files";
 import {createNote,type Note} from "./notes-store";
-import {imageIdsInHtml,loadImageFile,saveNewImageFile,deleteImageFile} from "./image-files";
+import {imageIdsInHtml,loadImageFile,saveNewImageFile,deleteImageFile,imageBlobFromBytes} from "./image-files";
 
 const LIMIT=80*1024*1024;
 const ID=/^[a-zA-Z0-9_-]{1,128}$/;
@@ -56,6 +56,7 @@ function parseManifest(files:Record<string,Uint8Array>):Envelope{
  if(imageRefs.some(id=>!imageIds.includes(id)))throw Error("Вложение фотографии отсутствует в описании");
  for(const id of imageIds){
   if(!files["images/"+id+".blob"]?.byteLength)throw Error("Отсутствует фотография");
+  imageBlobFromBytes(files["images/"+id+".blob"]);
  }
  if(p.hasPdf){
   if(n.kind!=="pdf"||!files["document.pdf"]?.byteLength)throw Error("Отсутствует оригинал PDF");
@@ -127,8 +128,7 @@ export async function receiveWaveNote(file:File,folderId:string):Promise<Note>{
   for(const imageId of p.imageIds||[]){
    const fresh=crypto.randomUUID();
    const data=files["images/"+imageId+".blob"];
-   const type=data[0]===0x89&&data[1]===0x50?"image/png":data[0]===0xff&&data[1]===0xd8?"image/jpeg":"image/webp";
-   await saveNewImageFile(fresh,new Blob([data.slice().buffer],{type}));
+   await saveNewImageFile(fresh,imageBlobFromBytes(data));
    generatedImages.push(fresh);
    body=body.split('data-image-id="'+imageId+'"').join('data-image-id="'+fresh+'"');
    body=body.split("data-image-id='"+imageId+"'").join("data-image-id='"+fresh+"'");
