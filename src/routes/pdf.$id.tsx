@@ -28,7 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { hasPdfDraftChanges, hasSaveablePdfContent } from "@/lib/pdf-edit-guard";
 import { PdfMarginRuler, type PdfMargins } from "@/components/pdf/PdfMarginRuler";
-import { normalizePdfMargins, wrapPdfGlyphs, pdfBaselineTopPx } from "@/lib/pdf-text-layout";
+import { normalizePdfMargins, wrapPdfGlyphs, pdfBaselineTopPx, displayPdfFontSize } from "@/lib/pdf-text-layout";
 import { displayToSourceRect, pdfTextBounds, sourceOverlayTransform } from "@/lib/pdf-page-geometry";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ColorGrid, PALETTE } from "@/components/ColorGrid";
@@ -175,7 +175,8 @@ function PdfViewerScreen() {
   const [searching, setSearching] = useState(false);
   const [textTool, setTextTool] = useState(false);
   // Ruler is page-relative, independent of zoom, scroll position and viewport pixels.
-  const [margins, setMargins] = useState<PdfMargins>({ left: 8, right: 92 });
+  const [margins, setMargins] = useState<PdfMargins>(() =>
+    normalizePdfMargins(note?.pdf?.rulerLeftPct ?? 8, note?.pdf?.rulerRightPct ?? 92));
   // Original source text is kept separately from the mutable editing draft.
   const draftStartRef = useRef<PdfTextOverlay | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -502,7 +503,7 @@ function PdfViewerScreen() {
     setEditingId(null);
     editingNodeRef.current = null;
     setTextBoxes([]);
-    setMargins({ left: 8, right: 92 });
+    // Ruler bounds are owned by the user, not page/rotation/caret movements.
   }, [page, rotation, id, setDraftOverlay]);
 
   /* ---------------- Scoped rich-text formatting for the active box -------- */
@@ -757,16 +758,22 @@ function PdfViewerScreen() {
 
   const ui = editingOverlay ? (activeStyle ?? baseStyle(editingOverlay)) : textTool ? draftStyle : null;
 
-  const changeMargins = (value: PdfMargins) => {
+  const changeMargins = (next: PdfMargins) => {
+    // This callback is called ONLY by a deliberate handle drag/keyboard action.
+    // Never derive the ruler position from a tapped PDF line or cursor.
+    setMargins(normalizePdfMargins(next.left, next.right));
+  };
+  const commitMargins = (value: PdfMargins) => {
     const next = normalizePdfMargins(value.left, value.right);
     setMargins(next);
-    // Setting bounds on a selected text box changes real page coordinates.
-    if (editingId) {
-      patchOverlay(editingId, {
-        xPct: next.left,
-        widthPct: next.right - next.left,
-      });
-    }
+    const latest = getNote(id);
+    if (latest?.pdf) updateNote(id, {
+      pdf: { ...latest.pdf, rulerLeftPct: next.left, rulerRightPct: next.right },
+    });
+    // A deliberate ruler edit changes the paragraph bounds. Mere selection does not.
+    if (editingId) patchOverlay(editingId, {
+      xPct: next.left, widthPct: next.right - next.left,
+    });
   };
 
   const onCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -795,7 +802,6 @@ function PdfViewerScreen() {
       if (draftOverlayRef.current?.id !== existing.id) setDraftOverlay(null);
       pendingTapRef.current = { x: event.clientX, y: event.clientY };
       editingNodeRef.current = null;
-      setMargins(normalizePdfMargins(existing.xPct, existing.xPct + existing.widthPct));
       setEditingId(existing.id);
       return;
     }
@@ -817,7 +823,10 @@ function PdfViewerScreen() {
       },rotation);
       const heightPx = (sourceBox.height / 100) * unrotatedPageSize.height;
       const startX = clamp(sourceBox.x, 0, 96);
-      const suggested = normalizePdfMargins(startX, Math.min(100, startX + Math.max(34, sourceBox.width + 4)));
+      // Keep the source text at its original x position, but constrain new
+      // wrapping to the user-set right ruler marker (without changing the marker).
+      const suggestedWidth = Math.max(4, Math.min(100 - startX, margins.right - startX));
+      const suggested = { left: startX, right: startX + suggestedWidth };
       const overlay: PdfTextOverlay = {
         id: createOverlayId(),
         page,
@@ -845,12 +854,11 @@ function PdfViewerScreen() {
         italic: hit.italic,
         color: DEFAULT_PDF_TEXT_COLOR,
       };
-      if (!hit.sourceFontExact)
-        toast.info("Исходный PDF-шрифт недоступен. Выберите замену в панели перед вводом.", { duration: 5500 });
+      // The PDF may contain an unexportable subset font. Never block cursor
+      // placement: the matched local family is already selected automatically.
       // Temporarily place a caret without changing the source PDF.
       draftStartRef.current = overlay;
       setDraftOverlay(overlay);
-      setMargins(suggested);
       editingNodeRef.current = null;
       setEditingId(overlay.id);
       return;
@@ -875,7 +883,6 @@ function PdfViewerScreen() {
     };
     draftStartRef.current = overlay;
     setDraftOverlay(overlay);
-    setMargins(normalizePdfMargins(overlay.xPct, overlay.xPct + overlay.widthPct));
     editingNodeRef.current = null;
     setEditingId(overlay.id);
   };
@@ -1476,21 +1483,21 @@ function PdfViewerScreen() {
                 type="button"
                 aria-label="Меньше"
                 onPointerDown={(event) => event.preventDefault()}
-                onClick={() => applyStyle((cur) => ({ fontSize: clamp(cur.fontSize - 1, 4, 96) }))}
+                onClick={() => applyStyle((cur) => ({ fontSize: clamp(displayPdfFontSize(cur.fontSize) - 1, 1, 96) }))}
                 className="grid h-8 w-8 place-items-center rounded-l-lg hover:bg-secondary active:scale-95"
               >
                 <Minus className="h-4 w-4" />
               </button>
               <input
                 type="number"
-                min={4}
+                min={1}
                 max={96}
-                step={0.5}
-                value={ui.fontSize}
+                step={1}
+                value={displayPdfFontSize(ui.fontSize)}
                 onChange={(event) => {
                   const value = Number(event.target.value);
                   if (!Number.isFinite(value) || value <= 0) return;
-                  applyStyle(() => ({ fontSize: clamp(value, 4, 96) }));
+                  applyStyle(() => ({ fontSize: clamp(Math.round(value), 1, 96) }));
                 }}
                 aria-label="Размер шрифта"
                 className="h-8 w-11 border-x border-border bg-transparent text-center text-xs font-semibold outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
@@ -1499,7 +1506,7 @@ function PdfViewerScreen() {
                 type="button"
                 aria-label="Больше"
                 onPointerDown={(event) => event.preventDefault()}
-                onClick={() => applyStyle((cur) => ({ fontSize: clamp(cur.fontSize + 1, 4, 96) }))}
+                onClick={() => applyStyle((cur) => ({ fontSize: clamp(displayPdfFontSize(cur.fontSize) + 1, 1, 96) }))}
                 className="grid h-8 w-8 place-items-center rounded-r-lg hover:bg-secondary active:scale-95"
               >
                 <Plus className="h-4 w-4" />
@@ -1601,7 +1608,7 @@ function PdfViewerScreen() {
               <Check className="h-4 w-4" />
             </button>
           </div>
-          <PdfMarginRuler value={margins} onChange={changeMargins} />
+          <PdfMarginRuler value={margins} onChange={changeMargins} onCommit={commitMargins} />
         </div>
       )}
 
@@ -1669,7 +1676,6 @@ function PdfViewerScreen() {
                       if (draftOverlayRef.current) commitEditing();
                       pendingTapRef.current = { x: event.clientX, y: event.clientY };
                       editingNodeRef.current = null;
-                      setMargins(normalizePdfMargins(overlay.xPct, overlay.xPct + overlay.widthPct));
                       setEditingId(overlay.id);
                     }
                   }}
@@ -1700,7 +1706,7 @@ function PdfViewerScreen() {
                   {isEditing ? (
                     <span
                       ref={(node) => mountEditor(node, overlay)}
-                      contentEditable={overlay.sourceFontExact !== false}
+                      contentEditable
                       suppressContentEditableWarning
                       spellCheck={false}
                       className="relative block w-full min-h-[1em] whitespace-pre-wrap break-words bg-transparent outline-none"

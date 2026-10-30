@@ -38,7 +38,7 @@ assert.ok(editorSrc.includes("touch-none"));
 assert.ok(src.includes("PdfMarginRuler value={margins}"));
 assert.ok(src.includes("draftStartRef.current = overlay"));
 assert.ok(src.includes("eraseWidthPct"));
-const { normalizePdfMargins, wrapPdfGlyphs } = await import("../src/lib/pdf-text-layout");
+const { normalizePdfMargins, wrapPdfGlyphs, displayPdfFontSize } = await import("../src/lib/pdf-text-layout");
 const { replaceAt, baseStyle, getRuns } = await import("../src/lib/pdf-runs");
 assert.deepEqual(normalizePdfMargins(-10, 150), {left: 0, right: 100});
 assert.deepEqual(normalizePdfMargins(95, 96), {left: 95, right: 99});
@@ -96,4 +96,18 @@ for (const slug of new Set(APP_FONTS.map(font=>font.slug))) {
   assert.ok(appCss.includes(`@import "@fontsource/${slug}/400.css";`), `Missing offline font CSS: ${slug}`);
 }
 
+// Regression: tapping any PDF line must never move the user-set ruler.
+assert.equal(displayPdfFontSize(11.0000000001), 11);
+assert.equal(displayPdfFontSize(11.999999), 12);
+assert.equal(displayPdfFontSize(Number.NaN), 11);
+assert.equal(displayPdfFontSize(1), 1);
+const rulerCode = await Bun.file("src/components/pdf/PdfMarginRuler.tsx").text();
+assert.ok(!src.includes('setMargins(suggested)'));
+assert.ok(!src.includes('setMargins(normalizePdfMargins(existing.xPct'));
+assert.ok(!src.includes('setMargins({ left: 8, right: 92 })'));
+assert.ok(!src.includes('Исходный PDF-шрифт недоступен. Выберите замену в панели перед вводом.'));
+assert.ok(src.includes('contentEditable\n'));
+assert.ok(rulerCode.includes('Math.abs(deltaX)<4'), "ruler does not jump on a simple tap");
+assert.ok(rulerCode.includes("onCommit?.(currentRef.current)"));
+assert.ok(src.includes('rulerLeftPct: next.left') && src.includes('rulerRightPct: next.right'));
 console.log("PDF tap no-op, 4 rotations, rotated text hitboxes and page-switch cleanup: PASS");

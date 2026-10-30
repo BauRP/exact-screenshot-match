@@ -6,32 +6,45 @@ export type PdfMargins = { left: number; right: number };
 type Handle = "left" | "right";
 
 /** Hairline ruler with accessible 44px touch targets, never tied to screen scroll. */
-export function PdfMarginRuler({ value, onChange }: {
+export function PdfMarginRuler({ value, onChange, onCommit }: {
   value: PdfMargins;
   onChange: (value: PdfMargins) => void;
+  onCommit?: (value: PdfMargins) => void;
 }) {
   const trackRef = useRef<HTMLDivElement | null>(null);
-  const activeRef = useRef<Handle | null>(null);
+  const dragRef = useRef<{side:Handle; startX:number; startValue:number; moved:boolean} | null>(null);
   const currentRef = useRef(value);
   currentRef.current = value;
 
-  const setFromClient = (side: Handle, clientX: number) => {
-    const rect = trackRef.current?.getBoundingClientRect();
-    if (!rect || rect.width <= 0) return;
-    const point = Math.max(0, Math.min(100, (clientX - rect.left) / rect.width * 100));
-    const old = currentRef.current;
-    const next = side === "left"
-      ? normalizePdfMargins(Math.min(point, old.right - 4), old.right)
-      : normalizePdfMargins(old.left, Math.max(point, old.left + 4));
-    currentRef.current = next;
+  const begin = (side: Handle, event: React.PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault(); // do not blur the PDF cursor or scroll the page
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    // The marker NEVER jumps to the pointer on touch-down.
+    dragRef.current = {side, startX: event.clientX,
+      startValue: currentRef.current[side], moved:false};
+  };
+  const move = (side:Handle, event:React.PointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.side !== side || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
+    const rect=trackRef.current?.getBoundingClientRect();
+    if (!rect?.width) return;
+    const deltaX=event.clientX-drag.startX;
+    // 4px slop: a simple tap is never a margin edit.
+    if (!drag.moved && Math.abs(deltaX)<4) return;
+    drag.moved=true;
+    const point=drag.startValue+deltaX/rect.width*100;
+    const old=currentRef.current;
+    const next = side==="left"
+      ? normalizePdfMargins(Math.min(point, old.right-4), old.right)
+      : normalizePdfMargins(old.left, Math.max(point, old.left+4));
+    currentRef.current=next;
     onChange(next);
   };
-
-  const begin = (side: Handle, event: React.PointerEvent<HTMLButtonElement>) => {
-    event.preventDefault(); // keep text caret and prevent page-scroll jumps
-    event.currentTarget.setPointerCapture(event.pointerId);
-    activeRef.current = side;
-    setFromClient(side, event.clientX);
+  const finish = () => {
+    const drag=dragRef.current;
+    dragRef.current=null;
+    if (drag?.moved) onCommit?.(currentRef.current);
   };
 
   const keys = (side: Handle, event: React.KeyboardEvent<HTMLButtonElement>) => {
@@ -49,6 +62,7 @@ export function PdfMarginRuler({ value, onChange }: {
       : normalizePdfMargins(old.left, Math.max(old.right + delta, old.left + 4));
     currentRef.current = next;
     onChange(next);
+    onCommit?.(next);
   };
 
   return (
@@ -72,12 +86,10 @@ export function PdfMarginRuler({ value, onChange }: {
             aria-valuetext={`${Math.round(value[side])}% ширины страницы`}
             tabIndex={0}
             onPointerDown={(event) => begin(side, event)}
-            onPointerMove={(event) => {
-              if (activeRef.current === side && event.currentTarget.hasPointerCapture(event.pointerId))
-                setFromClient(side, event.clientX);
-            }}
-            onPointerUp={() => { activeRef.current = null; }}
-            onPointerCancel={() => { activeRef.current = null; }}
+            onPointerMove={(event) => move(side, event)}
+            onPointerUp={finish}
+            onPointerCancel={() => { dragRef.current = null; }}
+            onLostPointerCapture={() => { dragRef.current = null; }}
             onKeyDown={(event) => keys(side, event)}
             className="absolute top-0 z-10 flex h-10 w-11 -translate-x-1/2 touch-none items-center justify-center outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
             style={{ left: `${value[side]}%` }}>

@@ -1,3 +1,7 @@
+/** Show a clean human-readable font size without changing source PDF precision. */
+export function displayPdfFontSize(points: number): number {
+  return Number.isFinite(points) ? Math.max(1, Math.min(96, Math.round(points))) : 11;
+}
 /** Values always refer to the original PDF page, not the viewport. */
 export function normalizePdfMargins(left: number, right: number) {
   const l = Math.max(0, Math.min(96, Number.isFinite(left) ? left : 8));
