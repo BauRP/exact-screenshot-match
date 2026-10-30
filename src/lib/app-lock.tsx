@@ -4,6 +4,34 @@ import { checkPinRecord, createPinRecord, needsPinMigration } from "./pin-securi
 const PIN_KEY = "sn.lock.pin.v1";
 const BIO_KEY = "sn.lock.bio.v1";
 const UNLOCKED_KEY = "sn.lock.unlocked.session";
+const ATTEMPTS_KEY="sn.lock.failed-attempts.v1";
+/** Delays are persisted, so restarting the WebView cannot clear the lockout. */
+type PinAttempts={failures:number;blockedUntil:number};
+function getPinAttempts():PinAttempts {
+  try {
+    const v=JSON.parse(localStorage.getItem(ATTEMPTS_KEY)??"null") as Partial<PinAttempts>|null;
+    return {failures:typeof v?.failures==="number" && Number.isFinite(v.failures)
+      ? Math.min(100,Math.max(0,v.failures)):0,
+      blockedUntil:typeof v?.blockedUntil==="number" && Number.isFinite(v.blockedUntil)
+      ? v.blockedUntil:0};
+  } catch{return {failures:0,blockedUntil:0};}
+}
+export function pinRetryAfterMs(now=Date.now()):number {
+  return Math.max(0,getPinAttempts().blockedUntil-now);
+}
+function recordPinResult(ok:boolean):void {
+  const prev=getPinAttempts();
+  if(ok) {
+    try{localStorage.removeItem(ATTEMPTS_KEY);}catch{}
+    return;
+  }
+  const failures=prev.failures+1;
+  // 5 errors: 30s; subsequent failures double the delay up to 5 minutes.
+  const delay=failures<5?0:Math.min(300000,30000*Math.pow(2,Math.min(4,failures-5)));
+  try{localStorage.setItem(ATTEMPTS_KEY,JSON.stringify({
+    failures,blockedUntil:delay?Date.now()+delay:prev.blockedUntil,
+  }));}catch{}
+}
 
 const listeners = new Set<() => void>();
 let pinHash: string | null = null;
@@ -45,6 +73,7 @@ export async function setPin(pin: string) {
   // Never report success if the PIN cannot survive an app restart.
   localStorage.setItem(PIN_KEY, record);
   pinHash = record;
+  recordPinResult(true);
   markUnlocked(); // The authenticated settings session remains active.
   emit();
 }
@@ -66,8 +95,10 @@ export function setBiometrics(v: boolean) {
 export async function verifyPin(pin: string): Promise<boolean> {
   hydrate();
   if (!pinHash) return false; // No PIN cannot authenticate protected actions.
+  if (pinRetryAfterMs()>0) return false;
   const saved = pinHash;
   const verified = await checkPinRecord(pin, saved);
+  recordPinResult(verified);
   if (verified && needsPinMigration(saved) && /^\d{6,8}$/.test(pin)) {
     // Upgrade existing long PINs after a successful unlock, never before.
     try {
@@ -185,6 +216,13 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
   const [pin, setPinState] = useState("");
   const [err, setErr] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [retrySeconds,setRetrySeconds]=useState(0);
+  const refreshRetry=()=>setRetrySeconds(Math.ceil(pinRetryAfterMs()/1000));
+  useEffect(()=>{
+    refreshRetry();
+    const timer=window.setInterval(refreshRetry,1000);
+    return ()=>window.clearInterval(timer);
+  },[]);
   const scanningRef = useRef(false);
   const tryBio = async () => {
     if (!bioEnabled || !pinEnabled || scanningRef.current) return;
@@ -206,8 +244,9 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
   }, []);
 
   const submit = async () => {
-    if (!pinEnabled || pin.length<4) return;
+    if (!pinEnabled || pin.length<4 || pinRetryAfterMs()>0) return;
     const ok=await verifyPin(pin);
+    refreshRetry();
     if (ok) {setErr(false);onUnlock();}
     else {setErr(true);setPinState("");}
   };
@@ -232,9 +271,9 @@ function LockScreen({ onUnlock }: { onUnlock: () => void }) {
               placeholder="••••••"
               className="w-full rounded-full border border-border bg-secondary/40 px-5 py-3 text-center text-2xl tracking-[0.4em] outline-none focus:border-primary"
             />
-            <button type="button" disabled={pin.length<4} onClick={()=>void submit()}
+            <button type="button" disabled={pin.length<4 || retrySeconds>0} onClick={()=>void submit()}
               className="mt-3 w-full rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50">
-              Войти по PIN
+              {retrySeconds>0 ? `Повторите через ${retrySeconds} сек.` : "Войти по PIN"}
             </button>
           </div>
         )}

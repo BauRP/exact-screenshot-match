@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { saveAudioFile } from "@/lib/audio-files";
+import { saveAudioFile, deleteAudioFile, audioIdsInHtml } from "@/lib/audio-files";
 import { ColorGrid, PALETTE } from "@/components/ColorGrid";
 import {
   ArrowLeft,
@@ -100,6 +100,14 @@ function EditorPage() {
   // Recording is not committed to the note until the binary is safely stored.
   const recordingWriteRef = useRef<Promise<void> | null>(null);
   const settleRecordingRef = useRef<{ resolve: () => void; reject: (reason?: unknown) => void } | null>(null);
+  const createdAudioIdsRef=useRef(new Set<string>());
+  const committedNoteRef=useRef(false);
+  const cleanupNewAudio=async(keep: string[] = [])=>{
+    const retained=new Set(keep);
+    const removed=[...createdAudioIdsRef.current].filter(id=>!retained.has(id));
+    await Promise.allSettled(removed.map(id=>deleteAudioFile(id)));
+    createdAudioIdsRef.current=new Set([...createdAudioIdsRef.current].filter(id=>retained.has(id)));
+  };
   const savingRef = useRef(false);
 
   const [currentFontFamily, setCurrentFontFamily] = useState(FONTS[0].value);
@@ -220,6 +228,12 @@ function EditorPage() {
         recorderRef.current?.state === "recording" && recorderRef.current.stop();
         streamRef.current?.getTracks().forEach((t) => t.stop());
       } catch {}
+      if (!committedNoteRef.current) {
+        // Native Back or page teardown can bypass the editor's Cancel button.
+        const pending=recordingWriteRef.current;
+        void (pending ? pending.catch(()=>undefined) : Promise.resolve()).then(()=>
+          Promise.allSettled([...createdAudioIdsRef.current].map(id=>deleteAudioFile(id))));
+      }
     };
   }, []);
 
@@ -238,7 +252,12 @@ function EditorPage() {
   }, []);
 
   /** Back = discard: nothing typed in this session reaches the notes list. */
-  const handleDiscard = () => navigate({ to: "/" });
+  const handleDiscard = async () => {
+    if (recorderRef.current?.state === "recording") stopRecording();
+    await recordingWriteRef.current?.catch(()=>undefined);
+    await cleanupNewAudio();
+    navigate({to:"/"});
+  };
 
   /** Checkmark = the one and only commit point. */
   const handleSave = async () => {
@@ -256,6 +275,7 @@ function EditorPage() {
     if (isNew) {
       // A note that was opened and left blank is cancelled entirely.
       if (!typedTitle && !plain) {
+        await cleanupNewAudio();
         navigate({ to: "/" });
         return;
       }
@@ -276,6 +296,8 @@ function EditorPage() {
       });
     }
 
+    committedNoteRef.current=true;
+    await cleanupNewAudio(audioIdsInHtml(body));
     navigate({ to: "/" });
     } catch (error) {
       console.error("Unable to save note", error);
@@ -349,6 +371,7 @@ function EditorPage() {
         try {
           if (blob.size === 0) throw new Error("Аудиозапись пуста");
           const audioId = await saveAudioFile(blob);
+          createdAudioIdsRef.current.add(audioId);
           if (!editor || editor.isDestroyed) throw new Error("Редактор закрыт до сохранения аудио");
           if (!editor.chain().focus().insertAudioNote(`audiodb:${audioId}`).run()) {
             throw new Error("Не удалось добавить аудиозапись в заметку");
@@ -356,6 +379,7 @@ function EditorPage() {
           settleRecordingRef.current?.resolve();
         } catch (error) {
           console.error("Could not save audio recording", error);
+          await cleanupNewAudio(editor?.getHTML() ? audioIdsInHtml(editor.getHTML()) : []);
           settleRecordingRef.current?.reject(error);
           alert("Не удалось сохранить аудио. Проверьте свободное место.");
         } finally {

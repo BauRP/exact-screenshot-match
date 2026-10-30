@@ -46,6 +46,8 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
     const slotTimers = new Set<ReturnType<typeof setTimeout>>();
     const handles: Array<{ remove(): Promise<void> }> = [];
     let restartingConsent = false;
+    let themeRestartTimer: ReturnType<typeof setTimeout>|null=null;
+    let lastNativeLightTheme=document.documentElement.classList.contains("light");
     const report = (state: string, details?: unknown) => console.info(`[SuperNotes AdMob] ${state}`, details ?? "");
 
     const initialize = async () => {
@@ -94,6 +96,7 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
         stage = "native";
         updateAdDiagnostic("loading", testAds ? "Загрузка тестовой нативной рекламы" : "Загрузка нативной рекламы");
         const lightTheme = document.documentElement.classList.contains("light");
+        lastNativeLightTheme=lightTheme;
         const feed = await NativeAdFeed.create({
           feedId: HOME_AD_FEED_ID,
           template: NativeAdTemplate.Small,
@@ -215,8 +218,21 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
     };
     window.addEventListener("supernotes-admob-retry", onRetry);
     window.addEventListener("online", onOnline);
+    const onThemeChanged=()=>{
+      // Ignore redundant events and debounce fast theme switches. Native
+      // template colors are fixed at creation: only genuine color changes
+      // need a new native feed, not every render or layout update.
+      const light=document.documentElement.classList.contains("light");
+      if(light===lastNativeLightTheme)return;
+      if(themeRestartTimer!==null)clearTimeout(themeRestartTimer);
+      themeRestartTimer=setTimeout(()=>{
+        themeRestartTimer=null;
+        if(!disposed && document.documentElement.classList.contains("light")!==lastNativeLightTheme)
+          void onPrivacyChanged();
+      },250);
+    };
     window.addEventListener("wave-admob-consent-changed", onPrivacyChanged);
-    window.addEventListener("wave-admob-theme-changed", onPrivacyChanged);
+    window.addEventListener("wave-admob-theme-changed", onThemeChanged);
     if (consumePendingAdRetry()) onRetry();
     else void initialize();
     return () => {
@@ -224,7 +240,8 @@ export function useNativeAdFeed(view: ViewMode, pauseForOverlay: boolean): boole
       abort.abort();
       window.removeEventListener("online", onOnline);
       window.removeEventListener("wave-admob-consent-changed", onPrivacyChanged);
-      window.removeEventListener("wave-admob-theme-changed", onPrivacyChanged);
+      window.removeEventListener("wave-admob-theme-changed", onThemeChanged);
+      if(themeRestartTimer!==null)clearTimeout(themeRestartTimer);
       window.removeEventListener("supernotes-admob-retry", onRetry);
       for (const timer of slotTimers) clearTimeout(timer);
       if (retryTimer !== null) clearTimeout(retryTimer);
