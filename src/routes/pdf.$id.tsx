@@ -965,7 +965,10 @@ function PdfViewerScreen() {
 
       // Validate and select an embeddable font for every character BEFORE
       // masking the original text. Unsupported scripts abort safely.
-      const exactFont = overlay.sourceFontId && runs.length ? await getPdfOriginalFont(overlay) : null;
+      // Unavailable PDF font data must not prevent saving user edits.
+      // Export with the automatically matched compatible family instead.
+      const exactFont = overlay.sourceFontId && overlay.sourceFontExact !== false && runs.length
+        ? await getPdfOriginalFont(overlay) : null;
       const prepared = [];
       for (const run of runs) {
         const original = exactFont && run.fontFamily === overlay.fontFamily &&

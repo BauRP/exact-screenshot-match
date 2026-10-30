@@ -49,6 +49,7 @@ assert.ok(runSource.includes("usesSource"));
 assert.ok(src.includes("sourceBaselinePct: unrotatedTx[5]"));
 assert.ok(src.includes("contentEditable={overlay.sourceFontExact !== false}"));
 assert.ok(src.includes("await getPdfOriginalFont(overlay)"));
+assert.ok(src.includes("overlay.sourceFontExact !== false && runs.length"), "unavailable embedded font must not block PDF export");
 assert.ok(src.includes("firstBaseline - lineNo * lineAdvance"));
 assert.ok(!src.includes("boxHeight - maxSize * 0.8 - lineNo"));
 assert.ok(src.includes("fontSize: height / (viewport.scale || 1)"), "PDF text size is never rounded");
