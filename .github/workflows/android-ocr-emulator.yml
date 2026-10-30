@@ -28,6 +28,7 @@ on:
       - 'src/components/BottomNav.tsx'
       - 'src/styles.css'
       - 'scripts/run-android-emulator-tests.sh'
+      - 'scripts/disable-android-intro-for-ci.mjs'
       - 'scripts/write-capacitor-index.mjs'
       - 'src/routes/editor.$id.tsx'
       - 'src/routes/pdf.$id.tsx'
@@ -48,7 +49,7 @@ concurrency:
 
 jobs:
   emulator:
-    name: Android ${{ matrix.api-level }} (${{ matrix.display-size }}, ${{ matrix.display-density }} dpi) — OCR and layout
+    name: Android ${{ matrix.api-level }} (${{ matrix.display-size }}, ${{ matrix.display-density }} dpi) — OCR and layout ${{ matrix.intro_variant == 'disabled' && '[intro OFF diagnostic]' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -73,7 +74,14 @@ jobs:
           - api-level: 36
             display-size: 480x1024
             display-density: 240
-            # Use the same emulator profile as the earlier fully successful run.
+            intro_variant: full
+            # Production intro is unchanged in this control run.
+          - api-level: 36
+            display-size: 480x1024
+            display-density: 240
+            intro_variant: disabled
+            # Diagnostic only: identical app without startup animation.
+            # NEVER publish this variant as the user APK.
           - api-level: '37.0'
             display-size: 1080x2400
             display-density: 420
@@ -129,6 +137,11 @@ jobs:
           node scripts/patch-admob-native-layout.mjs
           node scripts/verify-admob-native-layout.mjs
           bun run build
+          # Diagnostic A/B: remove only the startup animation from the local
+          # instrumented APK. Normal production APK and other jobs are untouched.
+          if [ "${{ matrix.intro_variant || 'full' }}" = 'disabled' ]; then
+            node scripts/disable-android-intro-for-ci.mjs
+          fi
           bash scripts/prepare-ocr-models.sh
           npx cap add android
           npx cap sync android
@@ -199,7 +212,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: wave-android-debug-${{ matrix.api-level }}-${{ matrix.display-size }}
+          name: wave-android-debug-${{ matrix.api-level }}-${{ matrix.display-size }}-${{ matrix.intro_variant || 'full' }}
           retention-days: 14
           if-no-files-found: warn
           path: |
