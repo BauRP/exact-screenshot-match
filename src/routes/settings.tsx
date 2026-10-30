@@ -363,10 +363,11 @@ function SettingsPage() {
   return (
     <div
       className="flex h-full min-h-0 flex-col overflow-hidden"
+      data-wave-settings-screen="true"
     >
       <AppHeader eyebrow={t("configuration")} title={t("settings")} />
 
-      <main className="mx-auto w-full min-h-0 max-w-xl flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 pb-[130px] pt-3 [-webkit-overflow-scrolling:touch]">
+      <main data-wave-settings-scroll="true" className="mx-auto w-full min-h-0 max-w-xl flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 pb-[130px] pt-3 [-webkit-overflow-scrolling:touch]">
 
         <Section title={t("appearance")} eyebrow="01">
           <Row

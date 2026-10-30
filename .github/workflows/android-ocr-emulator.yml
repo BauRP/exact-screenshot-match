@@ -73,10 +73,7 @@ jobs:
           - api-level: 36
             display-size: 480x1024
             display-density: 240
-            # Android 16 emulator repeatedly disconnected while opening WebView.
-            # Test a supported software renderer and remove Vulkan as a variable.
-            gpu_options: -gpu software -feature -Vulkan
-            ram_size: 2560M
+            # Use the same emulator profile as the earlier fully successful run.
           - api-level: '37.0'
             display-size: 1080x2400
             display-density: 420
@@ -187,9 +184,7 @@ jobs:
           arch: x86_64
           target: google_apis
           disable-animations: true
-          # Other six already pass. Isolate the graphics workaround to API 36.
-          ram-size: ${{ matrix.ram_size || '2048M' }}
-          emulator-options: -no-window -no-audio -no-boot-anim ${{ matrix.gpu_options || '-gpu swiftshader_indirect' }} -no-snapshot -no-metrics
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -no-metrics
           # On Android 8, 'svc wifi disable' aborts with exit 137 and
           # AIRPLANE_MODE broadcasts are denied to the shell. Offline tests
           # should not be blocked by those device-management commands.
@@ -199,6 +194,18 @@ jobs:
           # The action executes each script line as an individual /bin/sh -c call.
           # Keep invocation on ONE line; control-flow belongs inside the bash file.
           script: 'bash scripts/run-android-emulator-tests.sh "${{ matrix.api-level }}" "${{ matrix.display-size }}" "${{ matrix.display-density }}"'
+
+      - name: Upload Android failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wave-android-debug-${{ matrix.api-level }}-${{ matrix.display-size }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            android-test-diagnostics/
+            android/app/build/outputs/androidTest-results/
+            android/app/build/reports/androidTests/
 
       - name: Record actual Android OCR instrumentation results
         if: always()

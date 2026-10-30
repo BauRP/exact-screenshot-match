@@ -127,7 +127,7 @@ public class AndroidShellInstrumentedTest {
             boolean settingsReady=false;
             for(int attempt=0;attempt<20;attempt++){
                 if("true".equals(evaluate(web,
-                    "(function(){var h=document.querySelector('header');var hash=location.hash;return !!h && /^#\\/settings(?:[/?#]|$)/.test(hash) && h.getBoundingClientRect().height>0})()"))){
+                    "(function(){var page=document.querySelector('[data-wave-settings-screen]');var main=page&&page.querySelector('[data-wave-settings-scroll]');var h=page&&page.querySelector('header');var hash=location.hash;return !!(main&&h&&/^#\\/settings(?:[/?#]|$)/.test(hash)&&h.getBoundingClientRect().height>0)})()"))){
                     settingsReady=true;break;
                 }
                 Thread.sleep(300);
@@ -136,7 +136,7 @@ public class AndroidShellInstrumentedTest {
                 evaluate(web,"(function(){return JSON.stringify({path:location.pathname,hash:location.hash,headers:Array.from(document.querySelectorAll('header')).map(h=>({text:h.innerText.slice(0,80),height:h.getBoundingClientRect().height}))});})()"),
                 settingsReady);
             String settingsRaw=evaluate(web,
-                "(function(){var h=document.querySelector('header').getBoundingClientRect();var b=document.querySelector('.wave-bottom-nav').getBoundingClientRect();return JSON.stringify({headerTop:h.top,headerBottom:h.bottom,bottomTop:b.top,bottomEnd:b.bottom,viewportHeight:innerHeight});})()");
+                "(function(){var h=document.querySelector('[data-wave-settings-screen] header').getBoundingClientRect();var b=document.querySelector('.wave-bottom-nav').getBoundingClientRect();return JSON.stringify({headerTop:h.top,headerBottom:h.bottom,bottomTop:b.top,bottomEnd:b.bottom,viewportHeight:innerHeight});})()");
             JSONObject settings=new JSONObject((String)new JSONTokener(settingsRaw).nextValue());
             System.out.println("WAVE_SETTINGS_SAFE_AREA "+settings);
             assertTrue("Settings heading is above the safe WebView viewport: "+settings,
@@ -145,15 +145,15 @@ public class AndroidShellInstrumentedTest {
                 settings.getDouble("bottomEnd")<=settings.getDouble("viewportHeight")+2);
             assertTrue("Settings footer overlaps header: "+settings,
                 settings.getDouble("bottomTop")>=settings.getDouble("headerBottom"));
-            // Regression for the Vivo X200 report: the status bar looked safe
-            // initially but Settings content moved under it after a long swipe.
-            // The header must remain fixed while ONLY Settings <main> scrolls.
+            // The route hash updates before React finishes rendering: never
+            // test the previous route's first <main> after clicking Settings.
+            // Force overflow only on tablets whose Settings already fully fit.
             String scrolledRaw=evaluate(web,
-                "(function(){var m=document.querySelector('main');if(!m)return JSON.stringify({error:'main missing'});m.scrollTop=m.scrollHeight;var h=document.querySelector('header').getBoundingClientRect();var n=document.querySelector('.wave-bottom-nav').getBoundingClientRect();return JSON.stringify({scrollTop:m.scrollTop,scrollHeight:m.scrollHeight,clientHeight:m.clientHeight,headerTop:h.top,headerBottom:h.bottom,navTop:n.top,navBottom:n.bottom,windowScrollY:window.scrollY,documentScrollY:document.documentElement.scrollTop});})()");
+                "(function(){var page=document.querySelector('[data-wave-settings-screen]');var m=page&&page.querySelector('[data-wave-settings-scroll]');if(!m)return JSON.stringify({error:'settings main missing',hash:location.hash});var naturalOverflow=m.scrollHeight>m.clientHeight+2;var spacer=null;if(!naturalOverflow){spacer=document.createElement('div');spacer.setAttribute('data-wave-test-spacer','true');spacer.style.cssText='height:'+Math.max(650,innerHeight)+'px;min-height:'+Math.max(650,innerHeight)+'px;flex-shrink:0;pointer-events:none';m.appendChild(spacer);}m.scrollTop=m.scrollHeight;var h=page.querySelector('header').getBoundingClientRect();var n=document.querySelector('.wave-bottom-nav').getBoundingClientRect();var d={scrollTop:m.scrollTop,scrollHeight:m.scrollHeight,clientHeight:m.clientHeight,naturalOverflow:naturalOverflow,headerTop:h.top,headerBottom:h.bottom,navTop:n.top,navBottom:n.bottom,windowScrollY:window.scrollY,documentScrollY:document.documentElement.scrollTop};if(spacer)spacer.remove();return JSON.stringify(d);})()");
             JSONObject scrolled=new JSONObject((String)new JSONTokener(scrolledRaw).nextValue());
             System.out.println("WAVE_SETTINGS_AFTER_SCROLL "+scrolled);
             assertFalse("Settings scroll container missing: "+scrolled,scrolled.has("error"));
-            assertTrue("Settings must actually scroll: "+scrolled,
+            assertTrue("Settings scrolling failed: "+scrolled,
                 scrolled.getDouble("scrollHeight")>scrolled.getDouble("clientHeight") &&
                 scrolled.getDouble("scrollTop")>0);
             assertTrue("Settings header went under status bar after scroll: "+scrolled,
