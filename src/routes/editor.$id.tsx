@@ -27,6 +27,8 @@ import {
   ChevronUp,
   ChevronDown,
   ListChecks,
+  WandSparkles,
+  Grid3X3,
 } from "lucide-react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -63,6 +65,7 @@ import { APP_FONTS, fontNameFromCss } from "@/lib/app-fonts";
 import { InNoteSearch, noteSearchKey, findWords } from "@/lib/in-note-search";
 import { readEditorPreferences } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
+import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 
 export const Route = createFileRoute("/editor/$id")({
   head: () => ({ meta: [
@@ -137,6 +140,8 @@ function EditorPage() {
   const [currentFontSize, setCurrentFontSize] = useState<number>(18);
   const [currentColor, setCurrentColor] = useState<string>(editorInk(isNew,note?.style?.color));
   const [canvasBg, setCanvasBg] = useState<string>(editorBackground(isNew,note?.style?.background));
+  const [paperMood,setPaperMood]=useState<PaperMood>(note?.style?.paperMood??"solid");
+  const [paperRule,setPaperRule]=useState<PaperRule>(note?.style?.paperRule??"plain");
 
   // Sync local state once the note hydrates from storage.
   const syncedRef = useRef(false);
@@ -147,6 +152,8 @@ function EditorPage() {
     setPinnedLocal(!!note.pinned);
     setFolderId(note.folderId ?? "all");
     if (note.style?.background) setCanvasBg(note.style.background);
+    if (note.style?.paperMood) setPaperMood(note.style.paperMood);
+    if (note.style?.paperRule) setPaperRule(note.style.paperRule);
     if (note.style?.color) setCurrentColor(note.style.color);
   }, [note]);
 
@@ -273,7 +280,7 @@ function EditorPage() {
 
   const handleFolder = (fid: string) => setFolderId(fid);
 
-  const handleCanvasBg = (c: string) => setCanvasBg(c);
+  const handleCanvasBg = (c: string) => {setCanvasBg(c);setPaperMood("solid");};
   const hits=findOpen&&editor?findWords(editor.state.doc,findQuery,prefs.caseSensitive):[];
   const setSearchDecoration=(query:string,active:number)=>{
     if(editor)editor.view.dispatch(editor.state.tr.setMeta(noteSearchKey,{query,active,caseSensitive:prefs.caseSensitive}));
@@ -330,7 +337,7 @@ function EditorPage() {
         folderId,
         pinned,
         // Preserve dark default ink when the new yellow note is reopened.
-        style: { background: canvasBg, color: NEW_NOTE_INK },
+        style: { background: canvasBg, color: NEW_NOTE_INK, paperMood, paperRule },
       });
     } else if (note) {
       updateNote(id, {
@@ -338,7 +345,7 @@ function EditorPage() {
         body,
         folderId,
         pinned,
-        style: { background: canvasBg },
+        style: { background: canvasBg, paperMood, paperRule },
       });
     }
 
@@ -616,6 +623,36 @@ function EditorPage() {
               ))}
             </PopoverContent>
           </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" aria-label="Оформление листа" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+                <WandSparkles className="h-4 w-4"/>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-56 rounded-xl p-2">
+              <p className="px-2 py-1 text-xs font-semibold">Спокойное оформление</p>
+              {PAPER_MOODS.map(mood=><button type="button" key={mood.id}
+                onClick={()=>{setPaperMood(mood.id);if(mood.id!=="solid")setCanvasBg(mood.background);}}
+                className={`flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm hover:bg-secondary ${paperMood===mood.id?"text-primary":""}`}>
+                <span className="h-6 w-6 shrink-0 rounded-md border border-border" style={{background:mood.background,backgroundImage:mood.gradient||undefined}}/>
+                {mood.name}
+              </button>)}
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" aria-label="Разметка бумаги" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+                <Grid3X3 className="h-4 w-4"/>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-48 rounded-xl p-2">
+              <p className="px-2 py-1 text-xs font-semibold">Разметка листа</p>
+              {PAPER_RULES.map(rule=><button type="button" key={rule.id} onClick={()=>setPaperRule(rule.id)}
+                className={`flex min-h-11 w-full items-center rounded-lg px-2 text-left text-sm hover:bg-secondary ${paperRule===rule.id?"text-primary":""}`}>
+                {rule.name}
+              </button>)}
+            </PopoverContent>
+          </Popover>
           <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
           {editor && (
             <>
@@ -737,7 +774,7 @@ function EditorPage() {
       <main className="mx-auto flex w-full min-h-0 max-w-xl flex-1 flex-col px-3 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-3">
         <div
           className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border p-3 shadow-inner transition-colors [-webkit-overflow-scrolling:touch]"
-          style={{ background: canvasBg }}
+          style={{ backgroundColor: canvasBg, ...paperAppearance(paperMood,paperRule) }}
         >
           <EditorContent editor={editor} style={{
             "--wave-note-caret": noteCaretColor(canvasBg),

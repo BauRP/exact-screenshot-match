@@ -100,6 +100,9 @@ jobs:
       - name: Verify consent withdrawal interrupts native advertising
         run: bun scripts/test-admob-consent-change.ts
 
+      - name: Verify separate page mood, palette and paper ruling
+        run: bun scripts/test-wave-paper.ts
+
       - name: Verify checklist markup, persistence and note editor compatibility
         run: bun scripts/test-wave-checklist.ts
 

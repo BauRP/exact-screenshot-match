@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { markBackupDirty } from "./backup-signals";
 import { NEW_NOTE_YELLOW,NEW_NOTE_INK } from "./note-appearance";
+import { validPaperMood,validPaperRule } from "./note-paper";
 
 export type NoteKind = "note" | "pdf";
 
@@ -76,6 +77,8 @@ export type Note = {
     fontSize?: number;
     color?: string;
     background?: string;
+    paperMood?: import("./note-paper").PaperMood;
+    paperRule?: import("./note-paper").PaperRule;
   };
 };
 
@@ -151,6 +154,8 @@ function normalizeNote(input: unknown): Note | null {
         fontSize: typeof rawStyle.fontSize === "number" ? rawStyle.fontSize : undefined,
         color: typeof rawStyle.color === "string" ? rawStyle.color : undefined,
         background: typeof rawStyle.background === "string" ? rawStyle.background : undefined,
+        paperMood: validPaperMood(rawStyle.paperMood) ? rawStyle.paperMood : undefined,
+        paperRule: validPaperRule(rawStyle.paperRule) ? rawStyle.paperRule : undefined,
       }
     : undefined;
 
