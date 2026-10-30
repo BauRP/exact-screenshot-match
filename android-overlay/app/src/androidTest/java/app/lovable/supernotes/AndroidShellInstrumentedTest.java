@@ -58,7 +58,8 @@ public class AndroidShellInstrumentedTest {
             scenario.onActivity(activity -> {
                 Rect visible = new Rect();
                 assertTrue("WebView not visible", web.getGlobalVisibleRect(visible));
-                WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(web);
+                // Query the real Android window, not the sanitized WebView insets.
+                WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(activity.getWindow().getDecorView());
                 assertNotNull("WindowInsets not dispatched", insets);
                 // Padding alone is NOT the actual safe area: on Android 8-14
                 // decor may position the entire WebView below the status bar.
@@ -114,12 +115,19 @@ public class AndroidShellInstrumentedTest {
                 geometry.getDouble("documentWidth") <= geometry.getDouble("viewportWidth") + 2);
             // The Vivo X200 report is from Settings, not only the home page.
             // Verify that route changes do not drop the safe-area container.
-            assertEquals("true", evaluate(web,
-                "(function(){var a=document.querySelector('a[href=\"/settings\"]');if(!a)return false;a.click();return true;})()"));
+            // A native TanStack route may expose relative, absolute or
+            // slash-suffixed hrefs; locate the Settings tab by its path.
+            String linksRaw=evaluate(web,
+                "(function(){return JSON.stringify(Array.from(document.querySelectorAll('.wave-bottom-nav a')).map(a=>a.getAttribute('href')));})()");
+            System.out.println("WAVE_BOTTOM_LINKS "+linksRaw);
+            String clicked=evaluate(web,
+                "(function(){var links=Array.from(document.querySelectorAll('.wave-bottom-nav a'));var a=links.find(x=>/settings/.test(x.getAttribute('href')||''));if(!a)return false;a.click();return true;})()");
+            assertEquals("Cannot find settings in bottom tabs. hrefs="+linksRaw,
+                "true",clicked);
             boolean settingsReady=false;
             for(int attempt=0;attempt<20;attempt++){
                 if("true".equals(evaluate(web,
-                    "(function(){return location.pathname.indexOf('/settings')>=0 && !!document.querySelector('header')})()"))){
+                    "(function(){var h=document.querySelector('header');return !!h && /settings/.test(location.pathname) && h.getBoundingClientRect().height>0})()"))){
                     settingsReady=true;break;
                 }
                 Thread.sleep(300);
