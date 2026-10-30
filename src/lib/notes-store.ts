@@ -580,6 +580,12 @@ export function deleteNote(id: string) {
     void import("./pdf-files").then((module) => module.deletePdfFile(id)).catch((error) => console.error("Unable to remove PDF", error));
   }
   if (target?.body) {
+    void import("./image-files").then(async ({imageIdsInHtml,deleteImageFile})=>{
+      const stillUsed=new Set(nextNotes.flatMap(note=>imageIdsInHtml(note.body)));
+      await Promise.all(imageIdsInHtml(target.body).filter(id=>!stillUsed.has(id)).map(id=>deleteImageFile(id)));
+    }).catch(error=>console.error("Unable to delete image attachments",error));
+  }
+  if (target?.body) {
     void import("./audio-files").then(async ({ audioIdsInHtml, deleteAudioFile }) => {
       const stillUsed = new Set(nextNotes.flatMap((item) => audioIdsInHtml(item.body)));
       const ids = audioIdsInHtml(target.body).filter((audioId) => !stillUsed.has(audioId));
@@ -605,17 +611,19 @@ export async function clearAll(): Promise<void> {
   ensureReadyForMutation();
   const before = state.notes;
   const pdfIds = before.filter((note) => note.kind === "pdf").map((note) => note.id);
-  const [{ deletePdfFile }, { audioIdsInHtml, deleteAudioFile }] = await Promise.all([
-    import("./pdf-files"), import("./audio-files"),
+  const [{ deletePdfFile }, { audioIdsInHtml, deleteAudioFile }, { imageIdsInHtml,deleteImageFile }] = await Promise.all([
+    import("./pdf-files"), import("./audio-files"), import("./image-files"),
   ]);
   // Save the empty list before removing binary attachments: failed writes leave
   // existing notes and their files intact. Await cleanup before reporting success.
   persistNotes([]);
   commit({ notes: [], hydrated: true, status: "ready", error: null });
   const audioIds = [...new Set(before.flatMap((note) => audioIdsInHtml(note.body)))];
+  const imageIds = [...new Set(before.flatMap(note=>imageIdsInHtml(note.body)))];
   const results = await Promise.allSettled([
     ...pdfIds.map((id) => deletePdfFile(id)),
     ...audioIds.map((id) => deleteAudioFile(id)),
+    ...imageIds.map(id=>deleteImageFile(id)),
   ]);
   const failed = results.filter((result) => result.status === "rejected");
   if (failed.length > 0) {
