@@ -8,7 +8,6 @@ import { noteCaretColor } from "@/lib/note-caret-color";
 import { nativeAudioAvailable, startNativeAudio, stopNativeAudio } from "@/lib/native-audio";
 import {
   ArrowLeft,
-  Save,
   LoaderCircle,
   Type,
   Palette,
@@ -485,10 +484,16 @@ function EditorPage() {
             aria-busy={saving}
             className="group ml-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-wait"
           >
-            <span className="grid h-[34px] w-[34px] place-items-center rounded-full border border-border bg-secondary/50 text-primary shadow-sm transition-colors duration-150 group-hover:bg-secondary group-active:bg-secondary/80 group-disabled:opacity-70 motion-reduce:transition-none">
-              {saving
-                ? <LoaderCircle aria-hidden="true" className="h-[18px] w-[18px] animate-spin" strokeWidth={1.9} />
-                : <Save aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={1.9} />}
+            <span className="grid h-[38px] w-[38px] place-items-center rounded-full border border-border bg-secondary/50 text-primary shadow-sm transition-colors duration-150 group-hover:bg-secondary group-active:bg-secondary/80 group-disabled:opacity-70 motion-reduce:transition-none">
+              {saving ? (
+                <LoaderCircle aria-hidden="true" className="h-[22px] w-[22px] animate-spin" strokeWidth={2.2} />
+              ) : (
+                // Bold filled save pictogram: larger and recognizable at phone scale.
+                // Uses the same accent color as the other editor icons.
+                <svg aria-hidden="true" className="h-[23px] w-[23px]" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-9H5V5h10v5z" />
+                </svg>
+              )}
             </span>
           </button>
         </div>
