@@ -484,14 +484,26 @@ function EditorPage() {
             aria-busy={saving}
             className="group ml-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-wait"
           >
-            <span className="grid h-[38px] w-[38px] place-items-center rounded-full border border-border bg-secondary/50 text-primary shadow-sm transition-colors duration-150 group-hover:bg-secondary group-active:bg-secondary/80 group-disabled:opacity-70 motion-reduce:transition-none">
+            <span className="grid h-[38px] w-[38px] place-items-center rounded-full border border-border bg-secondary/50 text-white shadow-sm transition-colors duration-150 group-hover:bg-secondary group-active:bg-secondary/80 group-disabled:opacity-70 motion-reduce:transition-none">
               {saving ? (
-                <LoaderCircle aria-hidden="true" className="h-[22px] w-[22px] animate-spin" strokeWidth={2.2} />
+                <LoaderCircle aria-hidden="true" className="h-[22px] w-[22px] animate-spin" strokeWidth={2.1} />
               ) : (
-                // Bold filled save pictogram: larger and recognizable at phone scale.
-                // Uses the same accent color as the other editor icons.
-                <svg aria-hidden="true" className="h-[23px] w-[23px]" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M17 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-9H5V5h10v5z" />
+                // Balanced white outline: no stretched filled pictogram.
+                <svg
+                  aria-hidden="true"
+                  className="block h-[22px] w-[22px] shrink-0 text-white"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.95}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  preserveAspectRatio="xMidYMid meet"
+                >
+                  <path d="M5.5 3.5H16L20.5 8v11c0 1-.8 1.8-1.8 1.8H5.3c-1 0-1.8-.8-1.8-1.8V5.5c0-1.1.9-2 2-2Z" />
+                  <path d="M7.2 3.5v6.4h9.2V4" />
+                  <path d="M7.3 20.8v-7.2h9.4v7.2" />
+                  <path d="M9.4 16.7h5.2" strokeWidth={1.6} />
                 </svg>
               )}
             </span>
