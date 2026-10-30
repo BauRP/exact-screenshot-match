@@ -169,6 +169,7 @@ function Index() {
     const original=selectedNotes[0];
     let pdfCopyId:string|null=null;
     const addedAudioIds:string[]=[];
+    const addedImageIds:string[]=[];
     try{
       let body=original.body;
       const { audioIdsInHtml, loadAudioFile, saveAudioFile }=await import("@/lib/audio-files");
@@ -178,6 +179,16 @@ function Index() {
         const copiedId=await saveAudioFile(blob);
         addedAudioIds.push(copiedId);
         body=body.replaceAll(`audiodb:${id}`,`audiodb:${copiedId}`);
+      }
+      const {imageIdsInHtml,loadImageFile,saveNewImageFile}=await import("@/lib/image-files");
+      for(const imageId of imageIdsInHtml(body)){
+        const photo=await loadImageFile(imageId);
+        if(!photo)throw new Error("Не удалось прочитать исходную фотографию");
+        const copiedId=crypto.randomUUID();
+        await saveNewImageFile(copiedId,photo);
+        addedImageIds.push(copiedId);
+        body=body.replaceAll('data-image-id="'+imageId+'"','data-image-id="'+copiedId+'"')
+          .replaceAll("data-image-id='"+imageId+"'","data-image-id='"+copiedId+"'");
       }
       if(original.kind==="pdf"){
         const {loadPdfFile,saveNewPdfFile}=await import("@/lib/pdf-files");
@@ -196,6 +207,8 @@ function Index() {
     }catch(error){
       const {deleteAudioFile}=await import("@/lib/audio-files");
       await Promise.allSettled(addedAudioIds.map(id=>deleteAudioFile(id)));
+      const {deleteImageFile}=await import("@/lib/image-files");
+      await Promise.allSettled(addedImageIds.map(id=>deleteImageFile(id)));
       if(pdfCopyId){const {deletePdfFile}=await import("@/lib/pdf-files");await deletePdfFile(pdfCopyId).catch(console.error);}
       console.error("Duplicate note failed",error);
       toast.error(error instanceof Error?error.message:"Не удалось создать копию");
