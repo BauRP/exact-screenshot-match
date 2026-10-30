@@ -2,6 +2,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { saveAudioFile, deleteAudioFile, audioIdsInHtml } from "@/lib/audio-files";
 import { ColorGrid, PALETTE } from "@/components/ColorGrid";
+import { noteCaretColor } from "@/lib/note-caret-color";
+import { nativeAudioAvailable, startNativeAudio, stopNativeAudio } from "@/lib/native-audio";
 import {
   ArrowLeft,
   Check,
@@ -95,6 +97,9 @@ function EditorPage() {
   );
   const [recording, setRecording] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const nativeRecordingRef = useRef(false);
+  const [startingAudio,setStartingAudio]=useState(false);
+  const startingAudioRef=useRef(false);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   // Recording is not committed to the note until the binary is safely stored.
@@ -187,7 +192,7 @@ function EditorPage() {
       attributes: {
         class:
           "sn-tiptap min-h-full w-full whitespace-pre-wrap break-words outline-none",
-        style: "color:#FFFFFF;",
+        style: "color:#FFFFFF;caret-color:var(--wave-note-caret,#FFFFFF);",
       },
     },
     // Draft only: nothing is written to storage until the checkmark is tapped.
@@ -253,7 +258,7 @@ function EditorPage() {
 
   /** Back = discard: nothing typed in this session reaches the notes list. */
   const handleDiscard = async () => {
-    if (recorderRef.current?.state === "recording") stopRecording();
+    if (recorderRef.current?.state === "recording" || nativeRecordingRef.current) stopRecording();
     await recordingWriteRef.current?.catch(()=>undefined);
     await cleanupNewAudio();
     navigate({to:"/"});
@@ -266,7 +271,8 @@ function EditorPage() {
     try {
     // Stop MediaRecorder and wait for its final ondataavailable/onstop events.
     // Without this, a fast checkmark saves HTML before the audio node exists.
-    if (recorderRef.current?.state === "recording") stopRecording();
+    if (startingAudioRef.current) throw new Error("Подождите, пока микрофон включится.");
+    if (recorderRef.current?.state === "recording" || nativeRecordingRef.current) stopRecording();
     if (recordingWriteRef.current) await recordingWriteRef.current;
     const body = editor?.getHTML() ?? "";
     const plain = (editor?.getText() ?? "").trim();
@@ -346,72 +352,55 @@ function EditorPage() {
     return f.name;
   };
 
+  const attachAudio = async (blob: Blob) => {
+    if (!blob.size) throw new Error("Пустая аудиозапись");
+    const audioId=await saveAudioFile(blob);
+    createdAudioIdsRef.current.add(audioId);
+    if (!editor || editor.isDestroyed || !editor.chain().focus().insertAudioNote(`audiodb:${audioId}`).run()) throw new Error("Не удалось вставить аудио в заметку");
+  };
   const startRecording = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      alert("Микрофон недоступен в этом браузере");
+    if (recording || startingAudioRef.current || recordingWriteRef.current) return;
+    if (nativeAudioAvailable()) {
+      startingAudioRef.current=true;setStartingAudio(true);
+      try {
+        await startNativeAudio();
+        recordingWriteRef.current=new Promise<void>((resolve,reject)=>{settleRecordingRef.current={resolve,reject};});
+        void recordingWriteRef.current.catch(()=>undefined);
+        nativeRecordingRef.current=true;setRecording(true);
+      } catch(err) {
+        console.error("Native microphone start",err);
+        alert(err instanceof Error?err.message:"Нет доступа к микрофону");
+      } finally {startingAudioRef.current=false;setStartingAudio(false);}
       return;
     }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder==="undefined") {alert("Микрофон недоступен");return;}
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      const rec = new MediaRecorder(stream);
-      recordingWriteRef.current = new Promise<void>((resolve, reject) => {
-        settleRecordingRef.current = { resolve, reject };
-      });
-      // Avoid an unhandled rejection when a recording is abandoned without save.
-      void recordingWriteRef.current.catch(() => undefined);
-      chunksRef.current = [];
-      rec.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      streamRef.current=stream;
+      const rec=new MediaRecorder(stream);
+      recordingWriteRef.current=new Promise<void>((resolve,reject)=>{settleRecordingRef.current={resolve,reject};});
+      void recordingWriteRef.current.catch(()=>undefined);
+      chunksRef.current=[];
+      rec.ondataavailable=ev=>{if(ev.data.size)chunksRef.current.push(ev.data);};
+      rec.onstop=async()=>{
+        try {await attachAudio(new Blob(chunksRef.current,{type:rec.mimeType||"audio/webm"}));settleRecordingRef.current?.resolve();}
+        catch(err){settleRecordingRef.current?.reject(err);alert("Не удалось сохранить аудио");}
+        finally{recordingWriteRef.current=null;settleRecordingRef.current=null;stream.getTracks().forEach(t=>t.stop());streamRef.current=null;}
       };
-      rec.onstop = async () => {
-        const blob = new Blob(chunksRef.current, {
-          type: rec.mimeType || "audio/webm",
-        });
-        try {
-          if (blob.size === 0) throw new Error("Аудиозапись пуста");
-          const audioId = await saveAudioFile(blob);
-          createdAudioIdsRef.current.add(audioId);
-          if (!editor || editor.isDestroyed) throw new Error("Редактор закрыт до сохранения аудио");
-          if (!editor.chain().focus().insertAudioNote(`audiodb:${audioId}`).run()) {
-            throw new Error("Не удалось добавить аудиозапись в заметку");
-          }
-          settleRecordingRef.current?.resolve();
-        } catch (error) {
-          console.error("Could not save audio recording", error);
-          await cleanupNewAudio(editor?.getHTML() ? audioIdsInHtml(editor.getHTML()) : []);
-          settleRecordingRef.current?.reject(error);
-          alert("Не удалось сохранить аудио. Проверьте свободное место.");
-        } finally {
-          settleRecordingRef.current = null;
-          recordingWriteRef.current = null;
-          chunksRef.current = [];
-          streamRef.current?.getTracks().forEach((t) => t.stop());
-          streamRef.current = null;
-        }
-      };
-      rec.onerror = () => {
-        settleRecordingRef.current?.reject(new Error("Ошибка MediaRecorder"));
-        settleRecordingRef.current = null;
-        recordingWriteRef.current = null;
-        stream.getTracks().forEach((track) => track.stop());
-        setRecording(false);
-      };
-      rec.start();
-      recorderRef.current = rec;
-      setRecording(true);
-    } catch (err) {
-      console.error(err);
-      alert("Не удалось получить доступ к микрофону");
-    }
+      rec.onerror=()=>{settleRecordingRef.current?.reject(new Error("Ошибка аудиозаписи"));recordingWriteRef.current=null;settleRecordingRef.current=null;stream.getTracks().forEach(t=>t.stop());setRecording(false);};
+      rec.start();recorderRef.current=rec;setRecording(true);
+    }catch(err){console.error(err);alert("Не удалось получить доступ к микрофону");}
   };
-
-  const stopRecording = () => {
-    try {
-      recorderRef.current?.stop();
-    } catch {}
-    recorderRef.current = null;
-    setRecording(false);
+  const stopRecording=()=>{
+    if(nativeRecordingRef.current){
+      nativeRecordingRef.current=false;setRecording(false);
+      void stopNativeAudio().then(attachAudio).then(()=>settleRecordingRef.current?.resolve())
+        .catch(err=>{settleRecordingRef.current?.reject(err);alert(err instanceof Error?err.message:"Не удалось сохранить запись");})
+        .finally(()=>{recordingWriteRef.current=null;settleRecordingRef.current=null;});
+      return;
+    }
+    try {if(recorderRef.current?.state==="recording")recorderRef.current.stop();}catch(err){settleRecordingRef.current?.reject(err);recordingWriteRef.current=null;}
+    recorderRef.current=null;setRecording(false);
   };
 
   if (!hydrated) {
@@ -513,6 +502,7 @@ function EditorPage() {
           </button>
           <button
             onClick={recording ? stopRecording : startRecording}
+            disabled={startingAudio}
             className={`grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary ${
               recording ? "bg-destructive text-destructive-foreground animate-pulse" : ""
             }`}
@@ -642,7 +632,7 @@ function EditorPage() {
           className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border p-3 shadow-inner transition-colors [-webkit-overflow-scrolling:touch]"
           style={{ background: canvasBg }}
         >
-          <EditorContent editor={editor} />
+          <EditorContent editor={editor} style={{ "--wave-note-caret": noteCaretColor(canvasBg) } as React.CSSProperties} />
         </div>
         <p className="mt-2 shrink-0 text-center font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
           {t("save")} · {t("done")}
