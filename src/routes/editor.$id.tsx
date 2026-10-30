@@ -237,7 +237,7 @@ function EditorPage() {
       scheduleTick();
       const {$from}=currentEditor.state.selection;
       const before=$from.parent.textBetween(0,$from.parentOffset);
-      setSlashText(/^\\/[\\p{L}\\p{N} -]{0,22}$/u.test(before) ? before.slice(1) : null);
+      setSlashText(/^\/[\p{L}\p{N} -]{0,22}$/u.test(before) ? before.slice(1) : null);
     },
     onSelectionUpdate: ({ editor }) => {
       const { from, to } = editor.state.selection;
@@ -312,7 +312,7 @@ function EditorPage() {
     if(!editor)return;
     const {$from}=editor.state.selection;
     const textBefore=$from.parent.textBetween(0,$from.parentOffset);
-    const slashLength=/^\\/[\\p{L}\\p{N} -]{0,22}$/u.test(textBefore)?textBefore.length:0;
+    const slashLength=/^\/[\p{L}\p{N} -]{0,22}$/u.test(textBefore)?textBefore.length:0;
     let chain=editor.chain().focus();
     if(slashLength)chain=chain.deleteRange({from:$from.pos-slashLength,to:$from.pos});
     setSlashText(null);
