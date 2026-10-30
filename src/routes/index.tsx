@@ -16,6 +16,7 @@ import {
   Palette,
   FolderInput,
   Share2,
+  Download,
   MoreHorizontal,
   FileInput,
   Plus,
@@ -81,6 +82,7 @@ import { toast } from "sonner";
 import {inspectWaveFile,receiveWaveNote,shareWaveNote} from "@/lib/note-transfer";
 import {findReturnedOriginal,combineReturnedBodies,replacementBackup} from "@/lib/wave-note-conflicts";
 import {noteMatchesSearch,type NoteSearchFilter} from "@/lib/note-search";
+import {shareNoteExport,type NoteExportFormat} from "@/lib/note-export";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -120,6 +122,7 @@ function Index() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [colorDialog,setColorDialog]=useState(false);
   const [moveDialog,setMoveDialog]=useState(false);
+  const [exportDialog,setExportDialog]=useState(false);
   const [searchOpen,setSearchOpen]=useState(false);
   const [searchTerm,setSearchTerm]=useState("");
   const [searchAllFolders,setSearchAllFolders]=useState(false);
@@ -132,9 +135,9 @@ function Index() {
   // Google renders native ads above WebView; temporarily hide that overlay
   // while the popup is open so the popup remains readable and clickable.
   useEffect(() => {
-    setNativeAdDialogBlocked(menuOpen || renameValue !== null || confirmDelete || Boolean(folderDialog));
+    setNativeAdDialogBlocked(menuOpen || renameValue !== null || confirmDelete || Boolean(folderDialog) || exportDialog || Boolean(incomingWave) || colorDialog || moveDialog);
     return () => setNativeAdDialogBlocked(false);
-  }, [menuOpen, renameValue, confirmDelete, folderDialog]);
+  }, [menuOpen, renameValue, confirmDelete, folderDialog, exportDialog, incomingWave, colorDialog, moveDialog]);
 
   // Selection is scoped to the folder being viewed and to notes that still exist.
   useEffect(() => setSelected(new Set()), [activeFolder]);
@@ -259,6 +262,16 @@ function Index() {
     }catch(error){toast.error(error instanceof Error?error.message:"Не удалось получить заметку");}
     finally{setTransferBusy(false);}
   };
+  const doExportSelected=async(format:NoteExportFormat)=>{
+    if(transferBusy||selectedNotes.length!==1)return;
+    setTransferBusy(true);
+    try{
+      await shareNoteExport(selectedNotes[0],format);
+      setExportDialog(false);
+      toast.success("Файл подготовлен для экспорта");
+    }catch(error){toast.error(error instanceof Error?error.message:"Ошибка экспорта");}
+    finally{setTransferBusy(false);}
+  };
   const doShareSelected=async()=>{
     if(selectedNotes.length!==1||transferBusy)return;
     setTransferBusy(true);
@@ -374,6 +387,10 @@ function Index() {
                         onClick={()=>void doShareSelected()} className="min-h-10 gap-2">
                         <Share2 className="h-4 w-4"/>Поделиться заметкой
                       </DropdownMenuItem>}
+                      {selected.size===1 && selectedNotes[0]?.kind!=="pdf"&&
+                      <DropdownMenuItem disabled={transferBusy} onClick={()=>setExportDialog(true)} className="min-h-10 gap-2">
+                        <Download className="h-4 w-4"/>Экспорт в файл
+                      </DropdownMenuItem>}
                       <DropdownMenuItem onClick={()=>setColorDialog(true)} className="min-h-10 gap-2">
                         <Palette className="h-4 w-4"/>Цвет карточки
                       </DropdownMenuItem>
@@ -483,6 +500,18 @@ function Index() {
               <Button variant="destructive" disabled={transferBusy} onClick={()=>void doImportWave("replace")}>Заменить с резервной копией</Button>
             </>}
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={exportDialog} onOpenChange={open=>{if(!transferBusy)setExportDialog(open)}}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader><DialogTitle>Экспорт заметки</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Выберите формат копии. Галочка в редакторе по-прежнему сохраняет заметку только внутри Wave Notes.</p>
+          <div className="grid gap-2">
+            <Button disabled={transferBusy} variant="outline" onClick={()=>void doExportSelected("txt")}>TXT — простой текст</Button>
+            <Button disabled={transferBusy} variant="outline" onClick={()=>void doExportSelected("html")}>HTML — текст с оформлением</Button>
+            <Button disabled={transferBusy} variant="outline" onClick={()=>void doExportSelected("docx")}>Word (.docx) — редактируемый документ</Button>
+          </div>
+          <p className="text-xs text-muted-foreground">Некоторые специальные элементы и вложения сохраняются только в фирменном формате .wnote.</p>
         </DialogContent>
       </Dialog>
       <Dialog open={colorDialog} onOpenChange={setColorDialog}>
