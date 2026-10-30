@@ -65,7 +65,14 @@ assert.deepEqual(wrapPdfGlyphs([{text:"a",width:1},{text:"b",width:1}], 1).map(l
 assert.throws(()=>wrapPdfGlyphs([{text:"W",width:5}], 1), /символ/);
 const fakeKern = (a:{text:string;width:number}[]) => a.map(g=>g.text).join("")==="AV" ? 1.4 : a.length;
 assert.equal(wrapPdfGlyphs([{text:"A",width:1},{text:"V",width:1}],1.5,fakeKern).length,1);
-assert.ok(src.includes("const lines = wrapPdfGlyphs(glyphs, maxWidth, measureLine)"));
+assert.ok(src.includes("wrapPdfGlyphs(glyphs,maxWidth,measureLine)"),
+  "User-created PDF text boxes must still wrap correctly");
+assert.ok(src.includes("const lines = overlay.cover ?"),
+  "Source PDF text must use its own fitting geometry");
+assert.ok(src.includes("adaptivePdfTextScale("),
+  "Source edits must adjust to their available space rather than block typing");
+assert.ok(!src.includes("Новая строка пересечёт другой текст PDF."),
+  "Typing must not trigger the old blocking toast");
 assert.ok(src.includes("if (draftOverlayRef.current && editingId) commitEditing()"));
 assert.ok(src.includes('const inserted = newline ? "\\n" : event.data!'));
 assert.ok(src.includes("const cancelEditing = useCallback"));
