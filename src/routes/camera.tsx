@@ -20,7 +20,7 @@ import { chooseLocalOcrImagePath, reusableOcrImagePath, safeLocalOcrPreviewUrl }
 import { savePendingOcrDraft, readPendingOcrDraft, clearPendingOcrDraft, shouldClearPendingDraft, OcrDraftWriteGate } from "@/lib/ocr-draft";
 import { isCameraCancellation, readableOcrFailure } from "@/lib/ocr-errors";
 import { composeRecognizedText, extractNativeTextAlternative, recoverNativeFullTextForReview, type OcrNativeTextAlternative } from "@/lib/ocr-text";
-import { ocrScanPlan, completeAutomaticOcrPlan, automaticOcrRequiresReview, prioritizeRemainingOcrScripts, confidentOcrPrimaryScript, cyrillicLanguageForScan, type OcrScanRequest } from "@/lib/ocr-plan";
+import { ocrScanPlan, AUTO_SCAN_ORDER, completeAutomaticOcrPlan, automaticOcrRequiresReview, prioritizeRemainingOcrScripts, confidentOcrPrimaryScript, cyrillicLanguageForScan, type OcrScanRequest } from "@/lib/ocr-plan";
 
 export const Route = createFileRoute("/camera")({
   head: () => ({ meta: [
