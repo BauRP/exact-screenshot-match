@@ -5,6 +5,7 @@
  */
 import { strFromU8, strToU8, unzip, zip } from "fflate";
 import { audioIdsInHtml, loadAudioFile, saveNewAudioFile, deleteAudioFile } from "./audio-files";
+import { imageIdsInHtml, loadImageFile, saveNewImageFile, deleteImageFile, imageBlobFromBytes } from "./image-files";
 import { loadPdfFile, saveNewPdfFile, deletePdfFile } from "./pdf-files";
 import { exportNotes, importBackupNotes, type Note } from "./notes-store";
 import { exportFolderBackup, restoreFolderBackup, rollbackFolderBackup, type Folder } from "./folders-store";
@@ -50,6 +51,8 @@ type BackupManifest = {
   hiddenSystem: string[];
   pdfIds: string[];
   audioIds: string[];
+  /** Optional for version-one backups created before image attachments existed. */
+  imageIds?: string[];
   deletedAt?: Record<string, number>;
 };
 
@@ -64,8 +67,11 @@ function parseManifest(input: Uint8Array): BackupManifest {
     throw new Error("Это не поддерживаемая резервная копия Супер заметок");
   }
   if (manifest.notes.length > 10000 || manifest.pdfIds.length > 10000 ||
-      manifest.audioIds.length > 10000 || manifest.folders.length > 1000) {
+      manifest.audioIds.length > 10000 || (manifest.imageIds?.length ?? 0) > 10000 || manifest.folders.length > 1000) {
     throw new Error("Резервная копия содержит слишком много записей");
+  }
+  if (manifest.imageIds !== undefined && !Array.isArray(manifest.imageIds)) {
+    throw new Error("Повреждён список фотографий в резервной копии");
   }
   return manifest;
 }
@@ -84,6 +90,18 @@ export async function validateFullBackup(blob: Blob): Promise<void> {
   }
   for (const id of uniqueIds(manifest.audioIds)) {
     if (!entries["audio/"+id+".blob"]?.byteLength) throw new Error("В архиве отсутствует аудио: "+id);
+  }
+  const images=uniqueIds(manifest.imageIds??[]);
+  for (const note of manifest.notes) {
+    if (typeof note?.body !== "string") throw new Error("Повреждена заметка в архиве");
+    for (const id of imageIdsInHtml(note.body)) {
+      if (!images.includes(id)) throw new Error("В копии не сохранена фотография: "+id);
+    }
+  }
+  for (const id of images) {
+    const raw=entries["images/"+id+".blob"];
+    if (!raw?.byteLength) throw new Error("В архиве отсутствует фотография: "+id);
+    imageBlobFromBytes(raw);
   }
 }
 
@@ -123,6 +141,7 @@ export async function createFullBackup(previous?: Blob): Promise<Blob> {
   const notes = [...liveNotes, ...retained];
   const pdfIds = uniqueIds(notes.filter((note) => note.kind === "pdf").map((note) => note.id));
   const audioIds = uniqueIds(notes.flatMap((note) => audioIdsInHtml(note.body)));
+  const imageIds = uniqueIds(notes.flatMap(note=>imageIdsInHtml(note.body)));
   const entries: Record<string, Uint8Array> = {};
   let total = 0;
   const add = (name: string, bytes: Uint8Array) => {
@@ -132,7 +151,7 @@ export async function createFullBackup(previous?: Blob): Promise<Blob> {
   };
   const manifest: BackupManifest = {
     format: FORMAT, version: VERSION, createdAt: Date.now(),
-    notes, folders: folders.folders, hiddenSystem: folders.hiddenSystem, pdfIds, audioIds, deletedAt,
+    notes, folders: folders.folders, hiddenSystem: folders.hiddenSystem, pdfIds, audioIds, imageIds, deletedAt,
   };
   add("manifest.json", strToU8(JSON.stringify(manifest)));
   for (const id of pdfIds) {
@@ -146,6 +165,13 @@ export async function createFullBackup(previous?: Blob): Promise<Blob> {
     const raw = audio ? new Uint8Array(await audio.arrayBuffer()) : previousEntries["audio/" + id + ".blob"];
     if (!raw) throw new Error("Не найдено аудио. Сохранение копии отменено: " + id);
     add("audio/" + id + ".blob", raw);
+  }
+  for (const id of imageIds) {
+    const photo=await loadImageFile(id);
+    const raw=photo?new Uint8Array(await photo.arrayBuffer()):previousEntries["images/"+id+".blob"];
+    if (!raw) throw new Error("Не найдена фотография. Сохранение копии отменено: "+id);
+    imageBlobFromBytes(raw); // Reject damaged or unsupported data before publishing snapshot.
+    add("images/"+id+".blob",raw);
   }
   // fflate's asynchronous ZIP API avoids blocking the WebView while packaging
   // large text, PDF and audio data.
@@ -197,6 +223,7 @@ export async function restoreFullBackup(file: File): Promise<number> {
   const manifest = parseManifest(metadata);
   const pdfIds = uniqueIds(manifest.pdfIds);
   const audioIds = uniqueIds(manifest.audioIds);
+  const imageIds = uniqueIds(manifest.imageIds??[]);
   // Reject backups that omit referenced binary attachments.
   for (const record of manifest.notes) {
     if (!record || typeof record !== "object" || typeof record.id !== "string" ||
@@ -211,6 +238,9 @@ export async function restoreFullBackup(file: File): Promise<number> {
     for (const id of audioIdsInHtml(record.body)) {
       if (!audioIds.includes(id)) throw new Error("В архиве отсутствует аудиозапись: " + id);
     }
+    for (const id of imageIdsInHtml(record.body)) {
+      if (!imageIds.includes(id)) throw new Error("В архиве отсутствует фотография: " + id);
+    }
   }
 
   // Validate ALL referenced files before making any changes to local storage.
@@ -224,6 +254,12 @@ export async function restoreFullBackup(file: File): Promise<number> {
     const value = entries["audio/" + id + ".blob"];
     if (!value || !value.byteLength) throw new Error("Не найдено аудио в резервной копии: " + id);
     total += value.byteLength;
+  }
+  for (const id of imageIds) {
+    const raw=entries["images/"+id+".blob"];
+    if (!raw?.byteLength) throw new Error("Не найдена фотография в резервной копии: "+id);
+    imageBlobFromBytes(raw);
+    total+=raw.byteLength;
   }
   if (total > MAX_ARCHIVE_BYTES) throw new Error("Размер распакованных файлов превышает 100 МБ");
 
@@ -258,7 +294,9 @@ export async function restoreFullBackup(file: File): Promise<number> {
   }
   const newPdfIds:string[]=[];
   const newAudioIds:string[]=[];
+  const newImageIds:string[]=[];
   const rewritten=new Map<string,string>();
+  const rewrittenImages=new Map<string,string>();
   const previousFolders=exportFolderBackup();
   let touchedFolders=false;
 
@@ -273,6 +311,15 @@ export async function restoreFullBackup(file: File): Promise<number> {
         rewritten.set(id,replacement);
       }
       body=body.split("audiodb:"+id).join("audiodb:"+replacement);
+    }
+    for(const id of imageIdsInHtml(body)){
+      let replacement=rewrittenImages.get(id);
+      if(!replacement){
+        replacement=crypto.randomUUID();
+        rewrittenImages.set(id,replacement);
+      }
+      body=body.split('data-image-id="'+id+'"').join('data-image-id="'+replacement+'"');
+      body=body.split("data-image-id='"+id+"'").join("data-image-id='"+replacement+"'");
     }
     return {sourceId,note:{...note,body}};
   });
@@ -291,6 +338,12 @@ export async function restoreFullBackup(file: File): Promise<number> {
       await saveNewAudioFile(destinationId, new Blob([raw.slice().buffer]));
       newAudioIds.push(destinationId);
     }
+    for (const [sourceId,destinationId] of rewrittenImages) {
+      const raw=entries["images/"+sourceId+".blob"];
+      if(!raw)throw new Error("Отсутствует фотография: "+sourceId);
+      await saveNewImageFile(destinationId,imageBlobFromBytes(raw));
+      newImageIds.push(destinationId);
+    }
     // Note metadata is published only after ALL of its attachments exist.
     // Restore folder IDs ahead of note metadata to preserve their grouping.
     restoreFolderBackup(manifest.folders, manifest.hiddenSystem);
@@ -305,6 +358,7 @@ export async function restoreFullBackup(file: File): Promise<number> {
     await Promise.allSettled([
       ...newPdfIds.map((id) => deletePdfFile(id)),
       ...newAudioIds.map((id) => deleteAudioFile(id)),
+      ...newImageIds.map((id) => deleteImageFile(id)),
     ]);
     throw error;
   }
