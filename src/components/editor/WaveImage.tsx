@@ -2,13 +2,16 @@ import {Node,mergeAttributes} from "@tiptap/core";
 import {ReactNodeViewRenderer,NodeViewWrapper,type NodeViewProps} from "@tiptap/react";
 import {useEffect,useState} from "react";
 import {loadImageFile} from "@/lib/image-files";
+import {WaveInkCanvas} from "@/components/editor/WaveInkCanvas";
+import {moveWaveBlock} from "@/lib/wave-block-motion";
 
 declare module "@tiptap/core" {
  interface Commands<ReturnType> {
   waveImage:{insertWaveImage:(id:string)=>ReturnType};
  }
 }
-function ImageView({node,updateAttributes,deleteNode,editor}:NodeViewProps){
+function ImageView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewProps){
+ const [annotating,setAnnotating]=useState(false);
  const id=String(node.attrs.imageId||"");
  const width=Number(node.attrs.width)||320;
  const [src,setSrc]=useState("");
@@ -25,7 +28,13 @@ function ImageView({node,updateAttributes,deleteNode,editor}:NodeViewProps){
  },[id]);
  return <NodeViewWrapper data-image-id={id} className="wave-image-block my-3" contentEditable={false}>
    <div className="mx-auto w-full max-w-full" style={{width:width+"px"}}>
-    {src?<img src={src} alt={String(node.attrs.alt||"Фото в заметке")} draggable={false} className="block h-auto w-full rounded-xl" />:
+    {src?<div className="relative aspect-auto w-full overflow-hidden rounded-xl">
+      <img src={src} alt={String(node.attrs.alt||"Фото в заметке")} draggable={false} className="block h-auto w-full" />
+      <div className={annotating?"absolute inset-0":"pointer-events-none absolute inset-0"}>
+        <WaveInkCanvas value={String(node.attrs.ink||"[]")} editable={editor.isEditable} active={annotating}
+          onChange={ink=>updateAttributes({ink})}/>
+      </div>
+    </div>:
       <div role="status" className="rounded-xl border border-border p-5 text-sm text-muted-foreground">
         {error?"Фотография не найдена в памяти телефона":"Загрузка фотографии…"}
       </div>}
@@ -35,6 +44,11 @@ function ImageView({node,updateAttributes,deleteNode,editor}:NodeViewProps){
           aria-label="Ширина фотографии" onChange={e=>updateAttributes({width:Number(e.target.value)})}/>
         <span>{width}px</span>
       </label>
+      <button type="button" onClick={()=>setAnnotating(v=>!v)} className="rounded-lg border border-border px-3 py-2 text-xs">
+        {annotating?"Готово":"Рисовать поверх"}
+      </button>
+      <button type="button" onClick={()=>moveWaveBlock(editor,getPos,"up")} aria-label="Поднять фото" className="rounded-lg border px-2 py-2 text-xs">↑</button>
+      <button type="button" onClick={()=>moveWaveBlock(editor,getPos,"down")} aria-label="Опустить фото" className="rounded-lg border px-2 py-2 text-xs">↓</button>
       <button type="button" className="rounded-lg border border-border px-3 py-2 text-xs" onClick={deleteNode}>Удалить фото</button>
     </div>}
    </div>
@@ -45,6 +59,7 @@ export const WaveImage=Node.create({
  addAttributes(){return {
   imageId:{default:"",parseHTML:el=>el.getAttribute("data-image-id")||"",renderHTML:a=>({"data-image-id":a.imageId})},
   width:{default:320,parseHTML:el=>Math.min(720,Math.max(120,Number(el.getAttribute("data-width"))||320)),renderHTML:a=>({"data-width":a.width})},
+  ink:{default:"[]",parseHTML:el=>el.getAttribute("data-ink")||"[]",renderHTML:a=>({"data-ink":a.ink})},
   alt:{default:"Фото в заметке",parseHTML:el=>el.getAttribute("data-alt")||"Фото в заметке",renderHTML:a=>({"data-alt":a.alt})},
  };},
  parseHTML(){return [{tag:"div[data-wave-image]"}];},
