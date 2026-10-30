@@ -430,7 +430,7 @@ function SettingsPage() {
                 toast.error("Не удалось открыть сайт политики конфиденциальности");
                 console.error("Cannot open privacy policy", error);
               }
-            }}>Перейти на сайт</Btn>
+            }}>Перейти</Btn>
           </Row>
           {adPrivacyAvailable ? (
             <>

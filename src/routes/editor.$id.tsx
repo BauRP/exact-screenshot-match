@@ -50,6 +50,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useT } from "@/lib/i18n";
+import { APP_FONTS, fontNameFromCss } from "@/lib/app-fonts";
 
 export const Route = createFileRoute("/editor/$id")({
   head: () => ({ meta: [
@@ -66,28 +67,7 @@ export const Route = createFileRoute("/editor/$id")({
   component: EditorPage,
 });
 
-const FONTS = [
-  { label: "Roboto", value: '"Roboto", sans-serif' },
-  { label: "Inter", value: '"Inter", sans-serif' },
-  { label: "Montserrat", value: '"Montserrat", sans-serif' },
-  { label: "Open Sans", value: '"Open Sans", sans-serif' },
-  { label: "Ubuntu", value: '"Ubuntu", sans-serif' },
-  { label: "PT Sans", value: '"PT Sans", sans-serif' },
-  { label: "Playfair Display", value: '"Playfair Display", serif' },
-  { label: "Merriweather", value: '"Merriweather", serif' },
-  { label: "Lora", value: '"Lora", serif' },
-  { label: "Nunito", value: '"Nunito", sans-serif' },
-  { label: "Raleway", value: '"Raleway", sans-serif' },
-  { label: "Fira Sans", value: '"Fira Sans", sans-serif' },
-  { label: "Rubik", value: '"Rubik", sans-serif' },
-  { label: "Work Sans", value: '"Work Sans", sans-serif' },
-  { label: "Manrope", value: '"Manrope", sans-serif' },
-  { label: "Caveat", value: '"Caveat", cursive' },
-  { label: "Comfortaa", value: '"Comfortaa", cursive' },
-  { label: "Oswald", value: '"Oswald", sans-serif' },
-  { label: "Source Sans 3", value: '"Source Sans 3", sans-serif' },
-  { label: "Noto Sans", value: '"Noto Sans", sans-serif' },
-];
+const FONTS = APP_FONTS.map(font => ({label:font.name,value:font.css}));
 
 const SIZES = [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 44, 48];
 
@@ -553,7 +533,7 @@ function EditorPage() {
             <div className="glass grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-1.5 rounded-xl p-1.5">
               <ToolbarPopover
                 label={
-                  FONTS.find((f) => f.value === currentFontFamily)?.label ??
+                  (FONTS.find((f) => f.value === currentFontFamily)?.label ?? fontNameFromCss(currentFontFamily)) ??
                   "Шрифт"
                 }
                 icon={<Type className="h-4 w-4" />}
