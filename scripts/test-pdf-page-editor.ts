@@ -37,6 +37,12 @@ assert.ok(!src.includes("commitMargins"));
 assert.ok(!src.includes("normalizePdfMargins"));
 assert.ok(src.includes("draftStartRef.current = overlay"));
 assert.ok(src.includes("eraseWidthPct"));
+assert.ok(src.includes('overflow: "visible",'),"Do not clip original PDF eraser to editable text crop");
+assert.ok(src.includes('backgroundColor:overlay.eraseColor??"#ffffff"'),"Source eraser should use captured page background");
+assert.ok(src.includes("const eraser=sourceErasePixels(overlay,width,height)"),"PDF export shares source erase bounds");
+const {sourceErasePixels} = await import("../src/lib/pdf-text-mask");
+assert.deepEqual(sourceErasePixels({xPct:10,yPct:20,widthPct:30,heightPct:4},200,400),
+ {left:19,top:79,width:62,height:18});
 const { wrapPdfGlyphs, displayPdfFontSize, adaptivePdfTextScale } = await import("../src/lib/pdf-text-layout");
 const { sameSourceText, safeSourceRight, sourceLineFits } = await import("../src/lib/pdf-text-safety");
 const { replaceAt, baseStyle, getRuns } = await import("../src/lib/pdf-runs");

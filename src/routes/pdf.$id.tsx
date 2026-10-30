@@ -30,6 +30,7 @@ import { hasPdfDraftChanges, hasSaveablePdfContent } from "@/lib/pdf-edit-guard"
 import { wrapPdfGlyphs, pdfBaselineTopPx, displayPdfFontSize, adaptivePdfTextScale } from "@/lib/pdf-text-layout";
 import { displayToSourceRect, pdfTextBounds, sourceOverlayTransform } from "@/lib/pdf-page-geometry";
 import { safeSourceRight, sameSourceText } from "@/lib/pdf-text-safety";
+import { sourceErasePixels, sampleSolidPdfBackground } from "@/lib/pdf-text-mask";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ColorGrid, PALETTE } from "@/components/ColorGrid";
 import {
@@ -910,6 +911,12 @@ function PdfViewerScreen() {
         eraseYPct: sourceBox.y,
         eraseWidthPct: sourceBox.width,
         eraseHeightPct: sourceBox.height,
+        eraseColor: canvasRef.current ? sampleSolidPdfBackground(canvasRef.current,{
+          x:hit.leftPct/100*(parseFloat(canvasRef.current.style.width)||1),
+          y:hit.topPct/100*(parseFloat(canvasRef.current.style.height)||1),
+          width:hit.widthPct/100*(parseFloat(canvasRef.current.style.width)||1),
+          height:hit.heightPct/100*(parseFloat(canvasRef.current.style.height)||1),
+        }) ?? "#ffffff" : "#ffffff",
         sourceFontId: hit.sourceFontId,
         sourceFontName: hit.sourceFontName,
         sourceFontCss: hit.sourceFontCss,
@@ -1144,14 +1151,12 @@ function PdfViewerScreen() {
       }
       // Mask the original glyph rectangle, not the expanded editable text region.
       if (overlay.cover) {
-        const eraseX = ((overlay.eraseXPct ?? overlay.xPct) / 100) * width;
-        const eraseTop = ((overlay.eraseYPct ?? overlay.yPct) / 100) * height;
-        const eraseWidth = ((overlay.eraseWidthPct ?? overlay.widthPct) / 100) * width;
-        const eraseHeight = ((overlay.eraseHeightPct ?? overlay.heightPct) / 100) * height;
+        const eraser=sourceErasePixels(overlay,width,height);
+        const {r:maskR,g:maskG,b:maskB}=hexToRgb(overlay.eraseColor??"#ffffff");
         target.drawRectangle({
-          x: eraseX - 1, y: height - eraseTop - eraseHeight - 1,
-          width: eraseWidth + 2, height: eraseHeight + 2,
-          color: rgb(1, 1, 1),
+          x:eraser.left,y:height-eraser.top-eraser.height,
+          width:eraser.width,height:eraser.height,
+          color:rgb(maskR,maskG,maskB),
         });
       }
 
@@ -1793,8 +1798,10 @@ function PdfViewerScreen() {
                     top: baselineTop === null ? `${overlay.yPct}%` : `${baselineTop}px`,
                     width: `${Math.min(overlay.widthPct,Math.max(1,99-overlay.xPct))}%`,
                     minHeight: `${overlay.heightPct}%`,
-                    maxHeight: overlay.cover ? `${(overlay.eraseHeightPct ?? overlay.heightPct) / 100 * unrotatedPageSize.height + 6}px` : undefined,
-                    overflow: overlay.cover ? "hidden" : "visible",
+                    // The original-text eraser is a child of this positioned
+                    // block. Clipping the parent used to cut off its mask and
+                    // reveal the old PDF letters underneath newly typed text.
+                    overflow: "visible",
                     pointerEvents: "auto",
                     fontSize: `${sizePx}px`,
                     lineHeight: 1.2,
@@ -1806,7 +1813,8 @@ function PdfViewerScreen() {
                   }}
                 >
                   {overlay.cover && !untouchedSource && (
-                    <span aria-hidden="true" className="pointer-events-none absolute bg-white" style={{
+                    <span aria-hidden="true" className="pointer-events-none absolute" style={{
+                      backgroundColor:overlay.eraseColor??"#ffffff",
                       left: `${coverX / 100 * unrotatedPageSize.width - 1}px`,
                       top: `${(overlay.eraseYPct ?? overlay.yPct) / 100 * unrotatedPageSize.height - actualTopPx - 1}px`,
                       width: `${(overlay.eraseWidthPct ?? overlay.widthPct) / 100 * unrotatedPageSize.width + 2}px`,
@@ -1821,6 +1829,8 @@ function PdfViewerScreen() {
                       spellCheck={false}
                       className={`relative block w-full min-h-[1em] bg-transparent outline-none ${overlay.cover ? "whitespace-pre" : "whitespace-pre-wrap break-words"}`}
                       style={{
+                        overflow:overlay.cover ? "hidden" : "visible",
+                        maxHeight:overlay.cover ? `${(overlay.heightPct / 100 * unrotatedPageSize.height)+6}px`:undefined,
                         caretColor: overlay.color ?? DEFAULT_PDF_TEXT_COLOR,
                         // Preserve the exact glyphs from the original PDF on tap;
                         // only the caret is drawn until real text edits are made.
@@ -1865,7 +1875,9 @@ function PdfViewerScreen() {
                       }}
                     />
                   ) : (
-                    <span className={`relative block w-full ${overlay.cover ? "whitespace-pre" : "whitespace-pre-wrap break-words"}`}>
+                    <span className={`relative block w-full ${overlay.cover ? "whitespace-pre" : "whitespace-pre-wrap break-words"}`}
+                      style={{overflow:overlay.cover ? "hidden":"visible",
+                        maxHeight:overlay.cover ? `${overlay.heightPct / 100 * unrotatedPageSize.height + 6}px`:undefined}}>
                       {getRuns(overlay).map((run, index) => (
                         <span key={index} style={cssToReact(runCss(run, viewScale * previewFit, {
                           fontFamily: overlay.fontFamily, cssFamily: overlay.sourceFontCss,

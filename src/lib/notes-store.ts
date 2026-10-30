@@ -30,6 +30,8 @@ export type PdfTextOverlay = {
   eraseYPct?: number;
   eraseWidthPct?: number;
   eraseHeightPct?: number;
+  /** Sampled uniform background behind the source glyphs when available. */
+  eraseColor?: string;
   sourceFontId?: string;
   sourceFontName?: string;
   sourceFontCss?: string;
