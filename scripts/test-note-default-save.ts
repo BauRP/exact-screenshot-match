@@ -1,0 +1,40 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+import {PALETTE} from "../src/components/ColorGrid";
+import {noteCaretColor} from "../src/lib/note-caret-color";
+import {NEW_NOTE_YELLOW,NEW_NOTE_INK,editorBackground,editorInk} from "../src/lib/note-appearance";
+assert.ok(PALETTE.includes(NEW_NOTE_YELLOW));
+assert.equal(NEW_NOTE_YELLOW,"#FDE68A");
+assert.equal(noteCaretColor(NEW_NOTE_YELLOW),"#000000");
+assert.equal(editorBackground(true),NEW_NOTE_YELLOW);
+assert.equal(editorInk(true),NEW_NOTE_INK);
+assert.equal(editorBackground(false),"#000000");
+assert.equal(editorInk(false),"#FFFFFF");
+assert.equal(editorBackground(false,"#336699"),"#336699");
+assert.equal(editorInk(false,"#123456"),"#123456");
+const storage=new Map<string,string>();
+Object.defineProperty(globalThis,"window",{configurable:true,value:{localStorage:{
+ getItem:(key:string)=>storage.get(key)??null,
+ setItem:(key:string,value:string)=>{storage.set(key,value);},
+}}});
+const {createNote,getNote,updateNote,exportNotes}=await import("../src/lib/notes-store");
+const fresh=createNote({title:"Yellow note"});
+assert.deepEqual(fresh.style,{background:NEW_NOTE_YELLOW,color:NEW_NOTE_INK});
+const manual=createNote({title:"Custom",style:{background:"#112233",color:"#AACCEE"}});
+assert.equal(manual.style?.background,"#112233");
+const pdf=createNote({title:"Imported PDF",kind:"pdf"});
+assert.equal(pdf.style,undefined);
+updateNote(manual.id,{style:{background:"#334455"}});
+assert.equal(getNote(manual.id)?.style?.color,"#AACCEE");
+assert.equal(getNote(manual.id)?.style?.background,"#334455");
+assert.ok(exportNotes().includes(NEW_NOTE_YELLOW));
+const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
+assert.match(editor,/editorBackground\(isNew,note\?\.style\?\.background\)/);
+assert.match(editor,/color:var\(--wave-note-ink/);
+assert.match(editor,/caret-color:var\(--wave-note-caret/);
+assert.match(editor,/<Save aria-hidden="true"/);
+assert.match(editor,/h-\[30px\] w-\[30px\]/);
+assert.match(editor,/h-11 w-11/);
+assert.match(editor,/aria-label=\{t\("save"\)\}/);
+assert.match(editor,/toast\.success\(t\("saved"\)/);
+console.log("New note yellow, dark ink/caret, old note and PDF preservation, and Save affordance passed.");

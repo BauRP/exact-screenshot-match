@@ -1,12 +1,15 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { saveAudioFile, deleteAudioFile, audioIdsInHtml } from "@/lib/audio-files";
 import { ColorGrid, PALETTE } from "@/components/ColorGrid";
+import {NEW_NOTE_INK,editorBackground,editorInk} from "@/lib/note-appearance";
 import { noteCaretColor } from "@/lib/note-caret-color";
 import { nativeAudioAvailable, startNativeAudio, stopNativeAudio } from "@/lib/native-audio";
 import {
   ArrowLeft,
-  Check,
+  Save,
+  LoaderCircle,
   Type,
   Palette,
   CaseUpper,
@@ -114,13 +117,12 @@ function EditorPage() {
     createdAudioIdsRef.current=new Set([...createdAudioIdsRef.current].filter(id=>retained.has(id)));
   };
   const savingRef = useRef(false);
+  const [saving,setSaving] = useState(false);
 
   const [currentFontFamily, setCurrentFontFamily] = useState(FONTS[0].value);
   const [currentFontSize, setCurrentFontSize] = useState<number>(18);
-  const [currentColor, setCurrentColor] = useState<string>("#FFFFFF");
-  const [canvasBg, setCanvasBg] = useState<string>(
-    note?.style?.background ?? "#000000",
-  );
+  const [currentColor, setCurrentColor] = useState<string>(editorInk(isNew,note?.style?.color));
+  const [canvasBg, setCanvasBg] = useState<string>(editorBackground(isNew,note?.style?.background));
 
   // Sync local state once the note hydrates from storage.
   const syncedRef = useRef(false);
@@ -131,6 +133,7 @@ function EditorPage() {
     setPinnedLocal(!!note.pinned);
     setFolderId(note.folderId ?? "all");
     if (note.style?.background) setCanvasBg(note.style.background);
+    if (note.style?.color) setCurrentColor(note.style.color);
   }, [note]);
 
   // Latest title ref so onUpdate doesn't need to be recreated per keystroke.
@@ -192,7 +195,7 @@ function EditorPage() {
       attributes: {
         class:
           "sn-tiptap min-h-full w-full whitespace-pre-wrap break-words outline-none",
-        style: "color:#FFFFFF;caret-color:var(--wave-note-caret,#FFFFFF);",
+        style: "color:var(--wave-note-ink,#FFFFFF);caret-color:var(--wave-note-caret,#FFFFFF);",
       },
     },
     // Draft only: nothing is written to storage until the checkmark is tapped.
@@ -264,10 +267,11 @@ function EditorPage() {
     navigate({to:"/"});
   };
 
-  /** Checkmark = the one and only commit point. */
+  /** Save icon commits the draft to local storage; back still discards. */
   const handleSave = async () => {
     if (savingRef.current) return;
     savingRef.current = true;
+    setSaving(true);
     try {
     // Stop MediaRecorder and wait for its final ondataavailable/onstop events.
     // Without this, a fast checkmark saves HTML before the audio node exists.
@@ -290,7 +294,8 @@ function EditorPage() {
         body,
         folderId,
         pinned,
-        style: { background: canvasBg },
+        // Preserve dark default ink when the new yellow note is reopened.
+        style: { background: canvasBg, color: NEW_NOTE_INK },
       });
     } else if (note) {
       updateNote(id, {
@@ -304,12 +309,14 @@ function EditorPage() {
 
     committedNoteRef.current=true;
     await cleanupNewAudio(audioIdsInHtml(body));
+    toast.success(t("saved"),{duration:1600});
     navigate({ to: "/" });
     } catch (error) {
       console.error("Unable to save note", error);
       alert(error instanceof Error ? error.message : "Не удалось сохранить заметку. Текст остаётся в редакторе.");
     } finally {
       savingRef.current = false;
+      setSaving(false);
     }
   };
 
@@ -470,11 +477,19 @@ function EditorPage() {
               </DropdownMenuContent>
             </DropdownMenu>
           <button
+            type="button"
             onClick={handleSave}
-            className="ml-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm hover:opacity-90"
-            aria-label={t("done")}
+            disabled={saving}
+            aria-label={t("save")}
+            title={t("save")}
+            aria-busy={saving}
+            className="group ml-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-wait"
           >
-            <Check className="h-4 w-4" strokeWidth={2.5} />
+            <span className="grid h-[30px] w-[30px] place-items-center rounded-full bg-primary text-primary-foreground shadow-sm transition-transform duration-150 group-hover:scale-105 group-active:scale-95 group-disabled:scale-100 motion-reduce:transform-none">
+              {saving
+                ? <LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" strokeWidth={2} />
+                : <Save aria-hidden="true" className="h-4 w-4" strokeWidth={2} />}
+            </span>
           </button>
         </div>
       </header>
@@ -632,10 +647,13 @@ function EditorPage() {
           className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border p-3 shadow-inner transition-colors [-webkit-overflow-scrolling:touch]"
           style={{ background: canvasBg }}
         >
-          <EditorContent editor={editor} style={{ "--wave-note-caret": noteCaretColor(canvasBg) } as React.CSSProperties} />
+          <EditorContent editor={editor} style={{
+            "--wave-note-caret": noteCaretColor(canvasBg),
+            "--wave-note-ink": editorInk(isNew,note?.style?.color),
+          } as React.CSSProperties} />
         </div>
         <p className="mt-2 shrink-0 text-center font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-          {t("save")} · {t("done")}
+          {t("save")}
         </p>
       </main>
 

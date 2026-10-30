@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { markBackupDirty } from "./backup-signals";
+import { NEW_NOTE_YELLOW,NEW_NOTE_INK } from "./note-appearance";
 
 export type NoteKind = "note" | "pdf";
 
@@ -447,7 +448,11 @@ export function createNote(partial?: Partial<Note>): Note {
     folderId: partial?.folderId ?? "all",
     kind: partial?.kind ?? "note",
     pdf: partial?.pdf,
-    style: partial?.style,
+    // Only brand-new text notes inherit yellow paper. Imported/older saved
+    // notes are normalized without this default and keep their own backgrounds.
+    style: partial?.style ?? (partial?.kind === "pdf" ? undefined : {
+      background: NEW_NOTE_YELLOW, color: NEW_NOTE_INK,
+    }),
 
   };
   const nextNotes = [note, ...state.notes];

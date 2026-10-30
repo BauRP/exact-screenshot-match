@@ -79,6 +79,9 @@ jobs:
       - name: TypeScript static checks
         run: bunx tsc --noEmit
 
+      - name: Verify yellow new-note defaults and Save button
+        run: bun scripts/test-note-default-save.ts
+
       - name: Verify premium Android intro and timeout safeguards
         run: bun scripts/test-launch-intro.ts
 
