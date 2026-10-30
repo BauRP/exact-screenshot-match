@@ -112,6 +112,29 @@ public class AndroidShellInstrumentedTest {
                 geometry.getDouble("right") <= geometry.getDouble("viewportWidth") + 2);
             assertTrue("Document content overflows horizontally: " + details,
                 geometry.getDouble("documentWidth") <= geometry.getDouble("viewportWidth") + 2);
+            // The Vivo X200 report is from Settings, not only the home page.
+            // Verify that route changes do not drop the safe-area container.
+            assertEquals("true", evaluate(web,
+                "(function(){var a=document.querySelector('a[href=\"/settings\"]');if(!a)return false;a.click();return true;})()"));
+            boolean settingsReady=false;
+            for(int attempt=0;attempt<20;attempt++){
+                if("true".equals(evaluate(web,
+                    "(function(){return location.pathname.indexOf('/settings')>=0 && !!document.querySelector('header')})()"))){
+                    settingsReady=true;break;
+                }
+                Thread.sleep(300);
+            }
+            assertTrue("Settings route failed to mount",settingsReady);
+            String settingsRaw=evaluate(web,
+                "(function(){var h=document.querySelector('header').getBoundingClientRect();var b=document.querySelector('.wave-bottom-nav').getBoundingClientRect();return JSON.stringify({headerTop:h.top,headerBottom:h.bottom,bottomTop:b.top,bottomEnd:b.bottom,viewportHeight:innerHeight});})()");
+            JSONObject settings=new JSONObject((String)new JSONTokener(settingsRaw).nextValue());
+            System.out.println("WAVE_SETTINGS_SAFE_AREA "+settings);
+            assertTrue("Settings heading is above the safe WebView viewport: "+settings,
+                settings.getDouble("headerTop")>=-2);
+            assertTrue("Settings navigation is under Android system buttons: "+settings,
+                settings.getDouble("bottomEnd")<=settings.getDouble("viewportHeight")+2);
+            assertTrue("Settings footer overlaps header: "+settings,
+                settings.getDouble("bottomTop")>=settings.getDouble("headerBottom"));
         }
     }
 
