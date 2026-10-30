@@ -16,6 +16,7 @@ import {
   Palette,
   FolderInput,
   Share2,
+  MoreHorizontal,
   FileInput,
   Plus,
   ListChecks,
@@ -325,18 +326,29 @@ function Index() {
                       <Pencil className="h-4 w-4" />
                     </button>
                   )}
-                  {selected.size===1 && <button type="button" aria-label="Создать копию заметки" disabled={copyBusy} onClick={()=>void duplicateSelectedNote()}
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary hover:bg-secondary/70 disabled:opacity-40">
-                    <Copy className="h-4 w-4"/>
-                  </button>}
-                  {selected.size===1 && <button type="button" aria-label="Поделиться редактируемой заметкой" disabled={transferBusy}
-                    onClick={()=>void doShareSelected()} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary disabled:opacity-40">
-                    <Share2 className="h-4 w-4"/>
-                  </button>}
-                  <button type="button" aria-label="Цвет карточки" onClick={()=>setColorDialog(true)}
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary hover:bg-secondary/70"><Palette className="h-4 w-4"/></button>
-                  <button type="button" aria-label="Переместить в папку" onClick={()=>setMoveDialog(true)}
-                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary hover:bg-secondary/70"><FolderInput className="h-4 w-4"/></button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button type="button" aria-label="Дополнительные действия с заметкой"
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary hover:bg-secondary/70">
+                        <MoreHorizontal className="h-4 w-4"/>
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" sideOffset={6} className="w-56 rounded-xl">
+                      {selected.size===1 && <DropdownMenuItem disabled={copyBusy} onClick={()=>void duplicateSelectedNote()} className="min-h-10 gap-2">
+                        <Copy className="h-4 w-4"/>Создать копию
+                      </DropdownMenuItem>}
+                      {selected.size===1 && <DropdownMenuItem aria-label="Поделиться редактируемой заметкой" disabled={transferBusy}
+                        onClick={()=>void doShareSelected()} className="min-h-10 gap-2">
+                        <Share2 className="h-4 w-4"/>Поделиться заметкой
+                      </DropdownMenuItem>}
+                      <DropdownMenuItem onClick={()=>setColorDialog(true)} className="min-h-10 gap-2">
+                        <Palette className="h-4 w-4"/>Цвет карточки
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={()=>setMoveDialog(true)} className="min-h-10 gap-2">
+                        <FolderInput className="h-4 w-4"/>Переместить в папку
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <button
                     type="button"
                     aria-label={t("delete")}

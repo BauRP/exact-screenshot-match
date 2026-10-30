@@ -308,7 +308,7 @@ function EditorPage() {
     requestAnimationFrame(()=>editor.view.dom.querySelector(".wave-find-current")?.scrollIntoView({block:"nearest"}));
   };
 
-  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator",callout:CalloutKind="important")=>{
+  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator"|"bullets"|"numbered"|"heading"|"checklist",callout:CalloutKind="important")=>{
     if(!editor)return;
     const {$from}=editor.state.selection;
     const textBefore=$from.parent.textBetween(0,$from.parentOffset);
@@ -317,6 +317,10 @@ function EditorPage() {
     if(slashLength)chain=chain.deleteRange({from:$from.pos-slashLength,to:$from.pos});
     setSlashText(null);
     if(kind==="quote"){chain.toggleBlockquote().run();return;}
+    if(kind==="bullets"){chain.toggleBulletList().run();return;}
+    if(kind==="numbered"){chain.toggleOrderedList().run();return;}
+    if(kind==="heading"){chain.toggleHeading({level:2}).run();return;}
+    if(kind==="checklist"){chain.insertContent({type:"waveChecklistItem",attrs:{shape:checkShape,done:false},content:[{type:"text",text:" "}]}).run();return;}
     if(kind==="tape"){
       if(editor.state.selection.empty){toast("Сначала выделите слова, которые нужно скрыть");return;}
       chain.setMark("waveTape").run();return;
@@ -329,6 +333,10 @@ function EditorPage() {
     chain.insertContent(node).run();
   };
   const blockChoices=[
+    {id:"checklist",label:"Список дел",icon:"☐"},
+    {id:"bullets",label:"Маркированный список",icon:"•"},
+    {id:"numbered",label:"Нумерованный список",icon:"1."},
+    {id:"heading",label:"Заголовок",icon:"H"},
     {id:"callout",label:"Важно",icon:"!"},
     {id:"tip",label:"Совет",icon:"✦"},
     {id:"warning",label:"Предупреждение",icon:"⚠"},

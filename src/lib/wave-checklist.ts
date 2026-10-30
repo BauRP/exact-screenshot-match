@@ -6,6 +6,21 @@ const valid=(shape:string):shape is CheckShape=>["square","circle","diamond","ch
  */
 export const WaveChecklistItem=Node.create({
  name:"waveChecklistItem",
+ priority:1100,
+ addKeyboardShortcuts(){
+  return {Enter:()=>{
+    const {$from}=this.editor.state.selection;
+    if($from.parent.type.name!=="waveChecklistItem")return false;
+    if(!$from.parent.textContent.trim()){
+      return this.editor.commands.setNode("paragraph");
+    }
+    const at=$from.after();
+    return this.editor.chain().focus()
+      .insertContentAt(at,{type:"waveChecklistItem",attrs:{shape:$from.parent.attrs.shape,done:false},
+        content:[{type:"text",text:" "}]})
+      .setTextSelection(at+1).run();
+  }};
+ },
  group:"block",
  content:"inline*",
  defining:true,
