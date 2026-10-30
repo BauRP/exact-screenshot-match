@@ -12,6 +12,16 @@ Object.defineProperty(globalThis, "window", { configurable: true, value: { local
 Object.defineProperty(globalThis, "localStorage", { configurable: true, value: store });
 const notes = await import("../src/lib/notes-store");
 const { createFullBackup, restoreFullBackup } = await import("../src/lib/backup");
+const { getBackupDirtyRevision } = await import("../src/lib/backup-signals");
+const backupSettingsSource=await Bun.file("src/routes/settings.tsx").text();
+const privateBackupSource=await Bun.file("src/lib/local-backup.ts").text();
+assert.ok(!backupSettingsSource.includes("Сохранить копию вне приложения"));
+assert.ok(!backupSettingsSource.includes("Восстановить из ZIP"));
+assert.ok(!backupSettingsSource.includes("shareFullBackup("));
+assert.ok(backupSettingsSource.includes("<Toggle checked={automaticBackup}"));
+assert.ok(privateBackupSource.includes('sn.backup.auto-enabled.v1'));
+assert.ok(privateBackupSource.includes("isAutomaticBackupEnabled() || !getBackupDirtyRevision()"));
+assert.ok(privateBackupSource.includes("clearBackupDirtyRevision(getBackupDirtyRevision())"));
 
 const first = notes.createNote({ title: "Моя заметка", body: "Оригинальный текст" });
 const copy1 = await createFullBackup();

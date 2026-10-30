@@ -141,7 +141,12 @@ export function restoreLocalBackup(): Promise<number> {
   return serialized(async () => {
     const copy = await readBackupOrNull();
     if (!copy) throw new Error("Резервная копия ещё не создана. Включите «Автоматическая резервная копия» в настройках.");
-    return restoreFullBackup(new File([copy], BACKUP_FILE, { type: "application/zip" }));
+    const count=await restoreFullBackup(new File([copy], BACKUP_FILE, { type: "application/zip" }));
+    // Restoring from this snapshot is NOT a new user edit. Otherwise the
+    // restore event marks it dirty and a subsequent timer can immediately
+    // rewrite the recovery source with the just-restored notes.
+    clearBackupDirtyRevision(getBackupDirtyRevision());
+    return count;
   });
 }
 
