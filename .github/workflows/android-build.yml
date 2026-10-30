@@ -109,6 +109,9 @@ jobs:
       - name: Verify single-file Wave Notes transfer without overwrites
         run: bun scripts/test-wave-transfer.ts
 
+      - name: Verify editor ink and photo annotations
+        run: bun scripts/test-wave-ink.ts
+
       - name: Verify offline note image storage, exchange and cleanup
         run: bun scripts/test-wave-images.ts
 
