@@ -44,7 +44,7 @@ public class NativeAudioRecorderPlugin extends Plugin{
  }
  @PluginMethod public synchronized void stop(PluginCall call){
   if(!active||rec==null){call.reject("Запись не запущена");return;}
-  if(System.currentTimeMillis()-started<300){call.reject("Подождите хотя бы секунду записи");return;}
+  if(System.currentTimeMillis()-started<300){clean();call.reject("Запись слишком короткая. Начните новую запись и говорите не менее секунды.");return;}
   try{
    rec.stop();rec.release();rec=null;active=false;
    if(file.length()<1||file.length()>12L*1024*1024)throw new IOException("Пустая или слишком большая запись");
