@@ -87,14 +87,14 @@ export function automaticOcrRequiresReview(
   detectedScript?:string,
 ):boolean {
   const cyr=readings.find(item=>item.script==="cyrillic");
-  const count=(text:string)=>(text.match(/\\p{Script=Cyrillic}/gu)??[]).length;
+  const count=(text:string)=>(text.match(/\p{Script=Cyrillic}/gu)??[]).length;
   const cyrLetters=count(cyr?.text??"");
   const mergedLetters=count(selectedText);
   if(cyrLetters>=12 && mergedLetters<Math.max(4,cyrLetters*0.25))return true;
   if(cyr && cyrLetters>=12 && typeof cyr.confidence==="number" &&
      Number.isFinite(cyr.confidence) && cyr.confidence<40)return true;
   if(detectedScript==="cyrillic" && mergedLetters<4 &&
-     (selectedText.match(/\\p{L}/gu)??[]).length>=16)return true;
+     (selectedText.match(/\p{L}/gu)??[]).length>=16)return true;
   return false;
 }
 
