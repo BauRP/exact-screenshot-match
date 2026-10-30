@@ -16,8 +16,8 @@ assert.match(shell, /WAVE NOTES/);
 assert.match(shell, /fill: #fff; opacity: 0;/);
 assert.match(shell, /wave-halo/);
 assert.match(shell, /wave-atmosphere/);
-const splashCss = shell.slice(shell.indexOf('<style id="wave-intro-style">'), shell.indexOf('</style>', shell.indexOf('<style id="wave-intro-style">'))).replace(/\\/\\*[\\s\\S]*?\\*\\//g, "");
-assert.doesNotMatch(splashCss, /(?:^|[^-])filter\\s*:|clip-path\\s*:|stroke-dash(?:array|offset)\\s*:|text-shadow\\s*:/,
+const splashCss = shell.slice(shell.indexOf('<style id="wave-intro-style">'), shell.indexOf('</style>', shell.indexOf('<style id="wave-intro-style">'))).replace(/\/\*[\s\S]*?\*\//g, "");
+assert.doesNotMatch(splashCss, /(?:^|[^-])filter\s*:|clip-path\s*:|stroke-dash(?:array|offset)\s*:|text-shadow\s*:/,
   "Cold-start animation must not use expensive blur/clipping/vector-dash effects");
 assert.match(shell, /@media \(prefers-reduced-motion: reduce\)/);
 assert.match(shell, /window\.__waveNotesIntro/);
