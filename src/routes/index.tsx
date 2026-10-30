@@ -66,6 +66,7 @@ import {
   useNotesDatabaseStatus,
   useSort,
   useView,
+  moveNoteBefore,
   type Note,
   type SortMode,
   type ViewMode,
@@ -356,7 +357,8 @@ function Index() {
           ) : status === "error" ? (
             <DatabaseErrorState message={databaseError} />
           ) : (
-            <NotesGrid view={view} notes={filteredNotes} selected={selected} onToggle={toggleSelected} onOpen={openNote} />
+            <NotesGrid view={view} notes={filteredNotes} selected={selected} onToggle={toggleSelected} onOpen={openNote}
+              onMove={(id,target)=>{try{if(moveNoteBefore(id,target))toast.success("Порядок заметок сохранён");}catch(error){toast.error(error instanceof Error?error.message:"Не удалось переместить");}}} />
           )}
         </main>
       )}
@@ -550,6 +552,7 @@ function TopContextMenu({
             <SortItem current={sort} value="created" label={t("by_created")} icon={<CalendarPlus className="h-4 w-4" />} />
             <SortItem current={sort} value="updated" label={t("by_updated")} icon={<CalendarClock className="h-4 w-4" />} />
             <SortItem current={sort} value="alpha" label={t("alpha")} icon={<ArrowDownAZ className="h-4 w-4" />} />
+            <SortItem current={sort} value="manual" label="Мой порядок" icon={<List className="h-4 w-4" />} />
           </div>
         )}
       </DropdownMenuContent>
@@ -756,12 +759,14 @@ function NotesGrid({
   selected,
   onToggle,
   onOpen,
+  onMove,
 }: {
   view: ViewMode;
   notes: Note[];
   selected: Set<string>;
   onToggle: (id: string) => void;
   onOpen: (note: Note) => void;
+  onMove: (sourceId:string,targetId:string) => void;
 }) {
   return (
     <div className={view === "grid"
@@ -779,6 +784,7 @@ function NotesGrid({
             selectionMode={selected.size > 0}
             onToggle={() => onToggle(note.id)}
             onOpen={() => onOpen(note)}
+            onMove={targetId=>onMove(note.id,targetId)}
           />
           {(index + 1) % 5 === 0 && (
             <div className="col-span-full min-w-0">

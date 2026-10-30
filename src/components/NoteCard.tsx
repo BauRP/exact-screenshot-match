@@ -35,6 +35,7 @@ export function NoteCard({
   selectionMode = false,
   onToggle,
   onOpen,
+  onMove,
 }: {
   note: Note;
   view: ViewMode;
@@ -42,11 +43,14 @@ export function NoteCard({
   selectionMode?: boolean;
   onToggle: () => void;
   onOpen: () => void;
+  onMove: (targetId:string)=>void;
 }) {
   const isPdf = note.kind === "pdf";
   const isFavorite = isPdf ? !!note.pdf?.favorite : !!note.pinned;
   const pressTimer = useRef<number | null>(null);
   const longPressed = useRef(false);
+  const dragging=useRef(false);
+  const dropTarget=useRef<string|null>(null);
   const startPos = useRef({ x: 0, y: 0 });
 
   const clearPress = () => {
@@ -93,6 +97,7 @@ export function NoteCard({
   const muted = cardBg?(light?"#3F3F46":"#E5E7EB"):undefined;
   return (
     <div
+      data-wave-note-id={note.id}
       role="checkbox"
       aria-checked={selected}
       tabIndex={0}
@@ -108,10 +113,26 @@ export function NoteCard({
         if (e.key === " ") { e.preventDefault(); onToggle(); }
         if (e.key === "Enter") onOpen();
       }}
-      className={`group cursor-pointer select-none transition-all active:scale-[0.98] ${noteCardShell(view)} ${
+      className={`group cursor-pointer select-none transition-all active:scale-[0.98] ${noteCardShell(view)} ${selectionMode?"pl-12 ":""} ${
         selected ? "border-primary ring-2 ring-primary/40" : "hover:border-primary/40"
       }`}
     >
+      {selectionMode && <button type="button" aria-label="Перетащить заметку"
+        className="absolute left-1.5 top-2 z-20 grid h-10 w-9 touch-none place-items-center rounded-lg text-muted-foreground hover:bg-secondary/70"
+        onClick={e=>e.stopPropagation()}
+        onPointerDown={e=>{e.stopPropagation();e.preventDefault();clearPress();dragging.current=true;dropTarget.current=null;e.currentTarget.setPointerCapture(e.pointerId);}}
+        onPointerMove={e=>{
+          if(!dragging.current)return;e.stopPropagation();e.preventDefault();
+          const target=document.elementFromPoint(e.clientX,e.clientY)?.closest("[data-wave-note-id]");
+          const id=target?.getAttribute("data-wave-note-id");
+          if(id&&id!==note.id)dropTarget.current=id;
+          const scroll=e.currentTarget.closest("main") as HTMLElement|null;
+          if(scroll){const bounds=scroll.getBoundingClientRect();if(e.clientY<bounds.top+48)scroll.scrollTop-=13;else if(e.clientY>bounds.bottom-48)scroll.scrollTop+=13;}
+        }}
+        onPointerUp={e=>{e.stopPropagation();e.preventDefault();const dest=dropTarget.current;dragging.current=false;dropTarget.current=null;if(dest)onMove(dest);}}
+        onPointerCancel={e=>{e.stopPropagation();dragging.current=false;dropTarget.current=null;}}>
+        <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>}
       {selected && (
         <span className="absolute right-2 top-2 z-10 grid h-5 w-5 place-items-center rounded-full bg-primary text-primary-foreground">
           <Check className="h-3 w-3" strokeWidth={3} />

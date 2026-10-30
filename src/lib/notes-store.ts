@@ -70,6 +70,7 @@ export type Note = {
   pinned?: boolean;
   folderId?: string;
   cardColor?: string;
+  manualOrder?: number;
   kind?: NoteKind;
   pdf?: PdfMeta;
   style?: {
@@ -84,7 +85,7 @@ export type Note = {
 
 
 export type ViewMode = "list" | "grid" | "table";
-export type SortMode = "created" | "updated" | "alpha";
+export type SortMode = "created" | "updated" | "alpha" | "manual";
 export type NotesDatabaseStatus = "idle" | "loading" | "ready" | "error";
 
 type DatabaseSnapshot = {
@@ -168,6 +169,7 @@ function normalizeNote(input: unknown): Note | null {
     pinned: input.pinned === true,
     folderId,
     cardColor: typeof input.cardColor === "string" && /^#[0-9a-f]{6}$/i.test(input.cardColor) ? input.cardColor : undefined,
+    manualOrder: typeof input.manualOrder === "number" && Number.isSafeInteger(input.manualOrder) && input.manualOrder>=0 ? input.manualOrder : undefined,
     kind: input.kind === "pdf" ? "pdf" : "note",
     pdf: isRecord(input.pdf)
       ? {
@@ -205,7 +207,7 @@ function parseStoredView(raw: string | null): ViewMode {
 }
 
 function parseStoredSort(raw: string | null): SortMode {
-  return raw === "created" || raw === "alpha" || raw === "updated" ? raw : DEFAULT_SORT;
+  return raw === "created" || raw === "alpha" || raw === "updated" || raw === "manual" ? raw : DEFAULT_SORT;
 }
 
 function commit(patch: Partial<DatabaseSnapshot>) {
@@ -362,10 +364,11 @@ function sortNotes(list: Note[], mode: SortMode): Note[] {
   const pinned = list
     .filter((note) => note.pinned)
     .slice()
-    .sort((a, b) => a.title.localeCompare(b.title, "ru", { sensitivity: "base" }));
+    .sort((a, b) => mode==="manual" ? (a.manualOrder??Number.MAX_SAFE_INTEGER)-(b.manualOrder??Number.MAX_SAFE_INTEGER) || b.updatedAt-a.updatedAt : a.title.localeCompare(b.title, "ru", { sensitivity: "base" }));
 
   const rest = list.filter((note) => !note.pinned).slice();
   rest.sort((a, b) => {
+    if (mode === "manual") return (a.manualOrder??Number.MAX_SAFE_INTEGER)-(b.manualOrder??Number.MAX_SAFE_INTEGER) || b.updatedAt-a.updatedAt;
     if (mode === "alpha") return a.title.localeCompare(b.title, "ru", { sensitivity: "base" });
     if (mode === "created") return b.createdAt - a.createdAt;
     return b.updatedAt - a.updatedAt;
@@ -437,6 +440,21 @@ export function setSort(nextSort: SortMode) {
   persistPreference(SORT_KEY, nextSort);
 }
 
+/** Move one saved note without affecting native ad slots or binary files. */
+export function moveNoteBefore(sourceId:string,targetId:string):boolean{
+ ensureReadyForMutation();
+ if(sourceId===targetId)return false;
+ const ordered=sortNotes(state.notes,state.sort);
+ const from=ordered.findIndex(x=>x.id===sourceId),to=ordered.findIndex(x=>x.id===targetId);
+ if(from<0||to<0)return false;
+ if(ordered[from].pinned!==ordered[to].pinned||ordered[from].folderId!==ordered[to].folderId)return false;
+ const [moving]=ordered.splice(from,1);
+ ordered.splice(ordered.findIndex(x=>x.id===targetId),0,moving);
+ const ranks=new Map(ordered.map((note,k)=>[note.id,k]));
+ const next=state.notes.map(note=>({...note,manualOrder:ranks.get(note.id)}));
+ persistNotes(next);commit({notes:next,sort:"manual",status:"ready"});persistPreference(SORT_KEY,"manual");
+ return true;
+}
 export function getNote(id: string): Note | undefined {
   ensureReadyForMutation();
   return state.notes.find((note) => note.id === id);
@@ -454,6 +472,7 @@ export function createNote(partial?: Partial<Note>): Note {
     pinned: partial?.pinned ?? false,
     folderId: partial?.folderId ?? "all",
     cardColor: partial?.cardColor,
+    manualOrder: partial?.manualOrder,
     kind: partial?.kind ?? "note",
     pdf: partial?.pdf,
     // Only brand-new text notes inherit yellow paper. Imported/older saved
