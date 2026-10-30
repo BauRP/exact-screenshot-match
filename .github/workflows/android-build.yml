@@ -72,6 +72,9 @@ jobs:
       - name: TypeScript static checks
         run: bunx tsc --noEmit
 
+      - name: Verify premium Android intro and timeout safeguards
+        run: bun scripts/test-launch-intro.ts
+
       - name: Verify PDF text editing preserves original on taps and rotates with page
         run: bun scripts/test-pdf-page-editor.ts
 

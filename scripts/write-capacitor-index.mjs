@@ -122,8 +122,140 @@ ${cssLinks}
         }
       }());
     </script>
+  
+    <style id="wave-intro-style">
+      /* Android-only Capacitor boot screen. Rendered outside the React app. */
+      #wave-intro {
+        position: fixed; inset: 0; z-index: 2147483000; overflow: hidden;
+        display: flex; justify-content: center; align-items: center;
+        background: #050609; color: #fff; isolation: isolate;
+        font-family: system-ui, -apple-system, "Roboto", Arial, sans-serif;
+        transition: opacity .34s ease-out; opacity: 1;
+      }
+      #wave-intro.wave-intro-leave { opacity: 0; pointer-events: none; }
+      #wave-intro-beam {
+        position: absolute; top: -14%; left: 50%;
+        width: min(96vw, 410px); height: 86%;
+        transform: translateX(-50%); opacity: .1;
+        background: linear-gradient(90deg, transparent 2%, rgba(200,222,246,.025) 28%, rgba(227,239,255,.28) 50%, rgba(200,222,246,.025) 72%, transparent 98%);
+        clip-path: polygon(40% 0,60% 0,100% 100%,0 100%);
+        filter: blur(19px);
+      }
+      #wave-intro-content {
+        position: relative; z-index: 1; width: min(94vw, 360px);
+        display: flex; flex-direction: column; align-items: center;
+        transform: translateY(-2.5vh); text-align: center;
+      }
+      #wave-intro-logo { width: clamp(120px, 39vw, 162px); max-width: 45%; height: auto; overflow: visible; }
+      #wave-intro-logo .wave-intro-outline {
+        fill: none; stroke: #f8fbff; stroke-width: 2;
+        stroke-linejoin: round; stroke-linecap: round;
+        stroke-dasharray: 1000; stroke-dashoffset: 0;
+        opacity: 0; filter: drop-shadow(0 0 6px rgba(255,255,255,.7));
+      }
+      #wave-intro-logo .wave-intro-solid {
+        fill: #fff; opacity: 1;
+        filter: drop-shadow(0 0 8px rgba(235,245,255,.28));
+      }
+      #wave-intro-title {
+        margin-top: 12px; font-weight: 700;
+        font-size: clamp(19px, 5.45vw, 25px); line-height: 1.2;
+        white-space: nowrap; letter-spacing: .1px;
+        text-shadow: 0 0 14px rgba(246,250,255,.22);
+      }
+      #wave-intro-subtitle {
+        margin-top: 8px; padding-left: 4px;
+        color: rgba(241,245,252,.78);
+        font-size: 10px; font-weight: 500; letter-spacing: 4px;
+        line-height: 1.3; white-space: nowrap;
+      }
+      #wave-intro.wave-intro-play #wave-intro-beam {
+        animation: wave-light 2.8s ease-out both;
+      }
+      #wave-intro.wave-intro-play .wave-intro-outline {
+        animation: wave-stroke 1.35s ease-out .30s both;
+      }
+      #wave-intro.wave-intro-play .wave-intro-solid {
+        animation: wave-fill .75s ease-out 1.18s both;
+      }
+      #wave-intro.wave-intro-play #wave-intro-title {
+        animation: wave-words .70s ease-out 1.75s both;
+      }
+      #wave-intro.wave-intro-play #wave-intro-subtitle {
+        animation: wave-words .70s ease-out 2.07s both;
+      }
+      @keyframes wave-light {
+        0% { opacity: 0; transform: translateX(-50%) scaleY(.65); }
+        30% { opacity: .62; } 70% { opacity: .3; }
+        100% { opacity: .09; transform: translateX(-50%) scaleY(1); }
+      }
+      @keyframes wave-stroke {
+        0% { opacity: 0; stroke-dashoffset: 1000; }
+        15% { opacity: 1; }
+        85% { opacity: 1; stroke-dashoffset: 0; }
+        100% { opacity: 0; stroke-dashoffset: 0; }
+      }
+      @keyframes wave-fill {
+        from { opacity: 0; transform: translateY(7px) scale(.97); transform-origin: center; }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      @keyframes wave-words {
+        from { opacity: 0; transform: translateY(7px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #wave-intro *, #wave-intro *::before, #wave-intro *::after { animation: none !important; }
+        #wave-intro-beam { opacity: .08 !important; }
+        #wave-intro-logo .wave-intro-outline { opacity: 0 !important; }
+        #wave-intro-logo .wave-intro-solid, #wave-intro-title, #wave-intro-subtitle { opacity: 1 !important; }
+      }
+    </style>
   </head>
   <body>
+    <div id="wave-intro" aria-hidden="true">
+      <div id="wave-intro-beam"></div>
+      <div id="wave-intro-content">
+        <svg id="wave-intro-logo" viewBox="0 0 400 380" aria-hidden="true">
+          <path class="wave-intro-outline" pathLength="1000" d="M16,55 L42,168 L53,162 L66,158 L90,157 L141,169 L151,173 L151,277 L148,285 L139,300 L132,308 L132,310 L200,352 L268,310 L257,296 L248,278 L248,173 L270,166 L308,157 L327,157 L337,159 L357,167 L376,89 L377,80 L382,64 L383,55 L385,51 L367,55 L354,60 L303,73 L257,87 L227,94 L224,98 L220,113 L217,118 L202,163 L200,165 L196,161 L174,95 L120,81 L117,79 L109,78 L103,75 L31,55 L23,54 L16,51 Z"></path>
+          <path class="wave-intro-outline" pathLength="1000" d="M189,15 L185,22 L185,30 L188,36 L195,40 L207,38 L214,29 L214,22 L209,15 L202,12 L195,12 Z"></path>
+          <path class="wave-intro-solid" d="M16,55 L42,168 L53,162 L66,158 L90,157 L141,169 L151,173 L151,277 L148,285 L139,300 L132,308 L132,310 L200,352 L268,310 L257,296 L248,278 L248,173 L270,166 L308,157 L327,157 L337,159 L357,167 L376,89 L377,80 L382,64 L383,55 L385,51 L367,55 L354,60 L303,73 L257,87 L227,94 L224,98 L220,113 L217,118 L202,163 L200,165 L196,161 L174,95 L120,81 L117,79 L109,78 L103,75 L31,55 L23,54 L16,51 Z"></path>
+          <path class="wave-intro-solid" d="M189,15 L185,22 L185,30 L188,36 L195,40 L207,38 L214,29 L214,22 L209,15 L202,12 L195,12 Z"></path>
+        </svg>
+        <div id="wave-intro-title">Tengrize Studio</div>
+        <div id="wave-intro-subtitle">WAVE NOTES</div>
+      </div>
+    </div>
+    <script>
+      /* The startup clock begins before the main application bundle loads.
+         Never block navigation if the app fails to render or Android is slow. */
+      (function () {
+        var intro = document.getElementById("wave-intro");
+        var born = Date.now();
+        var active = false, closed = false, finishTimer;
+        function finish() {
+          if (closed) return;
+          closed = true;
+          clearTimeout(finishTimer);
+          intro.classList.add("wave-intro-leave");
+          setTimeout(function () { if (intro.parentNode) intro.parentNode.removeChild(intro); }, 375);
+        }
+        function begin() {
+          if (active || closed) return;
+          active = true;
+          intro.classList.add("wave-intro-play");
+          var elapsed = Date.now() - born;
+          // About 4–5 s overall; short and smooth on normal Android starts.
+          var left = Math.max(2250, Math.min(3550, 4350 - elapsed));
+          finishTimer = setTimeout(finish, left);
+        }
+        // Failsafe: the logo can never trap the user on a black screen.
+        var safety = setTimeout(finish, 5800);
+        window.__waveNotesIntro = {
+          begin: begin,
+          finish: function () { clearTimeout(safety); finish(); }
+        };
+      }());
+    </script>
     <div id="root"></div>
     <script type="module" src="./assets/${entryFile}"></script>
   </body>

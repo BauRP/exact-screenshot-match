@@ -13,9 +13,17 @@ if (typeof window !== "undefined") {
     CAPACITOR_ENTRY_MARKER;
 }
 
-// Safety net: the splash must never stay on screen longer than 3 seconds,
-// even if the app fails to start.
-const splashTimer = setTimeout(() => void hideNativeSplash(), 3000);
+// Android's native splash appears instantly; the isolated HTML overlay performs
+// the short animated intro while the Wave Notes app mounts beneath it.
+type StartupWindow = Window & { __waveNotesIntro?: { begin: () => void; finish: () => void } };
+const beginIntro = () => (window as StartupWindow).__waveNotesIntro?.begin();
+const finishIntro = () => (window as StartupWindow).__waveNotesIntro?.finish();
+
+// Hide the native splash even when React mounting is delayed. Starting the
+// animation is safe if the bridge is late: HTML has its own independent timer.
+const splashTimer = setTimeout(() => {
+  void hideNativeSplash().finally(beginIntro);
+}, 2200);
 
 window.addEventListener("error", (event) => {
   console.error("[startup] uncaught error", event.error ?? event.message);
@@ -50,6 +58,7 @@ function mount() {
   if (!root) {
     console.error("[startup] #root element missing");
     void hideNativeSplash();
+    finishIntro();
     return;
   }
 
@@ -59,6 +68,7 @@ function mount() {
       onUncaughtError: (error) => {
         console.error("[startup] React uncaught error", error);
         renderFatal(root, error);
+        finishIntro();
         void hideNativeSplash();
       },
     }).render(
@@ -69,12 +79,13 @@ function mount() {
   } catch (error) {
     console.error("[startup] bootstrap failed", error);
     renderFatal(root, error);
+    finishIntro();
   } finally {
     // Hide as soon as the first frame is painted.
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         clearTimeout(splashTimer);
-        void hideNativeSplash();
+        void hideNativeSplash().finally(beginIntro);
       }),
     );
   }
