@@ -3,7 +3,7 @@ import { webcrypto } from "node:crypto";
 import { pinIsValid, createPinRecord, checkPinRecord, needsPinMigration } from "../src/lib/pin-security";
 
 if (!globalThis.crypto?.subtle) Object.defineProperty(globalThis,"crypto",{value:webcrypto,configurable:true});
-for(const pin of ["","1234","123456","000000","111111","12345678","87654321","121212","112233"]) {
+for(const pin of ["","1234","123456","000000","111111","12345678","87654321","121212","112233","123123","11221122","22334455"]) {
   assert.equal(pinIsValid(pin),false,`Unsafe PIN accepted: ${pin}`);
 }
 for(const pin of ["704913","390615","50814672"]) {

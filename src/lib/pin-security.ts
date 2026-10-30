@@ -22,7 +22,13 @@ export function pinIsValid(pin: string): boolean {
   const consecutive = "012345678901234567890";
   const descending = "987654321098765432109";
   if (consecutive.includes(pin) || descending.includes(pin)) return false;
-  if (pin.length % 2 === 0 && pin.slice(0, pin.length/2) === pin.slice(pin.length/2)) return false;
+  // Reject short repeating cycles: 121212, 123123, 11221122, etc.
+  for (let cycle=1; cycle<=Math.floor(pin.length/2); cycle++) {
+    if (pin.length % cycle === 0 && pin === pin.slice(0,cycle).repeat(pin.length/cycle)) return false;
+  }
+  // Also reject simple paired digit patterns like 112233 and 22334455.
+  if (/^(\\d)\\1(\\d)\\2(\\d)\\3$/.test(pin)) return false;
+  if (/^(\\d)\\1(\\d)\\2(\\d)\\3(\\d)\\4$/.test(pin)) return false;
   return true;
 }
 export async function createPinRecord(pin: string): Promise<string> {
