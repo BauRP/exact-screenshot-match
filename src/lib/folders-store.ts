@@ -23,12 +23,24 @@ let hiddenSystem: string[] = [];
 let activeId: string = "all";
 let hydrated = false;
 
-function persist() {
+function persist(nextFolders: Folder[] = customFolders, nextHidden: string[] = hiddenSystem) {
+  // Write before exposing changes in React. A full disk must never show
+  // a folder as saved when localStorage refused the write.
+  const oldFolders=localStorage.getItem(FOLDERS_KEY);
+  const oldHidden=localStorage.getItem(HIDDEN_KEY);
   try {
-    localStorage.setItem(FOLDERS_KEY, JSON.stringify(customFolders));
-    localStorage.setItem(HIDDEN_KEY, JSON.stringify(hiddenSystem));
-    markBackupDirty();
-  } catch {}
+    localStorage.setItem(FOLDERS_KEY, JSON.stringify(nextFolders));
+    localStorage.setItem(HIDDEN_KEY, JSON.stringify(nextHidden));
+  } catch (error) {
+    try {
+      if (oldFolders===null) localStorage.removeItem(FOLDERS_KEY);
+      else localStorage.setItem(FOLDERS_KEY,oldFolders);
+      if (oldHidden===null) localStorage.removeItem(HIDDEN_KEY);
+      else localStorage.setItem(HIDDEN_KEY,oldHidden);
+    } catch (rollbackError) { console.error("Unable to roll back folder storage",rollbackError); }
+    throw new Error("Не удалось сохранить папки: хранилище недоступно или заполнено.",{cause:error});
+  }
+  markBackupDirty();
 }
 function emit() { listeners.forEach((l) => l()); }
 
@@ -83,39 +95,55 @@ export function useActiveFolder(): string {
 }
 
 export function setActiveFolder(id: string) {
-  activeId = id;
-  try { localStorage.setItem(ACTIVE_KEY, id); } catch {}
+  hydrate();
+  localStorage.setItem(ACTIVE_KEY,id);
+  activeId=id;
   emit();
 }
 
 export function addFolder(name: string): Folder {
   hydrate();
   const f: Folder = { id: crypto.randomUUID(), name: name.trim() || "Folder" };
-  customFolders = [...customFolders, f];
-  persist(); emit();
+  const next=[...customFolders, f];
+  persist(next,hiddenSystem);
+  customFolders=next; emit();
   return f;
 }
 
 export function renameFolder(id: string, name: string) {
   hydrate();
-  customFolders = customFolders.map((f) => f.id === id ? { ...f, name: name.trim() || f.name } : f);
-  persist(); emit();
+  const next=customFolders.map((f) => f.id === id ? { ...f, name: name.trim() || f.name } : f);
+  persist(next,hiddenSystem);
+  customFolders=next; emit();
 }
 
 export function deleteFolder(id: string) {
   hydrate();
   // The "ALL" tab is permanent and can never be removed.
   if (id === "all") return;
-  if (isSystemFolder(id)) {
-    if (!hiddenSystem.includes(id)) hiddenSystem = [...hiddenSystem, id];
+  const nextHidden=isSystemFolder(id) && !hiddenSystem.includes(id) ? [...hiddenSystem,id] : hiddenSystem;
+  const nextFolders=customFolders.filter((f) => f.id !== id);
+  persist(nextFolders,nextHidden);
+  if (activeId===id) {
+    // The deleted selection must not be restored at the next cold start.
+    localStorage.setItem(ACTIVE_KEY,"all");
+    activeId="all";
   }
-  customFolders = customFolders.filter((f) => f.id !== id);
-  if (activeId === id) { activeId = "all"; try { localStorage.setItem(ACTIVE_KEY, "all"); } catch {} }
-  persist(); emit();
+  customFolders=nextFolders; hiddenSystem=nextHidden; emit();
 }
 
 export function isSystemFolder(id: string) {
   return SYSTEM_FOLDERS.some((f) => f.id === id);
+}
+
+/** Exact rollback for a failed multi-store restore (not the normal merging restore).
+ * The caller holds a snapshot from before attempting the import.
+ */
+export function rollbackFolderBackup(snapshot: {folders:Folder[];hiddenSystem:string[]}):void {
+  persist(snapshot.folders,snapshot.hiddenSystem);
+  customFolders=snapshot.folders.map(folder=>({...folder}));
+  hiddenSystem=[...snapshot.hiddenSystem];
+  emit();
 }
 
 /** Backups include custom folder IDs so the note-to-folder relationship survives. */

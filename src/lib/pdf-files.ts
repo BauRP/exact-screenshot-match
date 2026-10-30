@@ -56,12 +56,10 @@ export async function saveNewPdfFile(id: string, bytes: ArrayBuffer): Promise<vo
 }
 
 export async function loadPdfFile(id: string): Promise<ArrayBuffer | null> {
-  try {
-    const value = await withStore<ArrayBuffer | undefined>("readonly", (store) => store.get(id));
-    return value ?? null;
-  } catch {
-    return null;
-  }
+  // Missing file != broken IndexedDB. Never describe a storage failure as a
+  // deleted PDF; callers already display genuine read errors separately.
+  const value=await withStore<ArrayBuffer | undefined>("readonly",store=>store.get(id));
+  return value ?? null;
 }
 
 export async function deletePdfFile(id: string): Promise<void> {

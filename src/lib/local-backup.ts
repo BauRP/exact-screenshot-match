@@ -6,7 +6,7 @@
  * - A staged file protects recovery when an update is interrupted.
  * - Uninstalling/clearing app data also deletes this internal backup.
  */
-import { createFullBackup, restoreFullBackup } from "./backup";
+import { createFullBackup, restoreFullBackup, validateFullBackup } from "./backup";
 import { clearBackupDirtyRevision, getBackupDirtyRevision } from "./backup-signals";
 
 const BACKUP_FILE = "WaveNotes.backup";
@@ -45,6 +45,8 @@ async function decodeArchive(base64: string): Promise<Blob> {
 
 async function readStored(path: string): Promise<Blob> {
   const { Filesystem, Directory } = await nativeFilesystem();
+  const stat = await Filesystem.stat({ path, directory: Directory.Data });
+  if (stat.size > 100 * 1024 * 1024) throw new Error("Резервная копия превышает 100 МБ");
   const result = await Filesystem.readFile({ path, directory: Directory.Data });
   if (typeof result.data !== "string") throw new Error("Неподдерживаемый формат резервной копии");
   return decodeArchive(result.data);
@@ -68,7 +70,7 @@ async function readBackupOrNull(): Promise<Blob | null> {
       const blob = await readStored(path);
       // Validate that the backup is readable before accepting it as a base
       // for the next update. A partial stage must never hide the good copy.
-      await validateBackup(blob);
+      await validateFullBackup(blob);
       return blob;
     } catch (error) {
       failure = error;
@@ -80,23 +82,6 @@ async function readBackupOrNull(): Promise<Blob | null> {
   return null;
 }
 
-async function validateBackup(blob: Blob): Promise<void> {
-  if (blob.size > 100 * 1024 * 1024) throw new Error("Превышен лимит резервной копии 100 МБ");
-  // Format and CRC are validated by the fflate async decompressor, without
-  // writing any restored note. Only look for the format marker in the manifest.
-  const { unzip, strFromU8 } = await import("fflate");
-  const encoded = new Uint8Array(await blob.arrayBuffer());
-  const contents = await new Promise<Record<string, Uint8Array>>((resolve, reject) => {
-    unzip(encoded, (error, files) => error ? reject(error) : resolve(files));
-  });
-  const raw = contents["manifest.json"];
-  if (!raw) throw new Error("В резервной копии отсутствует описание данных");
-  const manifest: unknown = JSON.parse(strFromU8(raw));
-  if (!manifest || typeof manifest !== "object" ||
-      (manifest as {format?: unknown}).format !== "super-notes-backup") {
-    throw new Error("Неверный формат резервной копии");
-  }
-}
 
 async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {

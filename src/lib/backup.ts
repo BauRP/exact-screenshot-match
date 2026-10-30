@@ -7,7 +7,7 @@ import { strFromU8, strToU8, unzip, zip } from "fflate";
 import { audioIdsInHtml, loadAudioFile, saveNewAudioFile, deleteAudioFile } from "./audio-files";
 import { loadPdfFile, saveNewPdfFile, deletePdfFile } from "./pdf-files";
 import { exportNotes, importBackupNotes, type Note } from "./notes-store";
-import { exportFolderBackup, restoreFolderBackup, type Folder } from "./folders-store";
+import { exportFolderBackup, restoreFolderBackup, rollbackFolderBackup, type Folder } from "./folders-store";
 
 const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
 const MAX_ENTRY_BYTES = 100 * 1024 * 1024;
@@ -67,6 +67,23 @@ function parseManifest(input: Uint8Array): BackupManifest {
     throw new Error("Резервная копия содержит слишком много записей");
   }
   return manifest;
+}
+
+/** Shared, bounded verification for internal and externally supplied ZIP copies.
+ * Never unpack archives using a path that bypasses the expanded-size limits.
+ */
+export async function validateFullBackup(blob: Blob): Promise<void> {
+  if (blob.size > MAX_ARCHIVE_BYTES) throw new Error("Архив превышает 100 МБ");
+  const entries=await unpackArchive(new Uint8Array(await blob.arrayBuffer()));
+  const metadata=entries["manifest.json"];
+  if (!metadata) throw new Error("В резервной копии отсутствует описание данных");
+  const manifest=parseManifest(metadata);
+  for (const id of uniqueIds(manifest.pdfIds)) {
+    if (!entries["pdf/"+id+".pdf"]?.byteLength) throw new Error("В архиве отсутствует PDF: "+id);
+  }
+  for (const id of uniqueIds(manifest.audioIds)) {
+    if (!entries["audio/"+id+".blob"]?.byteLength) throw new Error("В архиве отсутствует аудио: "+id);
+  }
 }
 
 function uniqueIds(ids: string[]) {
@@ -138,7 +155,7 @@ export async function createFullBackup(previous?: Blob): Promise<Blob> {
 }
 
 export async function shareFullBackup(blob: Blob): Promise<void> {
-  const name = "SuperNotes-backup-" + new Date().toISOString().slice(0, 10) + ".zip";
+  const name = "WaveNotes-backup-" + new Date().toISOString().slice(0, 10) + ".zip";
   const capacitor = (window as Window & {
     Capacitor?: { isNativePlatform?: () => boolean };
   }).Capacitor;
@@ -157,7 +174,7 @@ export async function shareFullBackup(blob: Blob): Promise<void> {
       reader.readAsDataURL(blob);
     });
     const result = await Filesystem.writeFile({ directory: Directory.Cache, path: name, data: encoded });
-    await Share.share({ title: "Резервная копия Супер заметок", url: result.uri });
+    await Share.share({ title: "Резервная копия Wave Notes", url: result.uri });
     return;
   }
   const url = URL.createObjectURL(blob);
@@ -214,6 +231,8 @@ export async function restoreFullBackup(file: File): Promise<number> {
   const newPdfIds: string[] = [];
   const newAudioIds: string[] = [];
   const rewritten = new Map<string, string>();
+  const previousFolders=exportFolderBackup();
+  let touchedFolders=false;
 
   // Audio may be referenced by existing notes or orphan files. Always use
   // new attachment IDs and rewrite only the imported notes' references.
@@ -247,8 +266,13 @@ export async function restoreFullBackup(file: File): Promise<number> {
     // Note metadata is published only after ALL of its attachments exist.
     // Restore folder IDs ahead of note metadata to preserve their grouping.
     restoreFolderBackup(manifest.folders, manifest.hiddenSystem);
+    touchedFolders=true;
     return importBackupNotes(newNotes);
   } catch (error) {
+    if (touchedFolders) {
+      try { rollbackFolderBackup(previousFolders); }
+      catch (rollbackError) { console.error("Folder restore rollback failed",rollbackError); }
+    }
     // Clean up only newly created binary data, never pre-existing files.
     await Promise.allSettled([
       ...newPdfIds.map((id) => deletePdfFile(id)),

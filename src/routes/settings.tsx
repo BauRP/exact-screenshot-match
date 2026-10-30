@@ -18,6 +18,7 @@ import {
 import { sendFeedback } from "@/lib/feedback.functions";
 import { AdMobDiagnosticsPanel } from "@/components/AdMobDiagnosticsPanel";
 import { saveLocalBackup, restoreLocalBackup } from "@/lib/local-backup";
+import { createFullBackup, restoreFullBackup, shareFullBackup } from "@/lib/backup";
 import { invalidateConsentForSession, requestConsentForSession } from "@/lib/admob-session";
 import { AppHeader } from "@/components/AppHeader";
 import { LanguagePickerSheet } from "@/components/LanguagePickerSheet";
@@ -222,6 +223,40 @@ function SettingsPage() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Не удалось сохранить резервную копию");
     } finally { setBackupBusy(false); }
+  };
+
+  const exportExternalBackup = async () => {
+    if (backupBusy) return;
+    setBackupBusy(true);
+    try {
+      // The user must choose a destination outside app-private storage.
+      const zip=await createFullBackup();
+      await shareFullBackup(zip);
+      toast.info("Сохраните ZIP в папку телефона или облако вне Wave Notes.");
+    } catch(error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось экспортировать архив");
+    } finally { setBackupBusy(false); }
+  };
+
+  const importExternalBackup = () => {
+    if (backupBusy) return;
+    const input=document.createElement("input");
+    input.type="file";
+    input.accept=".zip,application/zip,application/x-zip-compressed";
+    input.style.display="none";
+    document.body.appendChild(input);
+    input.addEventListener("change",()=>{ 
+      const file=input.files?.[0];
+      input.remove();
+      if (!file) return;
+      setBackupBusy(true);
+      void restoreFullBackup(file).then(count=>{
+        toast.success(count ? "Восстановлено заметок: "+count : "Новых заметок в архиве нет");
+      }).catch(error=>{
+        toast.error(error instanceof Error ? error.message : "Не удалось восстановить ZIP");
+      }).finally(()=>setBackupBusy(false));
+    },{once:true});
+    input.click();
   };
 
   const restoreBackup = async () => {
@@ -444,6 +479,16 @@ function SettingsPage() {
           <div className="h-px bg-border" />
           <Row icon={<Upload className="h-4 w-4" />} title="Восстановить резервную копию" hint="Восстанавливает данные из последней сохранённой резервной копии">
             <Btn disabled={backupBusy} onClick={() => void restoreBackup()}>Восстановить</Btn>
+          </Row>
+          <div className="h-px bg-border" />
+          <Row icon={<Download className="h-4 w-4" />} title="Сохранить копию вне приложения"
+            hint="Экспорт ZIP, который сохранится даже после удаления Wave Notes">
+            <Btn disabled={backupBusy} onClick={()=>void exportExternalBackup()}>Экспорт ZIP</Btn>
+          </Row>
+          <div className="h-px bg-border" />
+          <Row icon={<Upload className="h-4 w-4" />} title="Восстановить из ZIP"
+            hint="Выберите ранее сохранённую копию с телефона">
+            <Btn disabled={backupBusy} onClick={importExternalBackup}>Выбрать ZIP</Btn>
           </Row>
           <div className="h-px bg-border" />
           <Row icon={<Shield className="h-4 w-4" />} title={t("privacy_policy")}>
