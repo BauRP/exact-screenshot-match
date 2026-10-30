@@ -510,8 +510,9 @@ function Index() {
             <Button disabled={transferBusy} variant="outline" onClick={()=>void doExportSelected("txt")}>TXT — простой текст</Button>
             <Button disabled={transferBusy} variant="outline" onClick={()=>void doExportSelected("html")}>HTML — текст с оформлением</Button>
             <Button disabled={transferBusy} variant="outline" onClick={()=>void doExportSelected("docx")}>Word (.docx) — редактируемый документ</Button>
+            <Button disabled={transferBusy} variant="outline" onClick={()=>void doExportSelected("png")}>PNG — изображение заметки</Button>
           </div>
-          <p className="text-xs text-muted-foreground">Некоторые специальные элементы и вложения сохраняются только в фирменном формате .wnote.</p>
+          <p className="text-xs text-muted-foreground">PNG сохраняет читаемый текст, но не интерактивные элементы. Для полного оформления и вложений используйте .wnote.</p>
         </DialogContent>
       </Dialog>
       <Dialog open={colorDialog} onOpenChange={setColorDialog}>
