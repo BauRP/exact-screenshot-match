@@ -134,19 +134,34 @@ ${cssLinks}
       }
       #wave-intro.wave-intro-leave { opacity: 0; pointer-events: none; }
       #wave-intro-beam {
-        position: absolute; top: -14%; left: 50%;
-        width: min(96vw, 410px); height: 86%;
+        position: absolute; top: -9%; left: 50%;
+        width: 140vw; max-width: 900px; height: 108%;
         transform: translateX(-50%); opacity: .1;
         background: linear-gradient(90deg, transparent 2%, rgba(200,222,246,.025) 28%, rgba(227,239,255,.28) 50%, rgba(200,222,246,.025) 72%, transparent 98%);
-        clip-path: polygon(40% 0,60% 0,100% 100%,0 100%);
-        filter: blur(19px);
+        clip-path: polygon(43% 0,57% 0,100% 100%,0 100%);
+        filter: blur(24px);
+      }
+      #wave-intro-atmosphere {
+        position: absolute; inset: -5% -20%; opacity: 0;
+        background: radial-gradient(ellipse 65% 45% at 50% 35%, rgba(191,220,245,.22), transparent 82%);
+        pointer-events: none;
+      }
+      #wave-intro-glow {
+        position: absolute; top: 50%; left: 50%; width: 100vw; height: 40vh;
+        transform: translate(-50%,-50%); opacity: 0;
+        background: radial-gradient(ellipse, rgba(244,250,255,.22), transparent 67%);
+        filter: blur(21px); pointer-events: none;
+      }
+      #wave-intro.wave-intro-play #wave-intro-atmosphere,
+      #wave-intro.wave-intro-play #wave-intro-glow {
+        animation: wave-light 3.1s ease-out both;
       }
       #wave-intro-content {
         position: relative; z-index: 1; width: min(94vw, 360px);
         display: flex; flex-direction: column; align-items: center;
         transform: translateY(-2.5vh); text-align: center;
       }
-      #wave-intro-logo { width: clamp(120px, 39vw, 162px); max-width: 45%; height: auto; overflow: visible; }
+      #wave-intro-logo { width: clamp(145px, 42vw, 185px); max-width: 51%; height: auto; overflow: visible; }
       #wave-intro-logo .wave-intro-outline {
         fill: none; stroke: #f8fbff; stroke-width: 2;
         stroke-linejoin: round; stroke-linecap: round;
@@ -213,13 +228,15 @@ ${cssLinks}
   </head>
   <body>
     <div id="wave-intro" aria-hidden="true">
+      <div id="wave-intro-atmosphere"></div>
       <div id="wave-intro-beam"></div>
+      <div id="wave-intro-glow"></div>
       <div id="wave-intro-content">
         <svg id="wave-intro-logo" viewBox="0 0 400 380" aria-hidden="true">
           <path class="wave-intro-outline" pathLength="1000" d="M16,55 L42,168 L53,162 L66,158 L90,157 L141,169 L151,173 L151,277 L148,285 L139,300 L132,308 L132,310 L200,352 L268,310 L257,296 L248,278 L248,173 L270,166 L308,157 L327,157 L337,159 L357,167 L376,89 L377,80 L382,64 L383,55 L385,51 L367,55 L354,60 L303,73 L257,87 L227,94 L224,98 L220,113 L217,118 L202,163 L200,165 L196,161 L174,95 L120,81 L117,79 L109,78 L103,75 L31,55 L23,54 L16,51 Z"></path>
-          <path class="wave-intro-outline" pathLength="1000" d="M189,15 L185,22 L185,30 L188,36 L195,40 L207,38 L214,29 L214,22 L209,15 L202,12 L195,12 Z"></path>
+          <path class="wave-intro-outline" pathLength="1000" d="M199,3 C211,3 221,13 221,25 C221,37 211,47 199,47 C187,47 177,37 177,25 C177,13 187,3 199,3 Z"></path>
           <path class="wave-intro-solid" d="M16,55 L42,168 L53,162 L66,158 L90,157 L141,169 L151,173 L151,277 L148,285 L139,300 L132,308 L132,310 L200,352 L268,310 L257,296 L248,278 L248,173 L270,166 L308,157 L327,157 L337,159 L357,167 L376,89 L377,80 L382,64 L383,55 L385,51 L367,55 L354,60 L303,73 L257,87 L227,94 L224,98 L220,113 L217,118 L202,163 L200,165 L196,161 L174,95 L120,81 L117,79 L109,78 L103,75 L31,55 L23,54 L16,51 Z"></path>
-          <path class="wave-intro-solid" d="M189,15 L185,22 L185,30 L188,36 L195,40 L207,38 L214,29 L214,22 L209,15 L202,12 L195,12 Z"></path>
+          <path class="wave-intro-solid" d="M199,3 C211,3 221,13 221,25 C221,37 211,47 199,47 C187,47 177,37 177,25 C177,13 187,3 199,3 Z"></path>
         </svg>
         <div id="wave-intro-title">Tengrize Studio</div>
         <div id="wave-intro-subtitle">WAVE NOTES</div>
@@ -236,6 +253,7 @@ ${cssLinks}
           if (closed) return;
           closed = true;
           clearTimeout(finishTimer);
+          clearTimeout(safety);
           intro.classList.add("wave-intro-leave");
           setTimeout(function () { if (intro.parentNode) intro.parentNode.removeChild(intro); }, 375);
         }
@@ -245,11 +263,11 @@ ${cssLinks}
           intro.classList.add("wave-intro-play");
           var elapsed = Date.now() - born;
           // About 4–5 s overall; short and smooth on normal Android starts.
-          var left = Math.max(2250, Math.min(3550, 4350 - elapsed));
+          var left = Math.max(2650, Math.min(3400, 4300 - elapsed));
           finishTimer = setTimeout(finish, left);
         }
         // Failsafe: the logo can never trap the user on a black screen.
-        var safety = setTimeout(finish, 5800);
+        var safety = setTimeout(finish, 5300);
         window.__waveNotesIntro = {
           begin: begin,
           finish: function () { clearTimeout(safety); finish(); }
