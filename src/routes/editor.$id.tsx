@@ -66,6 +66,7 @@ import { AudioNote } from "@/components/editor/AudioNode";
 import { WaveImage } from "@/components/editor/WaveImage";
 import { WaveDrawing } from "@/components/editor/WaveDrawing";
 import {WavePageBreak} from "@/lib/wave-page-break";
+import {WaveTextDirection} from "@/lib/wave-text-direction";
 import {collectNoteOutline} from "@/lib/note-outline";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
@@ -240,6 +241,7 @@ function EditorPage() {
       WaveImage,
       WaveDrawing,
       WavePageBreak,
+      WaveTextDirection,
       InNoteSearch,
       WaveChecklistItem,
       WaveCallout,
