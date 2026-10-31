@@ -871,6 +871,15 @@ function EditorPage() {
               </button>)}
             </PopoverContent>
           </Popover>}
+          <button type="button" aria-label="Направление текста справа налево" title="Для арабского и других языков справа налево"
+            onClick={()=>{if(!editor)return;editor.commands.focus();const {$from}=editor.state.selection;
+              const node=$from.parent;const pos=$from.before();if(!node.isTextblock)return;
+              const next=node.attrs.textDirection==="rtl"?"ltr":"rtl";
+              editor.view.dispatch(editor.state.tr.setNodeMarkup(pos,undefined,{...node.attrs,textDirection:next}));
+            }}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
+            <span aria-hidden="true" className="text-xs font-bold">RTL</span>
+          </button>
           <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
           {editor && (
             <>
