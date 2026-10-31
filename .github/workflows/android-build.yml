@@ -142,6 +142,9 @@ jobs:
       - name: Verify offline note image storage, exchange and cleanup
         run: bun scripts/test-wave-images.ts
 
+      - name: Verify real PDF export RTL writing and task shortcuts
+        run: bun scripts/test-wave-pdf-rtl.ts
+
       - name: Verify real offline TXT HTML and DOCX document export
         run: bun scripts/test-wave-document-export.ts
 
