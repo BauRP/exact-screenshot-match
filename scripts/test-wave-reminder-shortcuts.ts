@@ -1,0 +1,13 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+const reminder=readFileSync("src/lib/note-reminders.ts","utf8");
+const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
+const search=readFileSync("src/lib/note-search.ts","utf8");
+const home=readFileSync("src/routes/index.tsx","utf8");
+const checklist=readFileSync("src/lib/wave-checklist.ts","utf8");
+for(const marker of ["reminderPresetTime","reminderIsUpcoming","setDate(date.getDate()+7)","setDate(date.getDate()+1)"])assert.ok(reminder.includes(marker),marker);
+for(const marker of ["Через час","Завтра","Через неделю","toReminderInput(reminderPresetTime(preset))"])assert.ok(editor.includes(marker),marker);
+for(const marker of ['filter==="upcoming"','reminderIsUpcoming(note.reminderAt)'])assert.ok(search.includes(marker),marker);
+assert.ok(home.includes('["upcoming","Ближайшие 7 дней"]'));
+assert.ok(checklist.includes('"Mod-Enter"'));
+console.log("Preset reminders, upcoming search and checklist shortcut wired");
