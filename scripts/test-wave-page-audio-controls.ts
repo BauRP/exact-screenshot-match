@@ -9,7 +9,7 @@ const positions=notePagePositions(doc);
 assert.deepEqual(pageDisplayNames(doc),["Страница 1","Глава","Страница 3"]);
 assert.equal(currentPageBreakPos(doc,positions[1]),positions[1]-1);
 assert.equal(currentPageBreakPos(doc,0),undefined);
-const merged=doc.cut(0,positions[1]-1).append(doc.cut(positions[1]));
+const merged=doc.copy(doc.content.cut(0,positions[1]-1).append(doc.content.cut(positions[1])));
 assert.equal(merged.textContent,doc.textContent);
 const audio=readFileSync("src/components/editor/AudioNode.tsx","utf8");
 for(const marker of ["Перемотка аудио","Скорость воспроизведения","playbackRate=rate","player.currentTime=at"])assert.ok(audio.includes(marker),marker);
