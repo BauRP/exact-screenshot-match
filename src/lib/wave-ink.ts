@@ -61,12 +61,14 @@ function segmentCrosses(a:InkPoint,b:InkPoint,c:InkPoint,d:InkPoint):boolean {
  }
  return ((x>=0&&y<=0)||(x<=0&&y>=0))&&((u>=0&&v<=0)||(u<=0&&v>=0));
 }
-export function inkStrokeAlong(strokes:InkStroke[],from:InkPoint,to:InkPoint,radius=22):number{
- if(from[0]===to[0]&&from[1]===to[1])return inkStrokeAt(strokes,to,radius);
- for(let i=strokes.length-1;i>=0;i--){
+/** All strokes hit by a continuous eraser movement. A single fast swipe
+ * must remove EVERY crossing stroke, not just the topmost one. */
+export function inkStrokeIndicesAlong(strokes:InkStroke[],from:InkPoint,to:InkPoint,radius=22):number[]{
+ const hits:number[]=[];
+ for(let i=0;i<strokes.length;i++){
   const stroke=strokes[i],points=stroke.points,threshold=radius+stroke.width/2;
   if(points.length===1){
-   if(segmentDistance(points[0],from,to)<=threshold)return i;
+   if(segmentDistance(points[0],from,to)<=threshold)hits.push(i);
    continue;
   }
   for(let j=1;j<points.length;j++){
@@ -75,12 +77,18 @@ export function inkStrokeAlong(strokes:InkStroke[],from:InkPoint,to:InkPoint,rad
       segmentDistance(a,from,to)<=threshold||
       segmentDistance(c,from,to)<=threshold||
       segmentDistance(from,a,c)<=threshold||
-      segmentDistance(to,a,c)<=threshold)return i;
+      segmentDistance(to,a,c)<=threshold){
+     hits.push(i);break;
+   }
   }
  }
- return -1;
+ return hits;
 }
-
+/** Keep the previous topmost-hit API for callers and older saved drawings. */
+export function inkStrokeAlong(strokes:InkStroke[],from:InkPoint,to:InkPoint,radius=22):number{
+ const hits=inkStrokeIndicesAlong(strokes,from,to,radius);
+ return hits.length?hits[hits.length-1]:-1;
+}
 /** Render saved vector strokes at any bounded destination size. */
 export function paintInk(ctx:CanvasRenderingContext2D,encoded:string,x:number,y:number,width:number,height:number):void{
  const strokes=parseInk(encoded);
