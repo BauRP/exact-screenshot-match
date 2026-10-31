@@ -190,6 +190,9 @@ jobs:
       - name: Verify real offline TXT HTML and DOCX document export
         run: bun scripts/test-wave-document-export.ts
 
+      - name: Test protected in-note search, marker shape and exact-time reminders
+        run: bun scripts/test-wave-privacy-ui-reminders.ts
+
       - name: Verify reminder update tracking and hidden answer safety
         run: bun scripts/test-wave-reminder-tape-safety.ts
 
