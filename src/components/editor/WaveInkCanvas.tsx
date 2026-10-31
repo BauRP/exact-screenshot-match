@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from "react";
 import type {PointerEvent as ReactPointerEvent} from "react";
-import {inkStrokeAt,parseInk,serializeInk,type InkPoint,type InkStroke} from "@/lib/wave-ink";
+import {inkStrokeAt,inkStrokeAlong,parseInk,serializeInk,type InkPoint,type InkStroke} from "@/lib/wave-ink";
 
 /** Per-drawing undo/redo also works for ink layered over a photograph. */
 export function WaveInkCanvas({value,onChange,editable,active=false}:{
@@ -13,6 +13,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
  const [historyVersion,setHistoryVersion]=useState(0);
  const gesture=useRef<number|null>(null);
  const gestureChanged=useRef(false);
+ const lastEraserPoint=useRef<InkPoint|null>(null);
  const mode=useRef<"pen"|"marker"|"eraser">("pen");
  const lastEmitted=useRef<string|null>(null);
  const [tool,setTool]=useState<"pen"|"marker"|"eraser">("pen");
@@ -49,8 +50,8 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
   return [Math.round(Math.min(1000,Math.max(0,(e.clientX-rect.left)/Math.max(rect.width,1)*1000))),
     Math.round(Math.min(1000,Math.max(0,(e.clientY-rect.top)/Math.max(rect.height,1)*1000)))];
  };
- const erase=(point:InkPoint)=>{
-   const at=inkStrokeAt(current.current,point);
+ const erase=(point:InkPoint,previous:InkPoint|null=null)=>{
+   const at=previous?inkStrokeAlong(current.current,previous,point):inkStrokeAt(current.current,point);
    if(at<0)return;
    markChanged();
    replace(current.current.filter((_,i)=>i!==at));
@@ -61,6 +62,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
   e.preventDefault();gesture.current=e.pointerId;gestureChanged.current=false;mode.current=tool;
   e.currentTarget.setPointerCapture(e.pointerId);
   const point=position(e);
+  lastEraserPoint.current=point;
   if(tool==="eraser")erase(point);
   else{
    markChanged();
@@ -70,7 +72,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
  const move=(e:ReactPointerEvent<SVGSVGElement>)=>{
   if(gesture.current!==e.pointerId)return;
   e.preventDefault();const point=position(e);
-  if(mode.current==="eraser"){erase(point);}
+  if(mode.current==="eraser"){erase(point,lastEraserPoint.current);lastEraserPoint.current=point;}
   else{
    const previous=current.current,last=previous[previous.length-1];
    if(!last||last.points.length>=500)return;
@@ -81,7 +83,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
  };
  const stop=(e:ReactPointerEvent<SVGSVGElement>)=>{
   if(gesture.current!==e.pointerId)return;
-  e.preventDefault();gesture.current=null;
+  e.preventDefault();gesture.current=null;lastEraserPoint.current=null;
   if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);
   if(gestureChanged.current)emit(current.current);
   gestureChanged.current=false;
