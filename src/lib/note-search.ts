@@ -16,7 +16,9 @@ export function parseNoteQuery(input:string, selected:NoteSearchFilter="all"):Pa
     query:match?trimmed.slice(match[0].length).trim():trimmed};
 }
 export function readableText(html:string):string {
-  return html.replace(/<[^>]+>/g," ").replace(/&(?:nbsp|#160);/gi," ")
+  // Do not reveal deliberately concealed Tape answers in list previews/search.
+  return html.replace(/<span\b[^>]*data-wave-tape(?:\s|=|>)[^>]*>[\s\S]*?<\/span>/gi," [Скрытый ответ] ")
+    .replace(/<[^>]+>/g," ").replace(/&(?:nbsp|#160);/gi," ")
     .replace(/&amp;/gi,"&").replace(/&lt;/gi,"<").replace(/&gt;/gi,">")
     .replace(/&quot;/gi,'"').replace(/&#39;/gi,"'").replace(/\s+/g," ");
 }
