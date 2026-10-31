@@ -83,6 +83,7 @@ import {inspectWaveFile,receiveWaveNote,shareWaveNote} from "@/lib/note-transfer
 import {findReturnedOriginal,combineReturnedBodies,replacementBackup} from "@/lib/wave-note-conflicts";
 import {noteMatchesSearch,type NoteSearchFilter} from "@/lib/note-search";
 import {shareNoteExport,type NoteExportFormat} from "@/lib/note-export";
+import {reminderIsDue,reminderPresetTime,reminderLabel} from "@/lib/note-reminders";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -229,6 +230,16 @@ function Index() {
     const inScope=searchOpen&&searchAllFolders||activeFolder==="all"||(note.folderId??"all")===activeFolder;
     return inScope && (!searchOpen || noteMatchesSearch(note,searchTerm,searchFilter));
   }),[activeFolder,notes,searchOpen,searchAllFolders,searchTerm,searchFilter,reminderMinute]);
+
+  const dueNotes=useMemo(()=>notes.filter(note=>
+    (activeFolder==="all"||(note.folderId??"all")===activeFolder)&&reminderIsDue(note.reminderAt)
+  ).sort((a,b)=>(a.reminderAt??0)-(b.reminderAt??0)).slice(0,3),[notes,activeFolder,reminderMinute]);
+  const changeDueReminder=(id:string,operation:"tomorrow"|"clear")=>{
+    try{
+      updateNote(id,{reminderAt:operation==="clear"?undefined:reminderPresetTime("tomorrow")});
+      toast.success(operation==="clear"?"Напоминание снято":"Перенесено на завтра");
+    }catch(error){toast.error(error instanceof Error?error.message:"Не удалось изменить напоминание");}
+  };
 
   // Opens an in-memory draft: nothing is stored until the checkmark is tapped.
   const createNoteInCurrentFolder = () => {
@@ -501,8 +512,34 @@ function Index() {
           ) : status === "error" ? (
             <DatabaseErrorState message={databaseError} />
           ) : (
-            <NotesGrid view={view} notes={filteredNotes} selected={selected} onToggle={toggleSelected} onOpen={openNote}
+            <>
+              {!searchOpen&&dueNotes.length>0&&<section aria-label="Просроченные напоминания"
+                className="mb-3 rounded-xl border border-amber-400/30 bg-secondary/50 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold">Напоминания к выполнению</h2>
+                  <button type="button" className="rounded-lg px-2 py-1 text-xs text-primary"
+                    onClick={()=>{setSearchOpen(true);setSearchFilter("overdue");setSearchTerm("");}}>
+                    Показать все
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {dueNotes.map(note=><div key={note.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-background/70 p-2">
+                    <button type="button" onClick={()=>openNote(note)}
+                      className="min-w-0 flex-1 text-left text-xs">
+                      <span className="block truncate font-semibold">{note.title}</span>
+                      <span className="text-muted-foreground">{reminderLabel(note.reminderAt)}</span>
+                    </button>
+                    <button type="button" onClick={()=>changeDueReminder(note.id,"tomorrow")}
+                      className="rounded-md border border-border px-2 py-2 text-xs">Завтра</button>
+                    <button type="button" onClick={()=>changeDueReminder(note.id,"clear")}
+                      className="rounded-md border border-border px-2 py-2 text-xs">Снять</button>
+                  </div>)}
+                </div>
+                <p className="mt-2 text-[11px] text-muted-foreground">Напоминания отображаются внутри приложения; Android-уведомления пока не включены.</p>
+              </section>}
+              <NotesGrid view={view} notes={filteredNotes} selected={selected} onToggle={toggleSelected} onOpen={openNote}
               onMove={(id,target)=>{try{if(moveNoteBefore(id,target))toast.success("Порядок заметок сохранён");}catch(error){toast.error(error instanceof Error?error.message:"Не удалось переместить");}}} />
+            </>
           )}
         </main>
       )}
