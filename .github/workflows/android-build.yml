@@ -109,6 +109,9 @@ jobs:
       - name: Verify single-file Wave Notes transfer without overwrites
         run: bun scripts/test-wave-transfer.ts
 
+      - name: Verify reminder metadata, due status and offline filters
+        run: bun scripts/test-wave-reminders.ts
+
       - name: Verify nested sections, page navigation and export
         run: bun scripts/test-wave-nested-pages.ts
 
