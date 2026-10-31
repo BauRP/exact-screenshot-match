@@ -49,6 +49,33 @@ export function inkStrokeAt(strokes:InkStroke[],point:InkPoint,radius=22):number
  return -1;
 }
 
+/** Continuous eraser path hit-test: quick pen/finger movement cannot skip
+ * strokes in between pointer events. Works for drawing and photo annotations. */
+function segmentCrosses(a:InkPoint,b:InkPoint,c:InkPoint,d:InkPoint):boolean {
+ const cross=(p:InkPoint,q:InkPoint,z:InkPoint)=>(q[0]-p[0])*(z[1]-p[1])-(q[1]-p[1])*(z[0]-p[0]);
+ const x=cross(a,b,c),y=cross(a,b,d),u=cross(c,d,a),v=cross(c,d,b);
+ return ((x>=0&&y<=0)||(x<=0&&y>=0))&&((u>=0&&v<=0)||(u<=0&&v>=0));
+}
+export function inkStrokeAlong(strokes:InkStroke[],from:InkPoint,to:InkPoint,radius=22):number{
+ if(from[0]===to[0]&&from[1]===to[1])return inkStrokeAt(strokes,to,radius);
+ for(let i=strokes.length-1;i>=0;i--){
+  const stroke=strokes[i],points=stroke.points,threshold=radius+stroke.width/2;
+  if(points.length===1){
+   if(segmentDistance(points[0],from,to)<=threshold)return i;
+   continue;
+  }
+  for(let j=1;j<points.length;j++){
+   const a=points[j-1],c=points[j];
+   if(segmentCrosses(from,to,a,c)||
+      segmentDistance(a,from,to)<=threshold||
+      segmentDistance(c,from,to)<=threshold||
+      segmentDistance(from,a,c)<=threshold||
+      segmentDistance(to,a,c)<=threshold)return i;
+  }
+ }
+ return -1;
+}
+
 /** Render saved vector strokes at any bounded destination size. */
 export function paintInk(ctx:CanvasRenderingContext2D,encoded:string,x:number,y:number,width:number,height:number):void{
  const strokes=parseInk(encoded);
