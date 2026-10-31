@@ -175,6 +175,9 @@ jobs:
       - name: Verify reminder update tracking and hidden answer safety
         run: bun scripts/test-wave-reminder-tape-safety.ts
 
+      - name: Execute in-note single and bulk replacement tests
+        run: bun scripts/test-wave-find-replace.ts
+
       - name: Execute offline Cyrillic note search unit tests
         run: bun scripts/test-wave-search-logic.ts
 
