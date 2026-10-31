@@ -68,7 +68,7 @@ import { WaveDrawing } from "@/components/editor/WaveDrawing";
 import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection} from "@/lib/wave-text-direction";
 import {collectNoteOutline,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
-import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock} from "@/lib/wave-block-motion";
+import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind} from "@/lib/wave-block-motion";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
 import {safeBrowserClipboardHtml} from "@/lib/wave-smart-paste";
@@ -974,6 +974,19 @@ function EditorPage() {
             className="rounded-md border px-2 py-1 text-xs" onClick={()=>nestSelectedWaveBlock(editor)}>↘</button>
           <button type="button" aria-label="Дублировать блок" title="Дублировать выбранный блок"
             className="rounded-md border px-2 py-1 text-xs" onClick={()=>duplicateSelectedWaveBlock(editor)}>⧉</button>
+          <select aria-label="Изменить тип информационного блока" defaultValue=""
+            className="max-w-32 rounded-md border border-border bg-background px-1 py-1 text-xs"
+            onChange={event=>{
+              const kind=event.target.value as CalloutKind;
+              if(!setSelectedCalloutKind(editor,kind))toast("Поместите курсор внутрь информационного блока");
+              event.target.value="";
+            }}>
+            <option value="" disabled>Тип блока</option>
+            <option value="important">Важно</option>
+            <option value="tip">Совет</option>
+            <option value="warning">Предупреждение</option>
+            <option value="info">Информация</option>
+          </select>
           <button type="button" aria-label="Вынести блок из раздела" title="Вынести блок из вложенного раздела" className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>liftWaveBlock(editor,()=>selectedWaveBlockPos(editor))}>↗</button>
         </div>}
