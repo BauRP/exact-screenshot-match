@@ -7,11 +7,11 @@ import {checklistSummary} from "./note-checklist-summary";
  * Commands are optional shortcuts for the same filters shown in the UI.
  * @locked intentionally returns no results until protected notes exist.
  */
-export type NoteSearchFilter = "all" | "todo" | "images" | "locked" | "reminders" | "overdue" | "pending" | "upcoming";
+export type NoteSearchFilter = "all" | "todo" | "images" | "locked" | "reminders" | "overdue" | "pending" | "upcoming" | "audio" | "drawings" | "pages" | "pinned";
 export type ParsedNoteQuery = {query:string;filter:NoteSearchFilter};
 export function parseNoteQuery(input:string, selected:NoteSearchFilter="all"):ParsedNoteQuery {
   const trimmed=input.trim();
-  const match=/^@(todo|images|locked|reminders|overdue|pending|upcoming)(?:\s+|$)/i.exec(trimmed);
+  const match=/^@(todo|images|locked|reminders|overdue|pending|upcoming|audio|drawings|pages|pinned)(?:\s+|$)/i.exec(trimmed);
   return {filter:match?match[1].toLowerCase() as NoteSearchFilter:selected,
     query:match?trimmed.slice(match[0].length).trim():trimmed};
 }
@@ -40,6 +40,10 @@ export function noteMatchesSearch(note:Note,input:string,selected:NoteSearchFilt
   const {query,filter}=parseNoteQuery(input,selected);
   const body=note.body||"";
   if(filter==="locked")return false; // Lock flags do not exist yet.
+  if(filter==="pinned"&&!note.pinned)return false;
+  if(filter==="audio"&&!/(?:data-audio-note|audiodb:)/i.test(body))return false;
+  if(filter==="drawings"&&!/(?:data-wave-drawing|data-ink=["'][^"']{5,})/i.test(body))return false;
+  if(filter==="pages"&&!/data-wave-page-break/i.test(body))return false;
   if(filter==="reminders"&&validReminderTime(note.reminderAt)===undefined)return false;
   if(filter==="overdue"&&!reminderIsDue(note.reminderAt))return false;
   if(filter==="upcoming"&&!reminderIsUpcoming(note.reminderAt))return false;
