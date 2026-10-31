@@ -46,3 +46,51 @@ export function moveWaveBlock(
   view.dispatch(state.tr.replaceWith(from, to, replacement).scrollIntoView());
   return true;
 }
+
+/** Find the editable block containing the caret without crossing a table or
+ * unrelated nested container. Only document and WaveFold are reorderable. */
+export function selectedWaveBlockPos(editor:Editor):number|undefined {
+ const {$from}=editor.state.selection;
+ for(let depth=$from.depth;depth>=0;depth--){
+  const parent=$from.node(depth);
+  if(parent.type.name!=="doc"&&parent.type.name!=="waveFold")continue;
+  const index=$from.index(depth);
+  if(index>=parent.childCount)return undefined;
+  return $from.start(depth)+parent.content.offsetAt(index);
+ }
+ return undefined;
+}
+export function moveSelectedWaveBlock(editor:Editor,direction:"up"|"down"):boolean{
+ const pos=selectedWaveBlockPos(editor);
+ return typeof pos==="number"&&moveWaveBlock(editor,()=>pos,direction);
+}
+
+/** Outdent one direct child from a folded section as a real sibling. Keep
+ * a placeholder if it was the section's only child, because block+ is required.
+ * No flattening or text reconstruction: all descendants, styles and files stay
+ * attached to their original ProseMirror nodes. */
+export function liftWaveBlock(editor:Editor,getPos:()=>number|undefined):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const pos=getPos();
+ if(typeof pos!=="number"||pos<0||pos>=editor.state.doc.content.size)return false;
+ const {doc,schema}=editor.state;
+ const $pos=doc.resolve(pos);
+ const section=$pos.parent;
+ if(section.type.name!=="waveFold"||$pos.depth<1)return false;
+ const index=$pos.index();
+ if(index>=section.childCount||section.content.offsetAt(index)!==$pos.parentOffset)return false;
+ const moving=section.child(index);
+ const sectionStart=$pos.before($pos.depth);
+ const outer=doc.resolve(sectionStart),outerIndex=outer.index();
+ const before=section.content.cut(0,$pos.parentOffset);
+ const after=section.content.cut($pos.parentOffset+moving.nodeSize);
+ const remaining=before.append(after);
+ const filler=schema.nodes.paragraph;
+ if(!remaining.childCount&&!filler)return false;
+ const nextSection=section.copy(remaining.childCount?remaining:Fragment.from(filler.create()));
+ const replacement=Fragment.fromArray([nextSection,moving]);
+ if(!nextSection.type.validContent(nextSection.content)||
+    !outer.parent.canReplace(outerIndex,outerIndex+1,replacement))return false;
+ editor.view.dispatch(editor.state.tr.replaceWith(sectionStart,sectionStart+section.nodeSize,replacement).scrollIntoView());
+ return true;
+}
