@@ -1,9 +1,11 @@
 import {strict as assert} from "node:assert";
-import {inkStrokeAt,parseInk,serializeInk,type InkStroke} from "../src/lib/wave-ink";
+import {inkStrokeAt,inkStrokeAlong,parseInk,serializeInk,type InkStroke} from "../src/lib/wave-ink";
 const line:InkStroke={tool:"pen",color:"#161b22",width:4,points:[[0,0],[1000,0]]};
 assert.equal(inkStrokeAt([line],[500,5],5),0);
 assert.equal(inkStrokeAt([line],[500,100],5),-1);
 assert.equal(inkStrokeAt([line],[995,2],5),0);
+assert.equal(inkStrokeAlong([line],[500,-10],[500,10],5),0);
+assert.equal(inkStrokeAlong([line],[500,100],[500,110],5),-1);
 assert.deepEqual(parseInk(serializeInk([line])),[line]);
 assert.deepEqual(parseInk('not-json'),[]);
 console.log("Ink eraser line-segment and serialization tests passed");
