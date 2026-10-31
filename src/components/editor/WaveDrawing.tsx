@@ -3,6 +3,7 @@ import {NodeViewWrapper,ReactNodeViewRenderer,type NodeViewProps} from "@tiptap/
 import {useState} from "react";
 import {WaveInkCanvas} from "@/components/editor/WaveInkCanvas";
 import {moveWaveBlock} from "@/lib/wave-block-motion";
+import {parseInk} from "@/lib/wave-ink";
 declare module "@tiptap/core"{
  interface Commands<ReturnType>{waveDrawing:{insertWaveDrawing:()=>ReturnType}}
 }
