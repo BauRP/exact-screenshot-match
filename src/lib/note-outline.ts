@@ -17,3 +17,16 @@ export function collectNoteOutline(doc:PMNode):OutlineItem[]{
  });
  return items;
 }
+
+/** Explicit page boundaries are ProseMirror positions, never guessed pixels. */
+export function notePagePositions(doc:PMNode):number[]{
+ const positions=[0];
+ doc.descendants((node,pos)=>{if(node.type.name==="wavePageBreak")positions.push(pos+node.nodeSize);});
+ return positions;
+}
+export function noteCurrentPage(doc:PMNode,selectionPos:number):number{
+ const pages=notePagePositions(doc);
+ let page=1;
+ for(let i=1;i<pages.length;i++)if(selectionPos>=pages[i])page=i+1;
+ return page;
+}
