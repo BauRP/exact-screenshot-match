@@ -141,3 +141,18 @@ export function duplicateSelectedWaveBlock(editor:Editor):boolean{
  editor.view.dispatch(editor.state.tr.insert(pos+node.nodeSize,node).scrollIntoView());
  return true;
 }
+
+/** Change the highlighted callout without rebuilding paragraphs or losing marks. */
+export function setSelectedCalloutKind(editor:Editor,kind:"important"|"tip"|"warning"|"info"):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const {$from}=editor.state.selection;
+ for(let depth=$from.depth;depth>0;depth--){
+  const node=$from.node(depth);
+  if(node.type.name!=="waveCallout")continue;
+  if(node.attrs.kind===kind)return false;
+  const pos=$from.before(depth);
+  editor.view.dispatch(editor.state.tr.setNodeMarkup(pos,undefined,{...node.attrs,kind}).scrollIntoView());
+  return true;
+ }
+ return false;
+}
