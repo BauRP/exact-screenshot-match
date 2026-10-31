@@ -341,3 +341,11 @@ html.wave-native-android .wave-app-frame {
   font-size:11px;
 }
 @media print { .sn-tiptap [data-wave-page-break]{break-after:page;page-break-after:always;border:0;} .sn-tiptap [data-wave-page-break]::after{display:none;} }
+
+/* Accessible section management that stays within the note canvas. */
+.wave-fold-heading{display:flex;align-items:center;gap:6px;min-width:0}
+.wave-fold-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.wave-fold-toggle,.wave-fold-rename,.wave-fold-nest{flex-shrink:0;min-width:30px;min-height:32px;border-radius:8px;cursor:pointer}
+.wave-fold-title-input{flex:1;min-width:0;border:1px solid var(--border);border-radius:7px;padding:5px 8px;background:var(--background);color:var(--foreground);font:inherit}
+.wave-fold-heading button:focus-visible,.wave-fold-title-input:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.wave-fold-body[hidden]{display:none!important}
