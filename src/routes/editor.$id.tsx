@@ -81,7 +81,7 @@ import {
 import { useT } from "@/lib/i18n";
 import { APP_FONTS, fontNameFromCss } from "@/lib/app-fonts";
 import { InNoteSearch, noteSearchKey, findWords } from "@/lib/in-note-search";
-import { readEditorPreferences,type EditorTool } from "@/lib/editor-preferences";
+import { readEditorPreferences,EDITOR_PREFS_CHANGED,type EditorTool } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
 import {setAllFoldSections,countFoldSections} from "@/lib/wave-section-batch";
@@ -162,7 +162,13 @@ function EditorPage() {
   const [findQuery,setFindQuery]=useState("");
   const [findActive,setFindActive]=useState(0);
   const [checkShape,setCheckShape]=useState<CheckShape>("square");
-  const [prefs]=useState(()=>readEditorPreferences());
+  const [prefs,setPrefs]=useState(()=>readEditorPreferences());
+  useEffect(()=>{
+    const refresh=()=>setPrefs(readEditorPreferences());
+    window.addEventListener(EDITOR_PREFS_CHANGED,refresh);
+    window.addEventListener("storage",refresh);
+    return ()=>{window.removeEventListener(EDITOR_PREFS_CHANGED,refresh);window.removeEventListener("storage",refresh);};
+  },[]);
   const toolVisible=(tool:EditorTool)=>!prefs.hiddenToolbar.includes(tool);
   const [slashText,setSlashText]=useState<string|null>(null);
 
