@@ -64,6 +64,7 @@ import { AutoLinkExtras } from "@/lib/editor-extensions";
 import { AudioNote } from "@/components/editor/AudioNode";
 import { WaveImage } from "@/components/editor/WaveImage";
 import { WaveDrawing } from "@/components/editor/WaveDrawing";
+import {WavePageBreak} from "@/lib/wave-page-break";
 import {collectNoteOutline} from "@/lib/note-outline";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
@@ -235,6 +236,7 @@ function EditorPage() {
       AudioNote,
       WaveImage,
       WaveDrawing,
+      WavePageBreak,
       InNoteSearch,
       WaveChecklistItem,
       WaveCallout,
@@ -353,7 +355,7 @@ function EditorPage() {
     requestAnimationFrame(()=>editor.view.dom.querySelector(".wave-find-current")?.scrollIntoView({block:"nearest"}));
   };
 
-  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator"|"bullets"|"numbered"|"heading"|"checklist",callout:CalloutKind="important")=>{
+  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator"|"bullets"|"numbered"|"heading"|"checklist"|"page",callout:CalloutKind="important")=>{
     if(!editor)return;
     const {$from}=editor.state.selection;
     const textBefore=$from.parent.textBetween(0,$from.parentOffset);
@@ -372,6 +374,7 @@ function EditorPage() {
     }
     if(kind==="date"){chain.insertContent(new Date().toLocaleDateString("ru-RU")).run();return;}
     if(kind==="separator"){chain.setHorizontalRule().run();return;}
+    if(kind==="page"){chain.insertWavePageBreak().run();return;}
     const node=kind==="fold"
       ? {type:"waveFold",attrs:{title:"Новый раздел",collapsed:false},content:[{type:"paragraph"}]}
       : {type:"waveCallout",attrs:{kind:callout},content:[{type:"paragraph"}]};
@@ -391,6 +394,7 @@ function EditorPage() {
     {id:"tape",label:"Скрыть выбранный ответ",icon:"▰"},
     {id:"date",label:"Вставить дату",icon:"◷"},
     {id:"separator",label:"Разделитель",icon:"—"},
+    {id:"page",label:"Новая страница",icon:"▤"},
   ] as const;
   const chooseBlock=(id:typeof blockChoices[number]["id"])=>{
     if(id==="callout")insertWaveBlock("callout","important");
