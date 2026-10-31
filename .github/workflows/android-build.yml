@@ -145,6 +145,9 @@ jobs:
       - name: Verify camera clipboard and drop image ingestion
         run: bun scripts/test-wave-image-ingestion.ts
 
+      - name: Verify detached attachment cleanup after durable writes
+        run: bun scripts/test-wave-attachment-reclaim.ts
+
       - name: Verify offline note image storage, exchange and cleanup
         run: bun scripts/test-wave-images.ts
 
