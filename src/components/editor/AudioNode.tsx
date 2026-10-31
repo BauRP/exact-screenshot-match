@@ -6,6 +6,7 @@ import {
 } from "@tiptap/react";
 import { useEffect, useRef, useState } from "react";
 import { Pause, Play, Trash2 } from "lucide-react";
+import { loadAudioFile } from "@/lib/audio-files";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -62,6 +63,7 @@ export const AudioNote = Node.create({
 
 function AudioNoteView({ node, deleteNode, editor }: NodeViewProps) {
   const src = node.attrs.src as string;
+  const [playbackSrc, setPlaybackSrc] = useState(() => src.startsWith("audiodb:") ? "" : src);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -69,8 +71,32 @@ function AudioNoteView({ node, deleteNode, editor }: NodeViewProps) {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [audioError,setAudioError]=useState("");
+  const [reloadToken,setReloadToken]=useState(0);
   const [duration, setDuration] = useState(0);
+  const [speed,setSpeed]=useState(1);
   const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    if (!src.startsWith("audiodb:")) {
+      setPlaybackSrc(src);
+      return;
+    }
+    let disposed = false;
+    let objectUrl: string | null = null;
+    setPlaybackSrc("");
+    setAudioError("");
+    void loadAudioFile(src.slice("audiodb:".length)).then((blob) => {
+      if (disposed) return;
+      if(!blob){setAudioError("Аудиофайл не найден");return;}
+      objectUrl = URL.createObjectURL(blob);
+      setPlaybackSrc(objectUrl);
+    }).catch((error) => {console.error("Unable to load audio attachment", error);if(!disposed)setAudioError("Не удалось загрузить аудио");});
+    return () => {
+      disposed = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [src,reloadToken]);
 
   useEffect(() => {
     return () => {
@@ -157,7 +183,7 @@ function AudioNoteView({ node, deleteNode, editor }: NodeViewProps) {
       try {
         await ctxRef.current?.resume();
       } catch {}
-      await audio.play();
+      try{await audio.play();setAudioError("");}catch(error){console.error("Audio playback failed",error);setAudioError("Не удалось воспроизвести аудио");}
     }
   };
 
@@ -195,6 +221,23 @@ function AudioNoteView({ node, deleteNode, editor }: NodeViewProps) {
             height={40}
             className="h-10 w-full"
           />
+          <div className="flex items-center gap-2 text-xs">
+            <label className="min-w-0 flex-1">Позиция записи
+              <input aria-label="Перемотка аудио" type="range" min={0} max={Number.isFinite(duration)&&duration>0?Math.ceil(duration):0}
+                step="1" value={Math.min(progress,Number.isFinite(duration)&&duration>0?Math.ceil(duration):0)}
+                disabled={!playbackSrc||!Number.isFinite(duration)||duration<=0}
+                onChange={event=>{const at=Number(event.target.value);const player=audioRef.current;if(player&&Number.isFinite(at)){player.currentTime=at;setProgress(at);}}}
+                className="block w-full"/>
+            </label>
+            <select aria-label="Скорость воспроизведения" className="rounded-md bg-secondary p-1"
+              value={speed} onChange={event=>{const rate=Number(event.target.value);setSpeed(rate);if(audioRef.current)audioRef.current.playbackRate=rate;}}>
+              {[0.75,1,1.25,1.5,2].map(rate=><option key={rate} value={rate}>{rate}×</option>)}
+            </select>
+          </div>
+          {audioError&&<div role="alert" className="mt-1 flex items-center gap-2 text-xs text-amber-300">
+            <span>{audioError}</span>
+            {src.startsWith("audiodb:")&&<button type="button" onClick={()=>setReloadToken(v=>v+1)} className="underline">Повторить</button>}
+          </div>}
           <div className="mt-1 flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-white/60">
             <span>Аудио</span>
             <span>
@@ -217,9 +260,10 @@ function AudioNoteView({ node, deleteNode, editor }: NodeViewProps) {
 
         <audio
           ref={audioRef}
-          src={src}
+          src={playbackSrc}
           preload="metadata"
-          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+          onLoadedMetadata={(e) => {setDuration(e.currentTarget.duration);e.currentTarget.playbackRate=speed;setAudioError("");}}
+          onError={()=>setAudioError("Не удалось прочитать аудиофайл")}
           onTimeUpdate={(e) => setProgress(e.currentTarget.currentTime)}
           onPlay={() => {
             setPlaying(true);

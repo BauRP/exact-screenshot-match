@@ -16,6 +16,8 @@ import { ThemeBoot } from "../lib/theme";
 import { AppLockGate } from "../lib/app-lock";
 import { NativeShellBoot } from "../lib/native-shell";
 import { NativeBackHandler } from "../lib/native-back";
+import { NativeAdRuntime } from "@/components/NativeAdRuntime";
+import { startLocalBackupAutoSync } from "../lib/local-backup";
 import { normalizeLang, dirOf } from "../lib/i18n";
 
 
@@ -81,13 +83,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         name: "viewport",
         content: "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover",
       },
-      { title: "Супер заметки — умный офлайн-блокнот" },
+      { title: "Wave Notes — умный офлайн-блокнот" },
       {
         name: "description",
         content:
-          "Супер заметки: премиальный офлайн-блокнот с распознаванием текста с камеры, стильным редактором и полной приватностью.",
+          "Wave Notes: премиальный офлайн-блокнот с распознаванием текста с камеры, стильным редактором и полной приватностью.",
       },
-      { property: "og:title", content: "Супер заметки" },
+      { property: "og:title", content: "Wave Notes" },
       {
         property: "og:description",
         content:
@@ -99,19 +101,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", href: "favicon.ico", type: "image/x-icon" }, // Изменено
-      {
-        rel: "preconnect",
-        href: "https://fonts.gstatic.com",
-        crossOrigin: "anonymous",
-      },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Caveat:wght@400;600&family=Comfortaa:wght@400;600;700&family=Fira+Sans:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Lora:wght@400;600&family=Manrope:wght@400;500;600;700&family=Merriweather:wght@400;700&family=Montserrat:wght@400;500;600;700&family=Noto+Sans:wght@400;500;600;700&family=Nunito:wght@400;500;600;700&family=Open+Sans:wght@400;500;600;700&family=Oswald:wght@400;500;600&family=PT+Sans:wght@400;700&family=Playfair+Display:ital,wght@0,600;1,600&family=Raleway:wght@400;500;600;700&family=Roboto:wght@400;500;700&family=Rubik:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Ubuntu:wght@400;500;700&family=Work+Sans:wght@400;500;600;700&display=swap",
-      },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Amatic+SC:wght@400;700&family=EB+Garamond:ital,wght@0,400;0,700;1,400&family=Lexend:wght@400;600;700&family=Lobster&family=Pacifico&family=Roboto+Mono:ital,wght@0,400;0,700;1,400&family=Roboto+Serif:ital,wght@0,400;0,700;1,400&family=Spectral:ital,wght@0,400;0,700;1,400&display=swap",
-      },
+      // Fonts are not fetched from remote servers during Android startup.
 
     ],
   }),
@@ -152,6 +142,7 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  useEffect(() => startLocalBackupAutoSync(), []);
 
   useEffect(() => {
     try {
@@ -176,8 +167,9 @@ function RootComponent() {
       <NativeShellBoot />
       <NativeBackHandler />
       <AppLockGate>
+        <NativeAdRuntime />
         <SafeFrame>
-          <div className="relative mx-auto flex min-h-0 w-full max-w-[450px] flex-1 flex-col overflow-hidden border-x border-slate-800 bg-background shadow-2xl md:max-w-3xl lg:max-w-5xl">
+          <div className="relative mx-auto flex min-h-0 w-full max-w-full flex-1 flex-col overflow-hidden bg-background shadow-2xl lg:max-w-5xl lg:border-x lg:border-slate-800">
             <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
               <Outlet />
             </div>
@@ -191,13 +183,17 @@ function RootComponent() {
 }
 
 
-/** Root frame: fills the screen and starts strictly below the system status bar. */
+/** The Android native WebView is already clipped to the safe window by
+ * MainActivity, so the web root must not add its own status/navigation insets.
+ * Browser/iOS use their CSS safe-area values as before.
+ */
 function SafeFrame({ children }: { children: ReactNode }) {
-  const top = "env(safe-area-inset-top)";
+  const nativeAndroid = typeof window !== "undefined" && (window as Window & { Capacitor?: { getPlatform?: () => string } }).Capacitor?.getPlatform?.() === "android";
+  const top = nativeAndroid ? "0px" : "env(safe-area-inset-top)";
   return (
     <div
-      style={{ paddingTop: top }}
-      className="flex h-[100dvh] w-full max-w-[100vw] flex-col overflow-x-hidden bg-background pb-[env(safe-area-inset-bottom)]"
+      style={{ paddingTop: top, paddingBottom: nativeAndroid ? "0px" : "env(safe-area-inset-bottom)" }}
+      className="wave-app-frame flex w-full min-w-0 max-w-full flex-col overflow-x-hidden bg-background"
     >
       {children}
     </div>

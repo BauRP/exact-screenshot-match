@@ -1,4 +1,8 @@
+import {validReminderTime} from "./note-reminders";
 import { useSyncExternalStore } from "react";
+import { markBackupDirty } from "./backup-signals";
+import { NEW_NOTE_YELLOW,NEW_NOTE_INK } from "./note-appearance";
+import { validPaperMood,validPaperRule } from "./note-paper";
 
 export type NoteKind = "note" | "pdf";
 
@@ -24,6 +28,18 @@ export type PdfTextOverlay = {
   text: string;
   /** True when the box masks existing PDF text that was replaced. */
   cover: boolean;
+  /** Exact source text rectangle to erase after a genuine edit. Keep independent of ruler changes. */
+  eraseXPct?: number;
+  eraseYPct?: number;
+  eraseWidthPct?: number;
+  eraseHeightPct?: number;
+  /** Sampled uniform background behind the source glyphs when available. */
+  eraseColor?: string;
+  sourceFontId?: string;
+  sourceFontName?: string;
+  sourceFontCss?: string;
+  sourceFontExact?: boolean;
+  sourceBaselinePct?: number;
   /** Inline text formatting (PDF points for the size). */
   fontSize?: number;
   fontFamily?: string;
@@ -53,7 +69,12 @@ export type Note = {
   createdAt: number;
   updatedAt: number;
   pinned?: boolean;
+  reminderAt?: number;
   folderId?: string;
+  cardColor?: string;
+  manualOrder?: number;
+  /** Original note ID in a transferred .wnote copy. */
+  originId?: string;
   kind?: NoteKind;
   pdf?: PdfMeta;
   style?: {
@@ -61,12 +82,14 @@ export type Note = {
     fontSize?: number;
     color?: string;
     background?: string;
+    paperMood?: import("./note-paper").PaperMood;
+    paperRule?: import("./note-paper").PaperRule;
   };
 };
 
 
 export type ViewMode = "list" | "grid" | "table";
-export type SortMode = "created" | "updated" | "alpha";
+export type SortMode = "created" | "updated" | "alpha" | "manual";
 export type NotesDatabaseStatus = "idle" | "loading" | "ready" | "error";
 
 type DatabaseSnapshot = {
@@ -136,6 +159,8 @@ function normalizeNote(input: unknown): Note | null {
         fontSize: typeof rawStyle.fontSize === "number" ? rawStyle.fontSize : undefined,
         color: typeof rawStyle.color === "string" ? rawStyle.color : undefined,
         background: typeof rawStyle.background === "string" ? rawStyle.background : undefined,
+        paperMood: validPaperMood(rawStyle.paperMood) ? rawStyle.paperMood : undefined,
+        paperRule: validPaperRule(rawStyle.paperRule) ? rawStyle.paperRule : undefined,
       }
     : undefined;
 
@@ -146,7 +171,11 @@ function normalizeNote(input: unknown): Note | null {
     createdAt,
     updatedAt,
     pinned: input.pinned === true,
+    reminderAt: validReminderTime(input.reminderAt),
     folderId,
+    cardColor: typeof input.cardColor === "string" && /^#[0-9a-f]{6}$/i.test(input.cardColor) ? input.cardColor : undefined,
+    manualOrder: typeof input.manualOrder === "number" && Number.isSafeInteger(input.manualOrder) && input.manualOrder>=0 ? input.manualOrder : undefined,
+    originId: typeof input.originId === "string" && /^[\w-]{1,128}$/.test(input.originId) ? input.originId : undefined,
     kind: input.kind === "pdf" ? "pdf" : "note",
     pdf: isRecord(input.pdf)
       ? {
@@ -171,10 +200,11 @@ function parseStoredNotes(raw: string | null): Note[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
+    if (!Array.isArray(parsed)) throw new Error("Unexpected notes database format");
+    if (parsed.some((item) => !isRecord(item))) throw new Error("Invalid note record");
     return parsed.map(normalizeNote).filter((note): note is Note => note !== null);
   } catch {
-    return [];
+    throw new Error("Saved notes could not be parsed. Original data is preserved.");
   }
 }
 
@@ -183,7 +213,7 @@ function parseStoredView(raw: string | null): ViewMode {
 }
 
 function parseStoredSort(raw: string | null): SortMode {
-  return raw === "created" || raw === "alpha" || raw === "updated" ? raw : DEFAULT_SORT;
+  return raw === "created" || raw === "alpha" || raw === "updated" || raw === "manual" ? raw : DEFAULT_SORT;
 }
 
 function commit(patch: Partial<DatabaseSnapshot>) {
@@ -199,12 +229,20 @@ function emit() {
   listeners.forEach((listener) => listener());
 }
 
+/**
+ * Persist first and notify React only after the storage write succeeded.
+ * A failed write must NEVER make an unsaved edit look successfully stored.
+ */
 function persistNotes(nextNotes: Note[]) {
-  if (!isBrowserStorageAvailable()) return;
   try {
+    if (!isBrowserStorageAvailable()) throw new Error("Local notes storage is unavailable");
     window.localStorage.setItem(NOTES_KEY, JSON.stringify(nextNotes));
+    // This occurs only after a committed save, never on editor onUpdate.
+    markBackupDirty();
   } catch (error) {
-    commit({ status: "error", error: error instanceof Error ? error.message : "Storage write failed" });
+    const message = error instanceof Error ? error.message : "Storage write failed";
+    commit({ status: "error", error: message });
+    throw new Error("Unable to save notes: " + message);
   }
 }
 
@@ -332,10 +370,11 @@ function sortNotes(list: Note[], mode: SortMode): Note[] {
   const pinned = list
     .filter((note) => note.pinned)
     .slice()
-    .sort((a, b) => a.title.localeCompare(b.title, "ru", { sensitivity: "base" }));
+    .sort((a, b) => mode==="manual" ? (a.manualOrder??Number.MAX_SAFE_INTEGER)-(b.manualOrder??Number.MAX_SAFE_INTEGER) || b.updatedAt-a.updatedAt : a.title.localeCompare(b.title, "ru", { sensitivity: "base" }));
 
   const rest = list.filter((note) => !note.pinned).slice();
   rest.sort((a, b) => {
+    if (mode === "manual") return (a.manualOrder??Number.MAX_SAFE_INTEGER)-(b.manualOrder??Number.MAX_SAFE_INTEGER) || b.updatedAt-a.updatedAt;
     if (mode === "alpha") return a.title.localeCompare(b.title, "ru", { sensitivity: "base" });
     if (mode === "created") return b.createdAt - a.createdAt;
     return b.updatedAt - a.updatedAt;
@@ -363,6 +402,9 @@ function createId() {
 
 function ensureReadyForMutation() {
   if (!state.hydrated) initializeSynchronously();
+  if (state.status === "error") {
+    throw new Error("Notes storage has an error. Writes are blocked to protect existing data.");
+  }
 }
 
 export function useNotes(): Note[] {
@@ -404,6 +446,21 @@ export function setSort(nextSort: SortMode) {
   persistPreference(SORT_KEY, nextSort);
 }
 
+/** Move one saved note without affecting native ad slots or binary files. */
+export function moveNoteBefore(sourceId:string,targetId:string):boolean{
+ ensureReadyForMutation();
+ if(sourceId===targetId)return false;
+ const ordered=sortNotes(state.notes,state.sort);
+ const from=ordered.findIndex(x=>x.id===sourceId),to=ordered.findIndex(x=>x.id===targetId);
+ if(from<0||to<0)return false;
+ if(ordered[from].pinned!==ordered[to].pinned||ordered[from].folderId!==ordered[to].folderId)return false;
+ const [moving]=ordered.splice(from,1);
+ ordered.splice(ordered.findIndex(x=>x.id===targetId),0,moving);
+ const ranks=new Map(ordered.map((note,k)=>[note.id,k]));
+ const next=state.notes.map(note=>({...note,manualOrder:ranks.get(note.id)}));
+ persistNotes(next);commit({notes:next,sort:"manual",status:"ready"});persistPreference(SORT_KEY,"manual");
+ return true;
+}
 export function getNote(id: string): Note | undefined {
   ensureReadyForMutation();
   return state.notes.find((note) => note.id === id);
@@ -419,15 +476,23 @@ export function createNote(partial?: Partial<Note>): Note {
     createdAt: partial?.createdAt ?? now,
     updatedAt: partial?.updatedAt ?? now,
     pinned: partial?.pinned ?? false,
+    reminderAt: validReminderTime(partial?.reminderAt),
     folderId: partial?.folderId ?? "all",
+    cardColor: partial?.cardColor,
+    manualOrder: partial?.manualOrder,
+    originId: partial?.originId,
     kind: partial?.kind ?? "note",
     pdf: partial?.pdf,
-    style: partial?.style,
+    // Only brand-new text notes inherit yellow paper. Imported/older saved
+    // notes are normalized without this default and keep their own backgrounds.
+    style: partial?.style ?? (partial?.kind === "pdf" ? undefined : {
+      background: NEW_NOTE_YELLOW, color: NEW_NOTE_INK,
+    }),
 
   };
   const nextNotes = [note, ...state.notes];
-  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
   persistNotes(nextNotes);
+  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
   return note;
 }
 
@@ -456,12 +521,14 @@ export function nextDefaultNoteTitle(base: string): string {
 }
 
 /** Fields whose change means the note content was actually modified. */
-const CONTENT_FIELDS = ["title", "body", "pdf", "style"] as const;
+const CONTENT_FIELDS = ["title", "body", "pdf", "style", "reminderAt"] as const;
 
 function touchesContent(note: Note, patch: Partial<Note>): boolean {
   return CONTENT_FIELDS.some((field) => {
     if (!(field in patch)) return false;
     const next = patch[field];
+    // Clearing a saved reminder is a real edit, not a no-op.
+    if (field === "reminderAt") return next !== note.reminderAt;
     if (next === undefined) return false;
     if (field === "style" || field === "pdf") {
       return JSON.stringify({ ...(note[field] as object), ...(next as object) }) !== JSON.stringify(note[field] ?? {});
@@ -470,8 +537,37 @@ function touchesContent(note: Note, patch: Partial<Note>): boolean {
   });
 }
 
+/**
+ * Reclaim binary files only after the new note body has been durably stored.
+ * A second live-reference check protects files still shared by copied notes.
+ * Cleanup failures are logged, never converted into false "Save failed" UI.
+ */
+async function reclaimDetachedAttachments(previousBody:string):Promise<void>{
+  if(!previousBody)return;
+  try{
+    const [{audioIdsInHtml,deleteAudioFile},{imageIdsInHtml,deleteImageFile}]=await Promise.all([
+      import("./audio-files"),import("./image-files"),
+    ]);
+    const usedAudio=new Set(state.notes.flatMap(note=>audioIdsInHtml(note.body)));
+    const usedImages=new Set(state.notes.flatMap(note=>imageIdsInHtml(note.body)));
+    const staleAudio=[...new Set(audioIdsInHtml(previousBody))].filter(id=>!usedAudio.has(id));
+    const staleImages=[...new Set(imageIdsInHtml(previousBody))].filter(id=>!usedImages.has(id));
+    // Recheck once against the latest state; it may have changed while
+    // IndexedDB was opening (e.g. a copied note restored a reference).
+    const latestAudio=new Set(state.notes.flatMap(note=>audioIdsInHtml(note.body)));
+    const latestImages=new Set(state.notes.flatMap(note=>imageIdsInHtml(note.body)));
+    const results=await Promise.allSettled([
+      ...staleAudio.filter(id=>!latestAudio.has(id)).map(id=>deleteAudioFile(id)),
+      ...staleImages.filter(id=>!latestImages.has(id)).map(id=>deleteImageFile(id)),
+    ]);
+    for(const result of results)if(result.status==="rejected")
+      console.error("Unable to reclaim unused note attachment",result.reason);
+  }catch(error){console.error("Unused attachment cleanup failed",error);}
+}
+
 export function updateNote(id: string, patch: Partial<Note>) {
   ensureReadyForMutation();
+  const oldBody=state.notes.find(note=>note.id===id)?.body;
   let changed = false;
   const nextNotes = state.notes.map((note) => {
     if (note.id !== id) return note;
@@ -489,8 +585,11 @@ export function updateNote(id: string, patch: Partial<Note>) {
   });
 
   if (!changed) return;
-  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
   persistNotes(nextNotes);
+  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
+  if(typeof patch.body==="string"&&oldBody!==undefined&&patch.body!==oldBody){
+    void reclaimDetachedAttachments(oldBody);
+  }
 }
 
 export function togglePin(id: string) {
@@ -503,8 +602,8 @@ export function togglePin(id: string) {
   });
 
   if (!changed) return;
-  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
   persistNotes(nextNotes);
+  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
 }
 
 export function deleteNote(id: string) {
@@ -512,18 +611,52 @@ export function deleteNote(id: string) {
   const target = state.notes.find((note) => note.id === id);
   const nextNotes = state.notes.filter((note) => note.id !== id);
   if (nextNotes.length === state.notes.length) return;
-  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
   persistNotes(nextNotes);
+  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
+  // Binary cleanup never affects still-referenced files in another note.
   if (target?.kind === "pdf") {
-    void import("./pdf-files").then((module) => module.deletePdfFile(id));
+    void import("./pdf-files").then(module=>module.deletePdfFile(id))
+      .catch(error=>console.error("Unable to remove PDF",error));
   }
+  if(target?.body)void reclaimDetachedAttachments(target.body);
 }
 
 
-export function clearAll() {
+/** Move the notes out of a folder BEFORE its tab is removed. */
+export function moveNotesToFolder(sourceId: string, destinationId = "all") {
   ensureReadyForMutation();
-  commit({ notes: [], hydrated: true, status: "ready", error: null });
+  if (sourceId === destinationId) return;
+  const nextNotes = state.notes.map((note) =>
+    note.folderId === sourceId ? { ...note, folderId: destinationId } : note,
+  );
+  if (nextNotes.every((note, index) => note === state.notes[index])) return;
+  persistNotes(nextNotes);
+  commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
+}
+
+export async function clearAll(): Promise<void> {
+  ensureReadyForMutation();
+  const before = state.notes;
+  const pdfIds = before.filter((note) => note.kind === "pdf").map((note) => note.id);
+  const [{ deletePdfFile }, { audioIdsInHtml, deleteAudioFile }, { imageIdsInHtml,deleteImageFile }] = await Promise.all([
+    import("./pdf-files"), import("./audio-files"), import("./image-files"),
+  ]);
+  // Save the empty list before removing binary attachments: failed writes leave
+  // existing notes and their files intact. Await cleanup before reporting success.
   persistNotes([]);
+  commit({ notes: [], hydrated: true, status: "ready", error: null });
+  const audioIds = [...new Set(before.flatMap((note) => audioIdsInHtml(note.body)))];
+  const imageIds = [...new Set(before.flatMap(note=>imageIdsInHtml(note.body)))];
+  const results = await Promise.allSettled([
+    ...pdfIds.map((id) => deletePdfFile(id)),
+    ...audioIds.map((id) => deleteAudioFile(id)),
+    ...imageIds.map(id=>deleteImageFile(id)),
+  ]);
+  const failed = results.filter((result) => result.status === "rejected");
+  if (failed.length > 0) {
+    console.error("Some local attachments could not be deleted", failed);
+    throw new Error("Заметки удалены, но некоторые вложения удалить не удалось. Очистите данные приложения в настройках Android, чтобы удалить оставшиеся файлы.");
+  }
 }
 
 export function exportNotes(): string {
@@ -537,4 +670,30 @@ export function exportNotes(): string {
     null,
     2,
   );
+}
+
+/** Non-destructive restore: existing notes always win on ID collisions. */
+export function importBackupNotes(imported: Note[]): number {
+  ensureReadyForMutation();
+  if (!Array.isArray(imported) || imported.length > 10000) throw new Error("Invalid notes archive");
+  const ids = new Set(state.notes.map((note) => note.id));
+  const additions: Note[] = [];
+  for (const item of imported) {
+    if (!isRecord(item) || typeof item.id !== "string" ||
+        !/^[\w-]{1,128}$/.test(item.id) ||
+        typeof item.body !== "string" || typeof item.title !== "string") {
+      throw new Error("Corrupted note in backup");
+    }
+    const normalized = normalizeNote(item);
+    if (!normalized) throw new Error("Corrupted note in backup");
+    if (!ids.has(normalized.id)) {
+      additions.push(normalized);
+      ids.add(normalized.id);
+    }
+  }
+  if (!additions.length) return 0;
+  const next = [...additions, ...state.notes];
+  persistNotes(next);
+  commit({ notes: next, hydrated: true, status: "ready", error: null });
+  return additions.length;
 }

@@ -69,7 +69,7 @@ export const ru: Dict = {
   delete: "Удалить",
   new_folder: "Новая папка",
   folder_name: "Название папки",
-  offline_note: "Супер заметки · v1.0 · Работает офлайн",
+  offline_note: "Wave Notes · v1.0 · Работает офлайн",
   new_note: "Новая заметка",
   back: "Назад",
   done: "Готово",

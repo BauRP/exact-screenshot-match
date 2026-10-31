@@ -1,0 +1,13 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+const prefs=readFileSync("src/lib/editor-preferences.ts","utf8");
+const settings=readFileSync("src/routes/settings.tsx","utf8");
+const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
+const page=readFileSync("src/lib/wave-page-break.ts","utf8");
+const css=readFileSync("src/styles.css","utf8");
+for(const marker of ["TOOLBAR_TOOLS","hiddenToolbar","validHiddenToolbar","saveEditorPreferences","Set<string>"])assert.ok(prefs.includes(marker),marker);
+for(const marker of ["TOOLBAR_TOOLS.map","editorPrefs.hiddenToolbar.includes","Показать все кнопки"])assert.ok(settings.includes(marker),marker);
+for(const marker of ['toolVisible("audio")','toolVisible("drawing")','toolVisible("camera")','toolVisible("gallery")','toolVisible("search")','toolVisible("outline")','toolVisible("checklist")','toolVisible("insert")','WavePageBreak,','insertWavePageBreak().run()','Новая страница'])assert.ok(editor.includes(marker),marker);
+assert.ok(page.includes("data-wave-page-break"));
+assert.ok(css.includes("break-after:page"));
+console.log("Toolbar preferences and explicit page breaks are wired to editor and settings");

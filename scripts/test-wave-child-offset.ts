@@ -1,0 +1,11 @@
+import {strict as assert} from "node:assert";
+import {Schema} from "@tiptap/pm/model";
+import {waveChildOffset} from "../src/lib/wave-block-motion";
+const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},text:{group:"inline"}},marks:{}});
+const nodes=["a","long line", "third"].map(t=>schema.nodes.paragraph.create(null,schema.text(t)));
+const doc=schema.nodes.doc.create(null,nodes);
+assert.equal(waveChildOffset(doc,0),0);
+assert.equal(waveChildOffset(doc,1),nodes[0].nodeSize);
+assert.equal(waveChildOffset(doc,2),nodes[0].nodeSize+nodes[1].nodeSize);
+assert.equal(waveChildOffset(doc,3),doc.content.size);
+console.log("ProseMirror child offsets match variable-size sibling nodes");

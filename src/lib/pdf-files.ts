@@ -24,7 +24,7 @@ function openDatabase(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("Failed to open PDF storage"));
+    request.onerror = () => { dbPromise = null; reject(request.error ?? new Error("Failed to open PDF storage")); };
   });
 
   return dbPromise;
@@ -36,8 +36,12 @@ function withStore<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => 
       new Promise<T>((resolve, reject) => {
         const tx = db.transaction(STORE, mode);
         const request = run(tx.objectStore(STORE));
-        request.onsuccess = () => resolve(request.result);
+        let value: T;
+        request.onsuccess = () => { value = request.result; };
         request.onerror = () => reject(request.error ?? new Error("PDF storage request failed"));
+        tx.oncomplete = () => resolve(value);
+        tx.onerror = () => reject(tx.error ?? new Error("PDF storage transaction failed"));
+        tx.onabort = () => reject(tx.error ?? new Error("PDF storage transaction aborted"));
       }),
   );
 }
@@ -46,21 +50,20 @@ export async function savePdfFile(id: string, bytes: ArrayBuffer): Promise<void>
   await withStore("readwrite", (store) => store.put(bytes, id) as IDBRequest<IDBValidKey>);
 }
 
+/** Create-only write for restoration. Never overwrite an existing/orphaned PDF. */
+export async function saveNewPdfFile(id: string, bytes: ArrayBuffer): Promise<void> {
+  await withStore("readwrite", (store) => store.add(bytes, id) as IDBRequest<IDBValidKey>);
+}
+
 export async function loadPdfFile(id: string): Promise<ArrayBuffer | null> {
-  try {
-    const value = await withStore<ArrayBuffer | undefined>("readonly", (store) => store.get(id));
-    return value ?? null;
-  } catch {
-    return null;
-  }
+  // Missing file != broken IndexedDB. Never describe a storage failure as a
+  // deleted PDF; callers already display genuine read errors separately.
+  const value=await withStore<ArrayBuffer | undefined>("readonly",store=>store.get(id));
+  return value ?? null;
 }
 
 export async function deletePdfFile(id: string): Promise<void> {
-  try {
-    await withStore("readwrite", (store) => store.delete(id) as unknown as IDBRequest<undefined>);
-  } catch {
-    /* ignore */
-  }
+  await withStore("readwrite", (store) => store.delete(id) as unknown as IDBRequest<undefined>);
 }
 
 /** Opens the native/system file picker and resolves with the chosen PDF. */
@@ -74,25 +77,41 @@ export function pickPdfFile(): Promise<File | null> {
     input.style.position = "fixed";
     input.style.left = "-9999px";
     let settled = false;
+    let pickerLeftApp = false;
+    let returnCheck: ReturnType<typeof setTimeout> | null = null;
+
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") pickerLeftApp = true;
+      else if (pickerLeftApp) checkReturn();
+    };
+    const onBlur = () => { pickerLeftApp = true; };
+    const onFocus = () => { if (pickerLeftApp) checkReturn(); };
 
     const finish = (file: File | null) => {
       if (settled) return;
       settled = true;
+      if (returnCheck !== null) clearTimeout(returnCheck);
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
       input.remove();
       resolve(file);
     };
 
+    function checkReturn() {
+      if (returnCheck !== null) clearTimeout(returnCheck);
+      returnCheck = setTimeout(() => {
+        if (!settled && !input.files?.length) finish(null);
+      }, 600);
+    }
+
     input.addEventListener("change", () => finish(input.files?.[0] ?? null));
     input.addEventListener("cancel", () => finish(null));
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
     document.body.appendChild(input);
     input.click();
-
-    // Safety net: some Android webviews never fire "cancel".
-    window.setTimeout(() => {
-      if (!settled && !input.files?.length) {
-        // keep waiting for change; only clean up if the element got detached
-      }
-    }, 1000);
   });
 }
 

@@ -1,9 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Moon,
   Sun,
-  Trash2,
   LayoutGrid,
   List,
   Table2,
@@ -13,15 +12,21 @@ import {
   Shield,
   Send,
   MessageSquarePlus,
-} from "lucide-react";
+  Download,
+  Upload,
+  SpellCheck,
+  Search,
+ } from "lucide-react";
 import { sendFeedback } from "@/lib/feedback.functions";
+import { AdMobDiagnosticsPanel } from "@/components/AdMobDiagnosticsPanel";
+import { isAutomaticBackupEnabled, setAutomaticBackupEnabled, restoreLocalBackup } from "@/lib/local-backup";
+import { invalidateConsentForSession, requestConsentForSession } from "@/lib/admob-session";
 import { AppHeader } from "@/components/AppHeader";
+import { LanguagePickerSheet } from "@/components/LanguagePickerSheet";
 import { BottomNav } from "@/components/BottomNav";
 import { useTheme, setTheme } from "@/lib/theme";
 import {
-  clearAll,
   setView,
-  useNotes,
   useView,
   type ViewMode,
 } from "@/lib/notes-store";
@@ -33,7 +38,10 @@ import {
   useLockConfig,
   verifyBiometric,
   verifyPin,
+  biometricAvailability,
 } from "@/lib/app-lock";
+import { pinIsValid } from "@/lib/pin-security";
+import { readEditorPreferences,saveEditorPreferences,TOOLBAR_TOOLS } from "@/lib/editor-preferences";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [
@@ -81,32 +89,6 @@ function Toggle({
   );
 }
 
-function NativeSelect({
-  value,
-  onChange,
-  options,
-  label,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-  label: string;
-}) {
-  return (
-    <select
-      aria-label={label}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-8 max-w-[10rem] rounded-full border border-border bg-secondary/60 px-3 text-xs font-medium text-foreground outline-none"
-    >
-      {options.map((o) => (
-        <option key={o.value} value={o.value} className="bg-popover text-popover-foreground">
-          {o.label}
-        </option>
-      ))}
-    </select>
-  );
-}
 
 function Modal({
   open,
@@ -179,14 +161,14 @@ function Btn({
 function SettingsPage() {
   const { theme } = useTheme();
   const view = useView();
-  const notes = useNotes();
   const language = useLang();
   const t = useT();
   const navigate = useNavigate();
   const { pinEnabled, bioEnabled } = useLockConfig();
-  const [clearOpen, setClearOpen] = useState(false);
   const [pinDialog, setPinDialog] = useState(false);
   const [pinValue, setPinValue] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
+  const [securityBusy, setSecurityBusy] = useState(false);
   const [enableBioAfterPin, setEnableBioAfterPin] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [authPin, setAuthPin] = useState("");
@@ -196,10 +178,78 @@ function SettingsPage() {
   const [fbTopic, setFbTopic] = useState("");
   const [fbText, setFbText] = useState("");
   const [fbSending, setFbSending] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [automaticBackup, setAutomaticBackup] = useState(false);
+  const [editorPrefs,setEditorPrefs]=useState(()=>readEditorPreferences());
+  const changePref=(patch:Partial<typeof editorPrefs>)=>{try{setEditorPrefs(saveEditorPreferences(patch));}catch(e){console.error(e);toast.error("Не удалось сохранить настройку");}};
+  useEffect(()=>{setAutomaticBackup(isAutomaticBackupEnabled());},[]);
+  const [adPrivacyAvailable, setAdPrivacyAvailable] = useState(false);
+  const [adPrivacyLoading, setAdPrivacyLoading] = useState(false);
+
+  // UMP determines whether a privacy-options entry is required in this region.
+  // Do not expose a dead button before the publisher has configured the form.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { Capacitor } = await import("@capacitor/core");
+        if (!Capacitor.isNativePlatform() || Capacitor.getPlatform() !== "android") return;
+        const info = await requestConsentForSession();
+        if (!cancelled) setAdPrivacyAvailable(info.privacyOptionsRequirementStatus === "REQUIRED");
+      } catch (error) {
+        console.info("AdMob privacy options unavailable", error);
+        if (!cancelled) setAdPrivacyAvailable(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const openAdPrivacyOptions = async () => {
+    if (adPrivacyLoading) return;
+    setAdPrivacyLoading(true);
+    try {
+      const { AdMob } = await import("@capacitor-community/admob");
+      await AdMob.showPrivacyOptionsForm();
+      invalidateConsentForSession();
+      toast.info("Рекламные настройки обновлены");
+    } catch (error) {
+      console.warn("Google UMP privacy options unavailable", error);
+      toast.error("Google пока не предоставил форму рекламных настроек. Проверьте публикацию сообщения в AdMob.");
+    } finally {
+      setAdPrivacyLoading(false);
+    }
+  };
+
+  const changeAutomaticBackup=async(enabled:boolean)=>{
+    if(backupBusy)return;
+    setBackupBusy(true);
+    try{
+      await setAutomaticBackupEnabled(enabled);
+      setAutomaticBackup(isAutomaticBackupEnabled());
+      toast.success(enabled
+        ? "Автокопирование включено. Первая копия сохранена внутри приложения."
+        : "Автокопирование выключено. Последняя копия сохранена.");
+    }catch(error){
+      setAutomaticBackup(isAutomaticBackupEnabled());
+      toast.error(error instanceof Error?error.message:"Не удалось изменить резервное копирование");
+    }finally{setBackupBusy(false);}
+  };
+
+  const restoreBackup = async () => {
+    if (backupBusy) return;
+    setBackupBusy(true);
+    try {
+      const count = await restoreLocalBackup();
+      toast.success(count > 0 ? `Восстановлено заметок: ${count}` : "Резервная копия проверена. Новых вариантов нет.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось восстановить резервную копию");
+    } finally { setBackupBusy(false); }
+  };
 
   const openPinSetup = (enableBiometricsAfterwards: boolean) => {
     setEnableBioAfterPin(enableBiometricsAfterwards);
     setPinValue("");
+    setPinConfirm("");
     setPinDialog(true);
   };
 
@@ -214,13 +264,7 @@ function SettingsPage() {
     setAuthError(false);
     setAuthOpen(true);
     if (bioEnabled) {
-      void verifyBiometric().then((ok) => {
-        if (ok) {
-          setAuthOpen(false);
-          setPendingAction(null);
-          action();
-        }
-      });
+      // System fingerprint prompt is requested only by the explicit button; PIN always works.
     }
   };
 
@@ -256,15 +300,21 @@ function SettingsPage() {
     if (!topic || !text || fbSending) return;
     setFbSending(true);
     try {
-      const res = await sendFeedback({ data: { topic, text } });
-      // Success toast + modal close only on an explicit 200 OK from Telegram.
-      if (res?.ok) {
+      const { Capacitor, registerPlugin } = await import("@capacitor/core");
+      if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
+        // The offline APK does not include a TanStack feedback server.
+        // Android's email composer sends only after the user confirms.
+        const email = registerPlugin<{ compose(options: { subject: string; message: string }): Promise<void> }>("FeedbackEmail");
+        await email.compose({ subject: topic, message: text });
+        toast.info("Открыта почта. Для доставки предложения нажмите «Отправить».");
+        setFeedbackOpen(false);
+      } else {
+        const res = await sendFeedback({ data: { topic, text } });
+        if (!res?.ok) throw new Error("Feedback service unavailable");
         toast.success(t("fb_sent"));
         setFbTopic("");
         setFbText("");
         setFeedbackOpen(false);
-      } else {
-        toast.error(t("fb_failed"));
       }
     } catch {
       toast.error(t("fb_failed"));
@@ -273,24 +323,56 @@ function SettingsPage() {
     }
   };
 
+  const enableBiometrics = async () => {
+    if (securityBusy) return;
+    if (!pinEnabled) { openPinSetup(true); return; }
+    setSecurityBusy(true);
+    try {
+      const status = await biometricAvailability();
+      if (!status.available) { toast.error(status.reason); return; }
+      if (!await verifyBiometric()) { toast.error("Отпечаток не подтверждён. PIN продолжает работать."); return; }
+      setBiometrics(true);
+      toast.success("Биометрия включена. PIN остаётся резервным.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось включить биометрию");
+    } finally { setSecurityBusy(false); }
+  };
+
   const savePin = async () => {
-    const v = pinValue.trim();
-    if (v.length < 4) return;
-    await setPin(v);
-    if (enableBioAfterPin) setBiometrics(true);
-    setEnableBioAfterPin(false);
-    setPinValue("");
-    setPinDialog(false);
-    toast.success(t("saved"));
+    const value = pinValue.trim();
+    if (!pinIsValid(value)) { toast.error("Укажите PIN из 6–8 цифр, без простой последовательности."); return; }
+    if (value !== pinConfirm.trim()) { toast.error("PIN и повторный ввод не совпадают."); return; }
+    if (securityBusy) return;
+    setSecurityBusy(true);
+    try {
+      await setPin(value);
+      const wantBio=enableBioAfterPin;
+      setEnableBioAfterPin(false);
+      setPinValue("");
+      setPinConfirm("");
+      setPinDialog(false);
+      toast.success("PIN установлен. Сохраните его для резервного входа.");
+      if (wantBio) {
+        const status=await biometricAvailability();
+        if (!status.available) toast.info(status.reason);
+        else if (await verifyBiometric()) {
+          setBiometrics(true);
+          toast.success("Отпечаток подтверждён. PIN остаётся резервным.");
+        } else toast.info("Отпечаток не подтверждён; защита PIN включена.");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не удалось установить PIN");
+    } finally { setSecurityBusy(false); }
   };
 
   return (
     <div
       className="flex h-full min-h-0 flex-col overflow-hidden"
+      data-wave-settings-screen="true"
     >
       <AppHeader eyebrow={t("configuration")} title={t("settings")} />
 
-      <main className="mx-auto w-full min-h-0 max-w-xl flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 pb-[130px] pt-3 [-webkit-overflow-scrolling:touch]">
+      <main data-wave-settings-scroll="true" className="mx-auto w-full min-h-0 max-w-xl flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 pb-[130px] pt-3 [-webkit-overflow-scrolling:touch]">
 
         <Section title={t("appearance")} eyebrow="01">
           <Row
@@ -320,8 +402,9 @@ function SettingsPage() {
             title={t("ui_language")}
             hint={t("ui_language_hint")}
           >
-            <NativeSelect
-              label={t("ui_language")}
+            <LanguagePickerSheet
+              compact label={t("ui_language")}
+              description="Выберите язык приложения Wave Notes"
               value={language}
               onChange={(v) => setLang(v as Lang)}
               options={LANGUAGES}
@@ -329,7 +412,30 @@ function SettingsPage() {
           </Row>
         </Section>
 
-        <Section title={t("security")} eyebrow="04">
+        <Section title="Редактор" eyebrow="04">
+          <Row icon={<SpellCheck className="h-4 w-4"/>} title="Подчёркивать возможные ошибки" hint="Проверка средствами телефона, без автоматического исправления слов">
+            <Toggle checked={editorPrefs.spellcheck} label="Проверка правописания" onChange={v=>changePref({spellcheck:v})}/>
+          </Row>
+          <div className="h-px bg-border"/>
+          <Row icon={<Search className="h-4 w-4"/>} title="Учитывать регистр в поиске" hint="Поиск только внутри открытой заметки">
+            <Toggle checked={editorPrefs.caseSensitive} label="Учитывать заглавные буквы" onChange={v=>changePref({caseSensitive:v})}/>
+          </Row>
+          <div className="h-px bg-border"/>
+          <div className="p-3">
+            <p className="text-sm font-semibold">Кнопки панели редактора</p>
+            <p className="mt-1 text-xs text-muted-foreground">Выберите инструменты, которые хотите видеть. Сохранение и отмена остаются доступными.</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {TOOLBAR_TOOLS.map(tool=><div key={tool.id} className="flex items-center justify-between gap-2 rounded-xl border border-border p-2">
+                <span className="text-xs">{tool.label}</span>
+                <Toggle label={tool.label} checked={!editorPrefs.hiddenToolbar.includes(tool.id)}
+                  onChange={shown=>changePref({hiddenToolbar:shown?editorPrefs.hiddenToolbar.filter(id=>id!==tool.id):[...editorPrefs.hiddenToolbar,tool.id]})}/>
+              </div>)}
+            </div>
+            <button type="button" onClick={()=>changePref({hiddenToolbar:[]})}
+              className="mt-3 rounded-lg border border-border px-3 py-2 text-xs">Показать все кнопки</button>
+          </div>
+        </Section>
+        <Section title={t("security")} eyebrow="05">
           <Row
             icon={<Fingerprint className="h-4 w-4" />}
             title={t("biometrics")}
@@ -341,7 +447,7 @@ function SettingsPage() {
               onChange={(next) => {
                 if (next) {
                   // Enabling biometrics always requires a backup PIN first.
-                  if (pinEnabled) setBiometrics(true);
+                  if (pinEnabled) void enableBiometrics();
                   else openPinSetup(true);
                 } else {
                   // Disabling requires a successful biometric scan or the PIN.
@@ -352,43 +458,75 @@ function SettingsPage() {
               }}
             />
           </Row>
-          {(bioEnabled || pinEnabled) && (
-            <>
-              <div className="h-px bg-border" />
-              <Row icon={<Lock className="h-4 w-4" />} title={t("set_pin")} hint={t("app_lock_hint")}>
-                <Btn
-                  onClick={() => {
-                    // Changing an existing PIN requires authentication.
-                    if (pinEnabled) requireAuth(() => openPinSetup(false));
-                    else openPinSetup(false);
-                  }}
-                >
-                  {t("set_pin")}
-                </Btn>
-              </Row>
-            </>
-          )}
+          <div className="h-px bg-border" />
+          <Row icon={<Lock className="h-4 w-4" />} title={t("set_pin")} hint={t("app_lock_hint")}>
+            <Btn
+              onClick={() => {
+                // Always permit first-time PIN setup; authenticate before changes.
+                if (pinEnabled) requireAuth(() => openPinSetup(false));
+                else openPinSetup(false);
+              }}
+            >
+              {t("set_pin")}
+            </Btn>
+          </Row>
         </Section>
 
-        <Section title={t("data")} eyebrow="05">
-          <Row
-            icon={<Trash2 className="h-4 w-4 text-destructive" />}
-            title={t("clear_all_notes")}
-            hint={t("cant_undo")}
-          >
-            <Btn variant="destructive" onClick={() => setClearOpen(true)} disabled={notes.length === 0}>
-              {t("clear")}
-            </Btn>
+        <Section title={t("data")} eyebrow="06">
+          <Row icon={<Download className="h-4 w-4" />} title="Автоматическая резервная копия"
+            hint={automaticBackup
+              ? "Включено. Копия обновляется после сохранения заметки или PDF галочкой."
+              : "Выключено. Включите, чтобы создать внутреннюю копию и обновлять её после сохранения."}>
+            <div className="flex shrink-0 flex-col items-center gap-1">
+              <Toggle checked={automaticBackup} onChange={value=>void changeAutomaticBackup(value)}
+                label="Автоматическое резервное копирование" />
+              <span className={`text-[10px] font-semibold ${automaticBackup?"text-primary":"text-muted-foreground"}`}>
+                {backupBusy?"Подождите":automaticBackup?"Включено":"Выключено"}
+              </span>
+            </div>
+          </Row>
+          <div className="h-px bg-border" />
+          <Row icon={<Upload className="h-4 w-4" />} title="Восстановить резервную копию" hint="Автоматически находит последнюю внутреннюю копию. Выбирать файл не нужно.">
+            <Btn disabled={backupBusy} onClick={() => void restoreBackup()}>Восстановить</Btn>
           </Row>
           <div className="h-px bg-border" />
           <Row icon={<Shield className="h-4 w-4" />} title={t("privacy_policy")}>
-            <Btn onClick={() => navigate({ to: "/privacy" })}>{t("open_action")}</Btn>
+            <Btn onClick={async () => {
+              try {
+                const { Capacitor, registerPlugin } = await import("@capacitor/core");
+                if (Capacitor.getPlatform() === "android" && Capacitor.isNativePlatform()) {
+                  const browser = registerPlugin<{ openPolicy(): Promise<void> }>("PrivacyLink");
+                  await browser.openPolicy();
+                } else {
+                  window.open("https://baurp.github.io/privacy/wave-notes/", "_blank", "noopener,noreferrer");
+                }
+              } catch (error) {
+                toast.error("Не удалось открыть сайт политики конфиденциальности");
+                console.error("Cannot open privacy policy", error);
+              }
+            }}>Перейти</Btn>
           </Row>
+          {adPrivacyAvailable ? (
+            <>
+              <div className="h-px bg-border" />
+              <Row icon={<Shield className="h-4 w-4" />} title="Настройки рекламной конфиденциальности" hint="Изменить выбор согласия Google">
+                <Btn disabled={adPrivacyLoading} onClick={() => void openAdPrivacyOptions()}>
+                  {adPrivacyLoading ? "Открытие…" : "Управлять"}
+                </Btn>
+              </Row>
+            </>
+          ) : null}
           <div className="h-px bg-border" />
           <Row icon={<MessageSquarePlus className="h-4 w-4" />} title={t("ideas_wishes")}>
             <Btn onClick={() => setFeedbackOpen(true)}>{t("fb_send")}</Btn>
           </Row>
         </Section>
+
+        {/* Build-time opt-in only: never show debug details in live-ad releases. */}
+        {import.meta.env.VITE_ADMOB_DIAGNOSTICS === "true" &&
+         import.meta.env.VITE_ADMOB_LIVE_ADS !== "true" ? (
+          <AdMobDiagnosticsPanel onGoHome={() => void navigate({ to: "/" })} />
+        ) : null}
 
         <p className="pt-4 text-center font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
           {t("offline_note")}
@@ -406,7 +544,7 @@ function SettingsPage() {
             <Btn variant="ghost" onClick={() => setPinDialog(false)}>
               {t("cancel")}
             </Btn>
-            <Btn variant="primary" onClick={savePin} disabled={pinValue.length < 4}>
+            <Btn variant="primary" onClick={savePin} disabled={securityBusy || !pinIsValid(pinValue) || pinValue !== pinConfirm}>
               {t("save")}
             </Btn>
           </>
@@ -418,9 +556,16 @@ function SettingsPage() {
           autoFocus
           value={pinValue}
           onChange={(e) => setPinValue(e.target.value.replace(/\D/g, "").slice(0, 8))}
-          placeholder={t("pin_placeholder")}
+          placeholder="Новый PIN: 6–8 цифр"
+          autoComplete="new-password"
           className="h-9 w-full rounded-xl border border-border bg-secondary/40 px-3 text-sm outline-none focus:border-primary"
         />
+        <input type="password" inputMode="numeric" autoComplete="new-password"
+          aria-label="Повторите PIN" value={pinConfirm}
+          onChange={event=>setPinConfirm(event.target.value.replace(/\D/g,"").slice(0,8))}
+          placeholder="Повторите PIN"
+          className="mt-2 h-9 w-full rounded-xl border border-border bg-secondary/40 px-3 text-sm outline-none focus:border-primary" />
+        <p className="mt-2 text-xs text-muted-foreground">PIN необходим для входа, если отпечаток пальца недоступен.</p>
       </Modal>
 
       {/* Authentication gate (biometric scan or current PIN) */}
@@ -512,33 +657,6 @@ function SettingsPage() {
             className="w-full resize-none rounded-xl border border-border bg-secondary/40 px-3 py-2 text-sm outline-none focus:border-primary"
           />
         </div>
-      </Modal>
-
-      {/* Clear-all confirm */}
-      <Modal
-        open={clearOpen}
-        onClose={() => setClearOpen(false)}
-        title={t("delete_all_q")}
-        icon={<Trash2 className="h-4 w-4 text-destructive" />}
-        footer={
-          <>
-            <Btn variant="ghost" onClick={() => setClearOpen(false)}>
-              {t("cancel")}
-            </Btn>
-            <Btn
-              variant="destructive"
-              onClick={() => {
-                clearAll();
-                setClearOpen(false);
-                toast.success(t("delete_all"));
-              }}
-            >
-              {t("delete_all")}
-            </Btn>
-          </>
-        }
-      >
-        <p className="text-xs text-muted-foreground">{t("delete_all_body")}</p>
       </Modal>
 
       <BottomNav />

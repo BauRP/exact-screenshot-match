@@ -1,9 +1,15 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import { saveAudioFile, deleteAudioFile, audioIdsInHtml } from "@/lib/audio-files";
 import { ColorGrid, PALETTE } from "@/components/ColorGrid";
+import {NEW_NOTE_INK,editorBackground,editorInk} from "@/lib/note-appearance";
+import { noteCaretColor } from "@/lib/note-caret-color";
+import {parseReminderInput,toReminderInput,reminderPresetTime} from "@/lib/note-reminders";
+import { nativeAudioAvailable, startNativeAudio, stopNativeAudio } from "@/lib/native-audio";
 import {
   ArrowLeft,
-  Check,
+  LoaderCircle,
   Type,
   Palette,
   CaseUpper,
@@ -17,6 +23,22 @@ import {
   Redo2,
   Mic,
   Square,
+  Search,
+  X,
+  ChevronUp,
+  ChevronDown,
+  ListChecks,
+  WandSparkles,
+  Grid3X3,
+  Blocks,
+  Quote,
+  BookOpen,
+  EyeOff,
+  CalendarDays,
+  ImagePlus,
+  Camera,
+  PenTool,
+  ListTree,
 } from "lucide-react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -41,6 +63,16 @@ import {
 } from "@/components/ui/popover";
 import { AutoLinkExtras } from "@/lib/editor-extensions";
 import { AudioNote } from "@/components/editor/AudioNode";
+import { WaveImage } from "@/components/editor/WaveImage";
+import { WaveDrawing } from "@/components/editor/WaveDrawing";
+import {WavePageBreak} from "@/lib/wave-page-break";
+import {WaveTextDirection} from "@/lib/wave-text-direction";
+import {collectNoteOutline,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
+import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock} from "@/lib/wave-block-motion";
+import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
+import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
+import {safeBrowserClipboardHtml} from "@/lib/wave-smart-paste";
+import {DOMParser as PMDOMParser} from "@tiptap/pm/model";
 import { useFolders, type Folder } from "@/lib/folders-store";
 import {
   DropdownMenu,
@@ -49,6 +81,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useT } from "@/lib/i18n";
+import { APP_FONTS, fontNameFromCss } from "@/lib/app-fonts";
+import { InNoteSearch, noteSearchKey, findWords } from "@/lib/in-note-search";
+import {replaceOneInNote,replaceAllInNote} from "@/lib/wave-find-replace";
+import { readEditorPreferences,EDITOR_PREFS_CHANGED,type EditorTool } from "@/lib/editor-preferences";
+import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
+import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
+import {setAllFoldSections,countFoldSections} from "@/lib/wave-section-batch";
+import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
+import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
+import {openExternalUrl,isSafeExternalUrl} from "@/lib/external-links";
 
 export const Route = createFileRoute("/editor/$id")({
   head: () => ({ meta: [
@@ -61,32 +103,12 @@ export const Route = createFileRoute("/editor/$id")({
   ] }),
   validateSearch: (search: Record<string, unknown>) => ({
     folder: typeof search.folder === "string" ? search.folder : undefined,
+    ...(search.template === "checklist" ? {template:"checklist" as const} : {}),
   }),
   component: EditorPage,
 });
 
-const FONTS = [
-  { label: "Roboto", value: '"Roboto", sans-serif' },
-  { label: "Inter", value: '"Inter", sans-serif' },
-  { label: "Montserrat", value: '"Montserrat", sans-serif' },
-  { label: "Open Sans", value: '"Open Sans", sans-serif' },
-  { label: "Ubuntu", value: '"Ubuntu", sans-serif' },
-  { label: "PT Sans", value: '"PT Sans", sans-serif' },
-  { label: "Playfair Display", value: '"Playfair Display", serif' },
-  { label: "Merriweather", value: '"Merriweather", serif' },
-  { label: "Lora", value: '"Lora", serif' },
-  { label: "Nunito", value: '"Nunito", sans-serif' },
-  { label: "Raleway", value: '"Raleway", sans-serif' },
-  { label: "Fira Sans", value: '"Fira Sans", sans-serif' },
-  { label: "Rubik", value: '"Rubik", sans-serif' },
-  { label: "Work Sans", value: '"Work Sans", sans-serif' },
-  { label: "Manrope", value: '"Manrope", sans-serif' },
-  { label: "Caveat", value: '"Caveat", cursive' },
-  { label: "Comfortaa", value: '"Comfortaa", cursive' },
-  { label: "Oswald", value: '"Oswald", sans-serif' },
-  { label: "Source Sans 3", value: '"Source Sans 3", sans-serif' },
-  { label: "Noto Sans", value: '"Noto Sans", sans-serif' },
-];
+const FONTS = APP_FONTS.map(font => ({label:font.name,value:font.css}));
 
 const SIZES = [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 44, 48];
 
@@ -101,7 +123,8 @@ function EditorPage() {
   // Recompute when notes list changes (e.g. after title/body edits from elsewhere)
   // "new" is a draft that exists only in memory until the checkmark is tapped.
   const isNew = id === "new";
-  const { folder: folderParam } = Route.useSearch();
+  const { folder: folderParam, template } = Route.useSearch();
+  const appliedTemplate=useRef(false);
   const note = useMemo(
     () => (isNew ? undefined : (notes.find((n) => n.id === id) ?? getNote(id))),
     [id, isNew, hydrated, notes],
@@ -109,20 +132,56 @@ function EditorPage() {
 
   const [title, setTitle] = useState(note?.title ?? "");
   const [pinned, setPinnedLocal] = useState(!!note?.pinned);
+  const [reminderAt,setReminderAt]=useState<string>(()=>toReminderInput(note?.reminderAt));
   const [folderId, setFolderId] = useState<string>(
     note?.folderId ?? folderParam ?? "all",
   );
   const [recording, setRecording] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const nativeRecordingRef = useRef(false);
+  const [startingAudio,setStartingAudio]=useState(false);
+  const startingAudioRef=useRef(false);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  // Recording is not committed to the note until the binary is safely stored.
+  const recordingWriteRef = useRef<Promise<void> | null>(null);
+  const settleRecordingRef = useRef<{ resolve: () => void; reject: (reason?: unknown) => void } | null>(null);
+  const createdAudioIdsRef=useRef(new Set<string>());
+  const createdImageIdsRef=useRef(new Set<string>());
+  const pendingImagesRef=useRef(new Set<Promise<void>>());
+  const enqueueImageRef=useRef<((load:()=>Promise<Blob>)=>void)|null>(null);
+  const imageSessionRef=useRef(true);
+  const committedNoteRef=useRef(false);
+  const cleanupNewAudio=async(keep: string[] = [])=>{
+    const retained=new Set(keep);
+    const removed=[...createdAudioIdsRef.current].filter(id=>!retained.has(id));
+    await Promise.allSettled(removed.map(id=>deleteAudioFile(id)));
+    createdAudioIdsRef.current=new Set([...createdAudioIdsRef.current].filter(id=>retained.has(id)));
+  };
+  const savingRef = useRef(false);
+  const [saving,setSaving] = useState(false);
+  const [findOpen,setFindOpen]=useState(false);
+  const [outlineOpen,setOutlineOpen]=useState(false);
+  const [findQuery,setFindQuery]=useState("");
+  const [findReplacement,setFindReplacement]=useState("");
+  const [findActive,setFindActive]=useState(0);
+  const [checkShape,setCheckShape]=useState<CheckShape>("square");
+  const [prefs,setPrefs]=useState(()=>readEditorPreferences());
+  useEffect(()=>{
+    const refresh=()=>setPrefs(readEditorPreferences());
+    window.addEventListener(EDITOR_PREFS_CHANGED,refresh);
+    window.addEventListener("storage",refresh);
+    return ()=>{window.removeEventListener(EDITOR_PREFS_CHANGED,refresh);window.removeEventListener("storage",refresh);};
+  },[]);
+  const toolVisible=(tool:EditorTool)=>!prefs.hiddenToolbar.includes(tool);
+  const [slashText,setSlashText]=useState<string|null>(null);
 
   const [currentFontFamily, setCurrentFontFamily] = useState(FONTS[0].value);
   const [currentFontSize, setCurrentFontSize] = useState<number>(18);
-  const [currentColor, setCurrentColor] = useState<string>("#FFFFFF");
-  const [canvasBg, setCanvasBg] = useState<string>(
-    note?.style?.background ?? "#000000",
-  );
+  const [currentColor, setCurrentColor] = useState<string>(editorInk(isNew,note?.style?.color));
+  const [canvasBg, setCanvasBg] = useState<string>(editorBackground(isNew,note?.style?.background));
+  const [paperMood,setPaperMood]=useState<PaperMood>(note?.style?.paperMood??"solid");
+  const [paperRule,setPaperRule]=useState<PaperRule>(note?.style?.paperRule??"plain");
 
   // Sync local state once the note hydrates from storage.
   const syncedRef = useRef(false);
@@ -131,8 +190,12 @@ function EditorPage() {
     syncedRef.current = true;
     setTitle(note.title);
     setPinnedLocal(!!note.pinned);
+    setReminderAt(toReminderInput(note.reminderAt));
     setFolderId(note.folderId ?? "all");
     if (note.style?.background) setCanvasBg(note.style.background);
+    if (note.style?.paperMood) setPaperMood(note.style.paperMood);
+    if (note.style?.paperRule) setPaperRule(note.style.paperRule);
+    if (note.style?.color) setCurrentColor(note.style.color);
   }, [note]);
 
   // Latest title ref so onUpdate doesn't need to be recreated per keystroke.
@@ -188,17 +251,60 @@ function EditorPage() {
       }),
       AutoLinkExtras,
       AudioNote,
+      WaveImage,
+      WaveDrawing,
+      WavePageBreak,
+      WaveTextDirection,
+      InNoteSearch,
+      WaveChecklistItem,
+      WaveCallout,
+      WaveFold,
+      WaveTape,
     ],
     content: note?.body || "<p></p>",
     editorProps: {
+      handleClick(_view,_pos,event){
+        const element=event.target instanceof Element?event.target:null;
+        const anchor=element?.closest("a[href]");
+        if(!anchor)return false;
+        const href=anchor.getAttribute("href");
+        if(!href || !isSafeExternalUrl(href))return false;
+        event.preventDefault();
+        void openExternalUrl(href).catch(error=>{
+          console.error("External browser failed",error);
+          toast.error("Не удалось открыть ссылку в браузере телефона");
+        });
+        return true;
+      },
+      handlePaste(_view,event){
+        const file=clipboardImage(event);
+        if(file){event.preventDefault();enqueueImageRef.current?.(()=>Promise.resolve(file));return true;}
+        const html=event.clipboardData?.getData("text/html")||"";
+        if(!html)return false;
+        event.preventDefault();
+        const cleaned=safeBrowserClipboardHtml(html);
+        if(cleaned){const container=document.createElement("div");container.innerHTML=cleaned;const slice=PMDOMParser.fromSchema(_view.state.schema).parseSlice(container);_view.dispatch(_view.state.tr.replaceSelection(slice).scrollIntoView());}
+        return true;
+      },
+      handleDrop(_view,event){
+        const file=droppedImage(event);
+        if(!file)return false;
+        event.preventDefault();enqueueImageRef.current?.(()=>Promise.resolve(file));return true;
+      },
       attributes: {
         class:
           "sn-tiptap min-h-full w-full whitespace-pre-wrap break-words outline-none",
-        style: "color:#FFFFFF;",
+        style: "color:var(--wave-note-ink,#FFFFFF);caret-color:var(--wave-note-caret,#FFFFFF);",
+        spellcheck: prefs.spellcheck ? "true" : "false",
       },
     },
     // Draft only: nothing is written to storage until the checkmark is tapped.
-    onUpdate: () => scheduleTick(),
+    onUpdate: ({editor:currentEditor}) => {
+      scheduleTick();
+      const {$from}=currentEditor.state.selection;
+      const before=$from.parent.textBetween(0,$from.parentOffset);
+      setSlashText(/^\/[\p{L}\p{N} -]{0,22}$/u.test(before) ? before.slice(1) : null);
+    },
     onSelectionUpdate: ({ editor }) => {
       const { from, to } = editor.state.selection;
       selectionRef.current = { from, to };
@@ -214,6 +320,13 @@ function EditorPage() {
     onTransaction: () => scheduleTick(),
   });
 
+
+  useEffect(()=>{
+    if(!editor||!isNew||template!=="checklist"||appliedTemplate.current)return;
+    appliedTemplate.current=true;
+    editor.commands.setContent({type:"doc",content:[{type:"waveChecklistItem",
+      attrs:{shape:"square",done:false},content:[{type:"text",text:" "}]}]});
+  },[editor,isNew,template]);
 
   // Load body when the note becomes available after hydration.
   useEffect(() => {
@@ -235,6 +348,15 @@ function EditorPage() {
         recorderRef.current?.state === "recording" && recorderRef.current.stop();
         streamRef.current?.getTracks().forEach((t) => t.stop());
       } catch {}
+      imageSessionRef.current=false;
+      if (!committedNoteRef.current) {
+        void Promise.allSettled([...pendingImagesRef.current]).then(()=>
+          Promise.allSettled([...createdImageIdsRef.current].map(id=>deleteImageFile(id))));
+        // Native Back or page teardown can bypass the editor's Cancel button.
+        const pending=recordingWriteRef.current;
+        void (pending ? pending.catch(()=>undefined) : Promise.resolve()).then(()=>
+          Promise.allSettled([...createdAudioIdsRef.current].map(id=>deleteAudioFile(id))));
+      }
     };
   }, []);
 
@@ -242,20 +364,119 @@ function EditorPage() {
 
   const handleFolder = (fid: string) => setFolderId(fid);
 
-  const handleCanvasBg = (c: string) => setCanvasBg(c);
+  const handleCanvasBg = (c: string) => {setCanvasBg(c);setPaperMood("solid");};
+  const hits=findOpen&&editor?findWords(editor.state.doc,findQuery,prefs.caseSensitive):[];
+  const outline=outlineOpen&&editor?collectNoteOutline(editor.state.doc):[];
+  const pagePositions=editor?notePagePositions(editor.state.doc):[0];
+  const currentPage=editor?noteCurrentPage(editor.state.doc,editor.state.selection.from):1;
+  const setSearchDecoration=(query:string,active:number)=>{
+    if(editor)editor.view.dispatch(editor.state.tr.setMeta(noteSearchKey,{query,active,caseSensitive:prefs.caseSensitive}));
+  };
+  useEffect(()=>{if(editor&&findOpen)setSearchDecoration(findQuery,findActive);},[prefs.caseSensitive,editor,findOpen,findQuery,findActive]);
+  const dismissFind=()=>{setFindOpen(false);setFindQuery("");setFindActive(0);setSearchDecoration("",0);};
+  const stepFind=(step:number)=>{
+    if(!editor||!hits.length)return;
+    const at=(findActive+step+hits.length)%hits.length;
+    setFindActive(at);setSearchDecoration(findQuery,at);
+    requestAnimationFrame(()=>editor.view.dom.querySelector(".wave-find-current")?.scrollIntoView({block:"nearest"}));
+  };
+
+  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator"|"bullets"|"numbered"|"heading"|"checklist"|"page",callout:CalloutKind="important")=>{
+    if(!editor)return;
+    const {$from}=editor.state.selection;
+    const textBefore=$from.parent.textBetween(0,$from.parentOffset);
+    const slashLength=/^\/[\p{L}\p{N} -]{0,22}$/u.test(textBefore)?textBefore.length:0;
+    let chain=editor.chain().focus();
+    if(slashLength)chain=chain.deleteRange({from:$from.pos-slashLength,to:$from.pos});
+    setSlashText(null);
+    if(kind==="quote"){chain.toggleBlockquote().run();return;}
+    if(kind==="bullets"){chain.toggleBulletList().run();return;}
+    if(kind==="numbered"){chain.toggleOrderedList().run();return;}
+    if(kind==="heading"){chain.toggleHeading({level:2}).run();return;}
+    if(kind==="checklist"){chain.insertContent({type:"waveChecklistItem",attrs:{shape:checkShape,done:false},content:[{type:"text",text:" "}]}).run();return;}
+    if(kind==="tape"){
+      if(editor.state.selection.empty){toast("Сначала выделите слова, которые нужно скрыть");return;}
+      chain.setMark("waveTape").run();return;
+    }
+    if(kind==="date"){chain.insertContent(new Date().toLocaleDateString("ru-RU")).run();return;}
+    if(kind==="separator"){chain.setHorizontalRule().run();return;}
+    if(kind==="page"){chain.insertWavePageBreak().run();return;}
+    const node=kind==="fold"
+      ? {type:"waveFold",attrs:{title:"Новый раздел",collapsed:false},content:[{type:"paragraph"}]}
+      : {type:"waveCallout",attrs:{kind:callout},content:[{type:"paragraph"}]};
+    chain.insertContent(node).run();
+  };
+  const blockChoices=[
+    {id:"checklist",label:"Список дел",icon:"☐"},
+    {id:"bullets",label:"Маркированный список",icon:"•"},
+    {id:"numbered",label:"Нумерованный список",icon:"1."},
+    {id:"heading",label:"Заголовок",icon:"H"},
+    {id:"callout",label:"Важно",icon:"!"},
+    {id:"tip",label:"Совет",icon:"✦"},
+    {id:"warning",label:"Предупреждение",icon:"⚠"},
+    {id:"info",label:"Информация",icon:"i"},
+    {id:"quote",label:"Цитата",icon:"❝"},
+    {id:"fold",label:"Сворачиваемый раздел",icon:"▸"},
+    {id:"tape",label:"Скрыть выбранный ответ",icon:"▰"},
+    {id:"date",label:"Вставить дату",icon:"◷"},
+    {id:"separator",label:"Разделитель",icon:"—"},
+    {id:"page",label:"Новая страница",icon:"▤"},
+  ] as const;
+  const chooseBlock=(id:typeof blockChoices[number]["id"])=>{
+    if(id==="callout")insertWaveBlock("callout","important");
+    else if(id==="tip"||id==="warning"||id==="info")insertWaveBlock("callout",id);
+    else insertWaveBlock(id);
+  };
+  const visibleSlashChoices=slashText===null?[]:blockChoices.filter(item=>item.label.toLocaleLowerCase().includes(slashText.toLocaleLowerCase()));
+  
+  // Keep archive work out of the editor completely, even if a previous
+  // committed edit was waiting to be archived. A checkmark navigates away
+  // after saving; the backup runs only once the editor is closed.
+  useEffect(() => {
+    window.dispatchEvent(new Event("wave-notes-editor-opened"));
+    return () => { window.dispatchEvent(new Event("wave-notes-editor-closed")); };
+  }, []);
 
   /** Back = discard: nothing typed in this session reaches the notes list. */
-  const handleDiscard = () => navigate({ to: "/" });
+  const handleDiscard = async () => {
+    if(savingRef.current)return;
+    imageSessionRef.current=false;
+    if (recorderRef.current?.state === "recording" || nativeRecordingRef.current) stopRecording();
+    await recordingWriteRef.current?.catch(()=>undefined);
+    await Promise.allSettled([...pendingImagesRef.current]);
+    await cleanupNewAudio();
+    await Promise.allSettled([...createdImageIdsRef.current].map(id=>deleteImageFile(id)));
+    createdImageIdsRef.current.clear();
+    navigate({to:"/"});
+  };
 
-  /** Checkmark = the one and only commit point. */
-  const handleSave = () => {
+  /** Save icon commits the draft to local storage; back still discards. */
+  const handleSave = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try {
+    // Stop MediaRecorder and wait for its final ondataavailable/onstop events.
+    // Without this, a fast checkmark saves HTML before the audio node exists.
+    if (startingAudioRef.current) throw new Error("Подождите, пока микрофон включится.");
+    if (recorderRef.current?.state === "recording" || nativeRecordingRef.current) stopRecording();
+    if (recordingWriteRef.current) await recordingWriteRef.current;
+    // Never commit note markup before pending camera/gallery/clipboard writes settle.
+    await Promise.allSettled([...pendingImagesRef.current]);
     const body = editor?.getHTML() ?? "";
     const plain = (editor?.getText() ?? "").trim();
+    const hasImages=imageIdsInHtml(body).length>0;
+    const hasDrawing=body.includes("data-wave-drawing");
     const typedTitle = title.trim();
+    const reminderValue=reminderAt?parseReminderInput(reminderAt):undefined;
+    if(reminderAt&&reminderValue===undefined)throw new Error("Укажите правильную дату и время напоминания");
 
     if (isNew) {
       // A note that was opened and left blank is cancelled entirely.
-      if (!typedTitle && !plain) {
+      if (!typedTitle && !plain && !hasImages && !hasDrawing) {
+        await cleanupNewAudio();
+        await Promise.allSettled([...createdImageIdsRef.current].map(id=>deleteImageFile(id)));
+        createdImageIdsRef.current.clear();
         navigate({ to: "/" });
         return;
       }
@@ -264,7 +485,9 @@ function EditorPage() {
         body,
         folderId,
         pinned,
-        style: { background: canvasBg },
+        reminderAt:reminderValue,
+        // Preserve dark default ink when the new yellow note is reopened.
+        style: { background: canvasBg, color: NEW_NOTE_INK, paperMood, paperRule },
       });
     } else if (note) {
       updateNote(id, {
@@ -272,11 +495,25 @@ function EditorPage() {
         body,
         folderId,
         pinned,
-        style: { background: canvasBg },
+        reminderAt:reminderValue,
+        style: { background: canvasBg, paperMood, paperRule },
       });
     }
 
+    committedNoteRef.current=true;
+    await cleanupNewAudio(audioIdsInHtml(body));
+    const keepImages=new Set(imageIdsInHtml(body));
+    await Promise.allSettled([...createdImageIdsRef.current].filter(id=>!keepImages.has(id)).map(id=>deleteImageFile(id)));
+    createdImageIdsRef.current.clear();
+    toast.success(t("saved"),{duration:1600});
     navigate({ to: "/" });
+    } catch (error) {
+      console.error("Unable to save note", error);
+      alert(error instanceof Error ? error.message : "Не удалось сохранить заметку. Текст остаётся в редакторе.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   };
 
   /**
@@ -318,47 +555,87 @@ function EditorPage() {
     return f.name;
   };
 
+  const enqueueImage=(load:()=>Promise<Blob>)=>{
+    if(!editor||savingRef.current||!imageSessionRef.current)return;
+    const job=(async()=>{
+      let imageId:string|null=null;
+      try{
+        const valid=await verifiedNoteImage(await load());
+        if(!imageSessionRef.current||editor.isDestroyed)return;
+        imageId=await saveImageFile(valid);
+        createdImageIdsRef.current.add(imageId);
+        if(!imageSessionRef.current||editor.isDestroyed||!editor.chain().focus().insertWaveImage(imageId).run()){
+          throw Error("Не удалось вставить фотографию");
+        }
+      }catch(error){
+        if(imageId){await deleteImageFile(imageId).catch(console.error);createdImageIdsRef.current.delete(imageId);}
+        if(imageSessionRef.current)toast.error(error instanceof Error?error.message:"Не удалось добавить изображение");
+      }
+    })();
+    pendingImagesRef.current.add(job);
+    void job.finally(()=>pendingImagesRef.current.delete(job));
+  };
+  const addImage=()=>{
+    if(!editor||savingRef.current)return;
+    const picker=document.createElement("input");
+    picker.type="file";picker.accept="image/jpeg,image/png,image/webp";picker.style.display="none";
+    picker.addEventListener("change",()=>{
+      const file=picker.files?.[0];picker.remove();
+      if(file)enqueueImage(()=>Promise.resolve(file));
+    },{once:true});
+    document.body.append(picker);picker.click();
+  };
+  enqueueImageRef.current=enqueueImage;
+  const addCameraImage=()=>enqueueImage(takeNotePhoto);
+  const attachAudio = async (blob: Blob) => {
+    if (!blob.size) throw new Error("Пустая аудиозапись");
+    const audioId=await saveAudioFile(blob);
+    createdAudioIdsRef.current.add(audioId);
+    if (!editor || editor.isDestroyed || !editor.chain().focus().insertAudioNote(`audiodb:${audioId}`).run()) throw new Error("Не удалось вставить аудио в заметку");
+  };
   const startRecording = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      alert("Микрофон недоступен в этом браузере");
+    if (recording || startingAudioRef.current || recordingWriteRef.current) return;
+    if (nativeAudioAvailable()) {
+      startingAudioRef.current=true;setStartingAudio(true);
+      try {
+        await startNativeAudio();
+        recordingWriteRef.current=new Promise<void>((resolve,reject)=>{settleRecordingRef.current={resolve,reject};});
+        void recordingWriteRef.current.catch(()=>undefined);
+        nativeRecordingRef.current=true;setRecording(true);
+      } catch(err) {
+        console.error("Native microphone start",err);
+        alert(err instanceof Error?err.message:"Нет доступа к микрофону");
+      } finally {startingAudioRef.current=false;setStartingAudio(false);}
       return;
     }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder==="undefined") {alert("Микрофон недоступен");return;}
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      const rec = new MediaRecorder(stream);
-      chunksRef.current = [];
-      rec.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      streamRef.current=stream;
+      const rec=new MediaRecorder(stream);
+      recordingWriteRef.current=new Promise<void>((resolve,reject)=>{settleRecordingRef.current={resolve,reject};});
+      void recordingWriteRef.current.catch(()=>undefined);
+      chunksRef.current=[];
+      rec.ondataavailable=ev=>{if(ev.data.size)chunksRef.current.push(ev.data);};
+      rec.onstop=async()=>{
+        try {await attachAudio(new Blob(chunksRef.current,{type:rec.mimeType||"audio/webm"}));settleRecordingRef.current?.resolve();}
+        catch(err){settleRecordingRef.current?.reject(err);alert("Не удалось сохранить аудио");}
+        finally{recordingWriteRef.current=null;settleRecordingRef.current=null;stream.getTracks().forEach(t=>t.stop());streamRef.current=null;}
       };
-      rec.onstop = async () => {
-        const blob = new Blob(chunksRef.current, {
-          type: rec.mimeType || "audio/webm",
-        });
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const dataUrl = reader.result as string;
-          editor?.chain().focus().insertAudioNote(dataUrl).run();
-        };
-        reader.readAsDataURL(blob);
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-      };
-      rec.start();
-      recorderRef.current = rec;
-      setRecording(true);
-    } catch (err) {
-      console.error(err);
-      alert("Не удалось получить доступ к микрофону");
-    }
+      rec.onerror=()=>{settleRecordingRef.current?.reject(new Error("Ошибка аудиозаписи"));recordingWriteRef.current=null;settleRecordingRef.current=null;stream.getTracks().forEach(t=>t.stop());setRecording(false);};
+      rec.start();recorderRef.current=rec;setRecording(true);
+    }catch(err){console.error(err);alert("Не удалось получить доступ к микрофону");}
   };
-
-  const stopRecording = () => {
-    try {
-      recorderRef.current?.stop();
-    } catch {}
-    recorderRef.current = null;
-    setRecording(false);
+  const stopRecording=()=>{
+    if(nativeRecordingRef.current){
+      nativeRecordingRef.current=false;setRecording(false);
+      void stopNativeAudio().then(attachAudio).then(()=>settleRecordingRef.current?.resolve())
+        .catch(err=>{settleRecordingRef.current?.reject(err);alert(err instanceof Error?err.message:"Не удалось сохранить запись");})
+        .finally(()=>{recordingWriteRef.current=null;settleRecordingRef.current=null;});
+      return;
+    }
+    try {if(recorderRef.current?.state==="recording")recorderRef.current.stop();}catch(err){settleRecordingRef.current?.reject(err);recordingWriteRef.current=null;}
+    recorderRef.current=null;setRecording(false);
   };
 
   if (!hydrated) {
@@ -427,12 +704,59 @@ function EditorPage() {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" aria-label="Напоминание" className="grid h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-secondary">
+                <CalendarDays className="h-4 w-4"/>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" sideOffset={8} className="w-64 rounded-xl p-3">
+              <p className="mb-2 text-sm font-semibold">Напоминание к заметке</p>
+              <input type="datetime-local" aria-label="Дата и время напоминания" value={reminderAt}
+                onChange={event=>setReminderAt(event.target.value)}
+                className="w-full rounded-lg border border-border bg-background p-2 text-sm"/>
+              <div className="mt-2 flex gap-1">
+                {([["hour","Через час"],["tomorrow","Завтра"],["week","Через неделю"]] as const).map(([preset,label])=>
+                  <button type="button" key={preset} onClick={()=>setReminderAt(toReminderInput(reminderPresetTime(preset)))}
+                    className="min-h-9 rounded-md border border-border px-2 text-[11px]">{label}</button>)}
+              </div>
+              <button type="button" onClick={()=>setReminderAt("")}
+                className="mt-2 rounded-lg border border-border px-3 py-2 text-xs">Убрать напоминание</button>
+              <p className="mt-2 text-xs text-muted-foreground">Дата сохраняется без интернета. Системные уведомления пока не включены.</p>
+            </PopoverContent>
+          </Popover>
           <button
+            type="button"
             onClick={handleSave}
-            className="ml-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm hover:opacity-90"
-            aria-label={t("done")}
+            disabled={saving}
+            aria-label={t("save")}
+            title={t("save")}
+            aria-busy={saving}
+            className="group ml-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-wait"
           >
-            <Check className="h-4 w-4" strokeWidth={2.5} />
+            <span className="grid h-[38px] w-[38px] place-items-center rounded-full border border-border bg-secondary/50 text-white shadow-sm transition-colors duration-150 group-hover:bg-secondary group-active:bg-secondary/80 group-disabled:opacity-70 motion-reduce:transition-none">
+              {saving ? (
+                <LoaderCircle aria-hidden="true" className="h-[22px] w-[22px] animate-spin" strokeWidth={2.1} />
+              ) : (
+                // Balanced white outline: no stretched filled pictogram.
+                <svg
+                  aria-hidden="true"
+                  className="block h-[22px] w-[22px] shrink-0 text-white"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.95}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  preserveAspectRatio="xMidYMid meet"
+                >
+                  <path d="M5.5 3.5H16L20.5 8v11c0 1-.8 1.8-1.8 1.8H5.3c-1 0-1.8-.8-1.8-1.8V5.5c0-1.1.9-2 2-2Z" />
+                  <path d="M7.2 3.5v6.4h9.2V4" />
+                  <path d="M7.3 20.8v-7.2h9.4v7.2" />
+                  <path d="M9.4 16.7h5.2" strokeWidth={1.6} />
+                </svg>
+              )}
+            </span>
           </button>
         </div>
       </header>
@@ -458,15 +782,28 @@ function EditorPage() {
           >
             <Redo2 className="h-4 w-4" />
           </button>
-          <button
+                    {toolVisible("audio")&&<button
             onClick={recording ? stopRecording : startRecording}
+            disabled={startingAudio}
             className={`grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary ${
               recording ? "bg-destructive text-destructive-foreground animate-pulse" : ""
             }`}
             aria-label={t("audio")}
           >
             {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-          </button>
+          </button>}
+          {toolVisible("drawing")&&<button type="button" onClick={()=>editor?.chain().focus().insertWaveDrawing().run()}
+            aria-label="Добавить рисунок" className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
+            <PenTool className="h-4 w-4"/>
+          </button>}
+          {toolVisible("camera")&&<button type="button" onClick={addCameraImage} aria-label="Сфотографировать для заметки"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
+            <Camera className="h-4 w-4"/>
+          </button>}
+          {toolVisible("gallery")&&<button type="button" onClick={addImage} aria-label="Добавить фотографию из галереи"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
+            <ImagePlus className="h-4 w-4"/>
+          </button>}
           <button
             onClick={handlePin}
             className={`grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary ${
@@ -477,6 +814,102 @@ function EditorPage() {
             <Star className="h-4 w-4" fill={pinned ? "currentColor" : "none"} />
           </button>
 
+          {toolVisible("outline")&&<button type="button" aria-label="Оглавление заметки" aria-expanded={outlineOpen}
+            onClick={()=>setOutlineOpen(open=>!open)}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+            <ListTree className="h-4 w-4"/>
+          </button>}
+          {toolVisible("search")&&<button type="button" onClick={()=>findOpen?dismissFind():setFindOpen(true)}
+            aria-label="Найти в заметке" aria-expanded={findOpen}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+            <Search className="h-4 w-4"/>
+          </button>}
+          {toolVisible("checklist")&&<Popover>
+            <PopoverTrigger asChild>
+              <button type="button" aria-label="Добавить список дел" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+                <ListChecks className="h-4 w-4"/>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" sideOffset={8} className="w-52 rounded-xl p-2">
+              {editor&&checklistCounts(editor).total>0&&<div className="mb-2 rounded-lg border border-border p-2">
+                <p className="mb-1 text-xs text-muted-foreground">Задачи: {checklistCounts(editor).done}/{checklistCounts(editor).total}</p>
+                <div className="flex gap-1">
+                  <button type="button" onClick={()=>setAllChecklistItems(editor,true)} className="rounded-md bg-secondary px-2 py-2 text-xs">Выполнить все</button>
+                  <button type="button" onClick={()=>setAllChecklistItems(editor,false)} className="rounded-md bg-secondary px-2 py-2 text-xs">Сбросить все</button>
+                </div>
+              </div>}
+              <p className="px-2 pb-1 text-xs font-semibold">Форма отметок</p>
+              {([{shape:"square",label:"Квадрат",symbol:"□"},{shape:"circle",label:"Круг",symbol:"○"},
+                {shape:"diamond",label:"Ромб",symbol:"◇"},{shape:"check",label:"Галочка",symbol:"✓"}] as const).map(choice=>(
+                <button type="button" key={choice.shape} onMouseDown={event=>event.preventDefault()}
+                  onClick={()=>{
+                    setCheckShape(choice.shape);
+                    if(!editor)return;
+                    editor.chain().focus().insertContent({type:"waveChecklistItem",
+                      attrs:{shape:choice.shape,done:false},content:[{type:"text",text:" "}]}).run();
+                  }}
+                  className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-2 text-left text-sm hover:bg-secondary ${checkShape===choice.shape?"text-primary":""}`}>
+                  <span className="w-5 text-center text-lg">{choice.symbol}</span>{choice.label}
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" aria-label="Оформление листа" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+                <WandSparkles className="h-4 w-4"/>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-56 rounded-xl p-2">
+              <p className="px-2 py-1 text-xs font-semibold">Спокойное оформление</p>
+              {PAPER_MOODS.map(mood=><button type="button" key={mood.id}
+                onClick={()=>{setPaperMood(mood.id);if(mood.id!=="solid")setCanvasBg(mood.background);}}
+                className={`flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm hover:bg-secondary ${paperMood===mood.id?"text-primary":""}`}>
+                <span className="h-6 w-6 shrink-0 rounded-md border border-border" style={{background:mood.background,backgroundImage:mood.gradient||undefined}}/>
+                {mood.name}
+              </button>)}
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" aria-label="Разметка бумаги" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+                <Grid3X3 className="h-4 w-4"/>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-48 rounded-xl p-2">
+              <p className="px-2 py-1 text-xs font-semibold">Разметка листа</p>
+              {PAPER_RULES.map(rule=><button type="button" key={rule.id} onClick={()=>setPaperRule(rule.id)}
+                className={`flex min-h-11 w-full items-center rounded-lg px-2 text-left text-sm hover:bg-secondary ${paperRule===rule.id?"text-primary":""}`}>
+                {rule.name}
+              </button>)}
+            </PopoverContent>
+          </Popover>
+          {toolVisible("insert")&&<Popover>
+            <PopoverTrigger asChild>
+              <button type="button" aria-label="Вставить блок" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+                <Blocks className="h-4 w-4"/>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" sideOffset={8} onOpenAutoFocus={e=>e.preventDefault()}
+              className="max-h-[min(23rem,65dvh)] w-56 overflow-y-auto rounded-xl p-2">
+              <p className="px-2 pb-1 text-xs font-semibold">Вставить в заметку</p>
+              {blockChoices.map(item=><button type="button" key={item.id}
+                onPointerDown={e=>e.preventDefault()} onMouseDown={e=>e.preventDefault()}
+                onClick={()=>chooseBlock(item.id)}
+                className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2 text-left text-sm hover:bg-secondary">
+                <span className="w-5 text-center">{item.icon}</span>{item.label}
+              </button>)}
+            </PopoverContent>
+          </Popover>}
+          <button type="button" aria-label="Направление текста справа налево" title="Для арабского и других языков справа налево"
+            onClick={()=>{if(!editor)return;editor.commands.focus();const {$from}=editor.state.selection;
+              const node=$from.parent;const pos=$from.before();if(!node.isTextblock)return;
+              const next=node.attrs.textDirection==="rtl"?"ltr":"rtl";
+              editor.view.dispatch(editor.state.tr.setNodeMarkup(pos,undefined,{...node.attrs,textDirection:next}));
+            }}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
+            <span aria-hidden="true" className="text-xs font-bold">RTL</span>
+          </button>
           <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
           {editor && (
             <>
@@ -495,6 +928,101 @@ function EditorPage() {
             </>
           )}
         </div>
+        {slashText!==null && visibleSlashChoices.length>0 && <div className="mt-2 max-h-44 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-lg"
+            role="listbox" aria-label="Быстрое меню вставки">
+            {visibleSlashChoices.map(item=><button type="button" key={item.id}
+              onMouseDown={event=>event.preventDefault()} onClick={()=>chooseBlock(item.id)}
+              className="flex min-h-9 w-full items-center gap-2 rounded-lg px-3 text-left text-xs hover:bg-secondary">
+              <span className="w-5 text-center">{item.icon}</span>{item.label}
+            </button>)}
+          </div>}
+        {editor&&<div className="mt-2 flex flex-wrap items-center gap-1 rounded-lg border border-border px-2 py-1" aria-label="Страницы и перемещение блоков">
+          <span className="mr-1 text-xs text-muted-foreground">Страница {currentPage}/{pagePositions.length}</span>
+          <button type="button" aria-label="Предыдущая страница" disabled={currentPage<=1}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>editor.chain().focus().setTextSelection(pagePositions[currentPage-2]).run()}>‹</button>
+          <button type="button" aria-label="Следующая страница" disabled={currentPage>=pagePositions.length}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>editor.chain().focus().setTextSelection(pagePositions[currentPage]).run()}>›</button>
+          {currentPage>1&&<button type="button" aria-label="Переименовать текущую страницу"
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{
+              const found=renameCurrentPage(editor.state.doc,editor.state.selection.from,"");
+              if(!found)return;
+              const current=String(editor.state.doc.nodeAt(found.pos)?.attrs.label||"");
+              const label=window.prompt("Название страницы (до 80 символов)",current);
+              if(label===null)return;
+              editor.view.dispatch(editor.state.tr.setNodeMarkup(found.pos,undefined,{...editor.state.doc.nodeAt(found.pos)?.attrs,label:label.trim().slice(0,80)}));
+            }}>Название страницы</button>}
+          {pagePositions.length>1&&<select aria-label="Выбрать страницу" value={String(currentPage)}
+            onChange={event=>{const index=Number(event.target.value)-1;const pos=pagePositions[index];if(pos!==undefined)editor.chain().focus().setTextSelection(Math.min(pos,editor.state.doc.content.size)).run();}}
+            className="max-w-32 rounded-md border border-border bg-background p-1 text-xs">
+            {pageDisplayNames(editor.state.doc).map((name,index)=><option key={index} value={index+1}>{name}</option>)}
+          </select>}
+          {currentPage>1&&<button type="button" aria-label="Объединить с предыдущей страницей"
+            className="rounded-md border px-2 py-1 text-xs" onClick={()=>{
+              const pos=currentPageBreakPos(editor.state.doc,editor.state.selection.from);
+              if(pos===undefined)return;
+              editor.view.dispatch(editor.state.tr.delete(pos,pos+1).scrollIntoView());
+            }}>Объединить страницы</button>}
+          <span className="mx-1 h-4 w-px bg-border"/>
+          <button type="button" aria-label="Поднять блок" title="Поднять выбранный блок" className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>moveSelectedWaveBlock(editor,"up")}>↑</button>
+          <button type="button" aria-label="Опустить блок" title="Опустить выбранный блок" className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>moveSelectedWaveBlock(editor,"down")}>↓</button>
+          <button type="button" aria-label="Вложить блок в раздел" title="Переместить блок в предыдущий раздел"
+            className="rounded-md border px-2 py-1 text-xs" onClick={()=>nestSelectedWaveBlock(editor)}>↘</button>
+          <button type="button" aria-label="Дублировать блок" title="Дублировать выбранный блок"
+            className="rounded-md border px-2 py-1 text-xs" onClick={()=>duplicateSelectedWaveBlock(editor)}>⧉</button>
+          <button type="button" aria-label="Вынести блок из раздела" title="Вынести блок из вложенного раздела" className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>liftWaveBlock(editor,()=>selectedWaveBlockPos(editor))}>↗</button>
+        </div>}
+        {outlineOpen&&<div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-border bg-card p-2"
+          role="navigation" aria-label="Оглавление заметки">
+          {editor&&countFoldSections(editor)>0&&<div className="mb-2 flex gap-2 px-2">
+            <button type="button" onClick={()=>setAllFoldSections(editor,false)}
+              className="rounded-md border px-2 py-1.5 text-xs">Раскрыть все</button>
+            <button type="button" onClick={()=>setAllFoldSections(editor,true)}
+              className="rounded-md border px-2 py-1.5 text-xs">Свернуть все</button>
+          </div>}
+          <p className="px-2 pb-1 text-xs text-muted-foreground">Заголовки и разделы</p>
+          {outline.length===0?<p className="px-2 py-3 text-xs text-muted-foreground">Добавьте заголовок или сворачиваемый раздел.</p>:
+            outline.map(item=><button key={item.pos} type="button"
+              className="block w-full truncate rounded-lg px-3 py-2 text-left text-xs hover:bg-secondary"
+              style={{paddingLeft:Math.min(item.depth,5)*8+8}}
+              onClick={()=>{
+                if(!editor)return;
+                editor.chain().focus().setTextSelection(Math.min(editor.state.doc.content.size,item.pos+(item.type==="page"?0:1))).run();
+                const targetPos=Math.min(editor.state.doc.content.size,item.pos+(item.type==="page"?0:1));
+                try{const dom=editor.view.domAtPos(targetPos).node;const el=dom instanceof Element?dom:dom.parentElement;el?.scrollIntoView({block:"nearest",behavior:"smooth"});}catch{/* the editor still moved the selection */}
+              }}>
+              {item.type==="page"?"▤ ":item.type==="fold"?"▸ ":"§ "}{item.title}
+            </button>)}
+        </div>}
+        {findOpen && <div role="search" aria-label="Поиск внутри заметки"
+          className="mt-2 flex min-w-0 items-center gap-1 rounded-xl border border-border bg-secondary/50 px-2 py-1.5">
+          <Search className="h-4 w-4 shrink-0 text-muted-foreground"/>
+          <input aria-label="Искать слово" autoFocus maxLength={100} placeholder="Найти слово…"
+            value={findQuery} onChange={e=>{const q=e.target.value;setFindQuery(q);setFindActive(0);setSearchDecoration(q,0);}}
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none"/>
+          <span aria-live="polite" className="shrink-0 text-[10px] text-muted-foreground">{findQuery?(hits.length?`${findActive+1}/${hits.length}`:"0/0"):"—"}</span>
+          <button type="button" disabled={!hits.length} onClick={()=>stepFind(-1)} aria-label="Предыдущее совпадение" className="grid h-8 w-8 shrink-0 place-items-center disabled:opacity-30"><ChevronUp className="h-4 w-4"/></button>
+          <button type="button" disabled={!hits.length} onClick={()=>stepFind(1)} aria-label="Следующее совпадение" className="grid h-8 w-8 shrink-0 place-items-center disabled:opacity-30"><ChevronDown className="h-4 w-4"/></button>
+          <input aria-label="Заменить на" placeholder="Заменить на…" value={findReplacement}
+            maxLength={500} onChange={e=>setFindReplacement(e.target.value)}
+            className="w-20 min-w-0 rounded-md border border-border bg-background p-1 text-xs"/>
+          <button type="button" disabled={!hits.length} onClick={()=>{
+            if(!editor)return;
+            if(replaceOneInNote(editor,findQuery,findReplacement,findActive,prefs.caseSensitive))
+              setFindActive(0);
+          }} aria-label="Заменить совпадение" className="rounded-md border border-border px-2 py-1 text-xs disabled:opacity-30">Заменить</button>
+          <button type="button" disabled={!hits.length} onClick={()=>{
+            if(!editor)return;
+            const changed=replaceAllInNote(editor,findQuery,findReplacement,prefs.caseSensitive);
+            if(changed){setFindActive(0);toast.success(`Заменено: ${changed}`);}
+          }} aria-label="Заменить все совпадения" className="rounded-md border border-border px-2 py-1 text-xs disabled:opacity-30">Все</button>
+          <button type="button" onClick={dismissFind} aria-label="Закрыть поиск" className="grid h-8 w-8 shrink-0 place-items-center"><X className="h-4 w-4"/></button>
+        </div>}
       </div>
 
       {/* ROW 3: Style bar — font / size / color / bg (always visible) */}
@@ -504,7 +1032,7 @@ function EditorPage() {
             <div className="glass grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-1.5 rounded-xl p-1.5">
               <ToolbarPopover
                 label={
-                  FONTS.find((f) => f.value === currentFontFamily)?.label ??
+                  (FONTS.find((f) => f.value === currentFontFamily)?.label ?? fontNameFromCss(currentFontFamily)) ??
                   "Шрифт"
                 }
                 icon={<Type className="h-4 w-4" />}
@@ -587,12 +1115,16 @@ function EditorPage() {
       <main className="mx-auto flex w-full min-h-0 max-w-xl flex-1 flex-col px-3 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-3">
         <div
           className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border p-3 shadow-inner transition-colors [-webkit-overflow-scrolling:touch]"
-          style={{ background: canvasBg }}
+          style={{ backgroundColor: canvasBg, ...paperAppearance(paperMood,paperRule) }}
         >
-          <EditorContent editor={editor} />
+          <EditorContent editor={editor} style={{
+            "--wave-note-caret": noteCaretColor(canvasBg),
+            "--wave-find-contrast": noteCaretColor(canvasBg),
+            "--wave-note-ink": editorInk(isNew,note?.style?.color),
+          } as React.CSSProperties} />
         </div>
         <p className="mt-2 shrink-0 text-center font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-          {t("save")} · {t("done")}
+          {t("save")}
         </p>
       </main>
 

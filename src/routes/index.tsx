@@ -1,9 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   ArrowDownAZ,
   X,
   CalendarClock,
+  ChevronDown,
   CalendarPlus,
   FolderPlus,
   LayoutGrid,
@@ -11,7 +12,16 @@ import {
   MoreVertical,
   FileType2,
   Pencil,
+  Copy,
+  Palette,
+  FolderInput,
+  Share2,
+  Download,
+  MoreHorizontal,
+  FileInput,
   Plus,
+  ListChecks,
+  Search,
   Table2,
   Trash2,
 } from "lucide-react";
@@ -19,6 +29,8 @@ import { AppHeader } from "@/components/AppHeader";
 import { useLongPress } from "@/hooks/use-long-press";
 import { BottomNav } from "@/components/BottomNav";
 import { NoteCard } from "@/components/NoteCard";
+import { NativeAdCard } from "@/components/NativeAdCard";
+import { setNativeAdDialogBlocked } from "@/lib/native-ad-ui";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -48,6 +60,7 @@ import {
 } from "@/lib/folders-store";
 import {
   createNote,
+  moveNotesToFolder,
   deleteNote,
   updateNote,
   setSort,
@@ -58,6 +71,7 @@ import {
   useNotesDatabaseStatus,
   useSort,
   useView,
+  moveNoteBefore,
   type Note,
   type SortMode,
   type ViewMode,
@@ -65,6 +79,11 @@ import {
 import { useT } from "@/lib/i18n";
 import { pickPdfFile, savePdfFile } from "@/lib/pdf-files";
 import { toast } from "sonner";
+import {inspectWaveFile,receiveWaveNote,shareWaveNote} from "@/lib/note-transfer";
+import {findReturnedOriginal,combineReturnedBodies,replacementBackup} from "@/lib/wave-note-conflicts";
+import {noteMatchesSearch,type NoteSearchFilter} from "@/lib/note-search";
+import {shareNoteExport,type NoteExportFormat} from "@/lib/note-export";
+import {reminderIsDue,reminderPresetTime,reminderLabel} from "@/lib/note-reminders";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -102,6 +121,33 @@ function Index() {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [renameValue, setRenameValue] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [colorDialog,setColorDialog]=useState(false);
+  const [moveDialog,setMoveDialog]=useState(false);
+  const [exportDialog,setExportDialog]=useState(false);
+  const [searchOpen,setSearchOpen]=useState(false);
+  const [searchTerm,setSearchTerm]=useState("");
+  const [searchAllFolders,setSearchAllFolders]=useState(false);
+  const [searchFilter,setSearchFilter]=useState<NoteSearchFilter>("all");
+  // Refresh due-state while the list stays open; no polling or network traffic.
+  const [reminderMinute,setReminderMinute]=useState(()=>Math.floor(Date.now()/60000));
+  useEffect(()=>{
+    const timer=window.setInterval(()=>{
+      const minute=Math.floor(Date.now()/60000);
+      setReminderMinute(last=>last===minute?last:minute);
+    },30000);
+    return ()=>window.clearInterval(timer);
+  },[]);
+  const [copyBusy,setCopyBusy]=useState(false);
+  const [transferBusy,setTransferBusy]=useState(false);
+  const [incomingWave,setIncomingWave]=useState<{file:File;title:string;originId:string;kind:"note"|"pdf"}|null>(null);
+  const [folderDialog, setFolderDialog] = useState<FolderDialogState>(null);
+  // The menu floats above the list without moving folders or ads.
+  // Google renders native ads above WebView; temporarily hide that overlay
+  // while the popup is open so the popup remains readable and clickable.
+  useEffect(() => {
+    setNativeAdDialogBlocked(menuOpen || renameValue !== null || confirmDelete || Boolean(folderDialog) || exportDialog || Boolean(incomingWave) || colorDialog || moveDialog);
+    return () => setNativeAdDialogBlocked(false);
+  }, [menuOpen, renameValue, confirmDelete, folderDialog, exportDialog, incomingWave, colorDialog, moveDialog]);
 
   // Selection is scoped to the folder being viewed and to notes that still exist.
   useEffect(() => setSelected(new Set()), [activeFolder]);
@@ -127,12 +173,73 @@ function Index() {
       : navigate({ to: "/editor/$id", params: { id: note.id }, search: { folder: undefined } });
 
   const selectedNotes = notes.filter((n) => selected.has(n.id));
-  const [folderDialog, setFolderDialog] = useState<FolderDialogState>(null);
+  const duplicateSelectedNote = async () => {
+    if(copyBusy || selectedNotes.length!==1)return;
+    setCopyBusy(true);
+    const original=selectedNotes[0];
+    let pdfCopyId:string|null=null;
+    const addedAudioIds:string[]=[];
+    const addedImageIds:string[]=[];
+    try{
+      let body=original.body;
+      const { audioIdsInHtml, loadAudioFile, saveAudioFile }=await import("@/lib/audio-files");
+      for(const id of audioIdsInHtml(body)){
+        const blob=await loadAudioFile(id);
+        if(!blob)throw new Error("Не удалось прочитать исходную аудиозапись");
+        const copiedId=await saveAudioFile(blob);
+        addedAudioIds.push(copiedId);
+        body=body.replaceAll(`audiodb:${id}`,`audiodb:${copiedId}`);
+      }
+      const {imageIdsInHtml,loadImageFile,saveNewImageFile}=await import("@/lib/image-files");
+      for(const imageId of imageIdsInHtml(body)){
+        const photo=await loadImageFile(imageId);
+        if(!photo)throw new Error("Не удалось прочитать исходную фотографию");
+        const copiedId=crypto.randomUUID();
+        await saveNewImageFile(copiedId,photo);
+        addedImageIds.push(copiedId);
+        body=body.replaceAll('data-image-id="'+imageId+'"','data-image-id="'+copiedId+'"')
+          .replaceAll("data-image-id='"+imageId+"'","data-image-id='"+copiedId+"'");
+      }
+      if(original.kind==="pdf"){
+        const {loadPdfFile,saveNewPdfFile}=await import("@/lib/pdf-files");
+        const file=await loadPdfFile(original.id);
+        if(!file)throw new Error("Исходный PDF не найден");
+        pdfCopyId=crypto.randomUUID();
+        await saveNewPdfFile(pdfCopyId,file);
+      }
+      createNote({
+        ...original,id:pdfCopyId??crypto.randomUUID(),title:original.title+" — копия",
+        body,pdf:original.pdf?structuredClone(original.pdf):undefined,
+        createdAt:Date.now(),updatedAt:Date.now(),
+      });
+      setSelected(new Set());
+      toast.success("Независимая копия создана");
+    }catch(error){
+      const {deleteAudioFile}=await import("@/lib/audio-files");
+      await Promise.allSettled(addedAudioIds.map(id=>deleteAudioFile(id)));
+      const {deleteImageFile}=await import("@/lib/image-files");
+      await Promise.allSettled(addedImageIds.map(id=>deleteImageFile(id)));
+      if(pdfCopyId){const {deletePdfFile}=await import("@/lib/pdf-files");await deletePdfFile(pdfCopyId).catch(console.error);}
+      console.error("Duplicate note failed",error);
+      toast.error(error instanceof Error?error.message:"Не удалось создать копию");
+    }finally{setCopyBusy(false);}
+  };
 
-  const filteredNotes = useMemo(() => {
-    if (activeFolder === "all") return notes;
-    return notes.filter((note) => (note.folderId ?? "all") === activeFolder);
-  }, [activeFolder, notes]);
+
+  const filteredNotes = useMemo(() => notes.filter((note) => {
+    const inScope=searchOpen&&searchAllFolders||activeFolder==="all"||(note.folderId??"all")===activeFolder;
+    return inScope && (!searchOpen || noteMatchesSearch(note,searchTerm,searchFilter));
+  }),[activeFolder,notes,searchOpen,searchAllFolders,searchTerm,searchFilter,reminderMinute]);
+
+  const dueNotes=useMemo(()=>notes.filter(note=>
+    (activeFolder==="all"||(note.folderId??"all")===activeFolder)&&reminderIsDue(note.reminderAt)
+  ).sort((a,b)=>(a.reminderAt??0)-(b.reminderAt??0)).slice(0,3),[notes,activeFolder,reminderMinute]);
+  const changeDueReminder=(id:string,operation:"tomorrow"|"clear")=>{
+    try{
+      updateNote(id,{reminderAt:operation==="clear"?undefined:reminderPresetTime("tomorrow")});
+      toast.success(operation==="clear"?"Напоминание снято":"Перенесено на завтра");
+    }catch(error){toast.error(error instanceof Error?error.message:"Не удалось изменить напоминание");}
+  };
 
   // Opens an in-memory draft: nothing is stored until the checkmark is tapped.
   const createNoteInCurrentFolder = () => {
@@ -143,16 +250,84 @@ function Index() {
     });
   };
 
+  const createChecklistInCurrentFolder=()=>{
+    navigate({to:"/editor/$id",params:{id:"new"},search:{folder:activeFolder==="all"?"all":activeFolder,template:"checklist"}});
+  };
+  
+  const importWave=()=>{
+    const picker=document.createElement("input");picker.type="file";
+    picker.accept=".wnote,application/octet-stream";picker.style.display="none";
+    picker.addEventListener("change",()=>{
+      const file=picker.files?.[0];picker.remove();
+      if(!file)return;
+      void inspectWaveFile(file).then(info=>setIncomingWave({file,title:info.title,originId:info.originId,kind:info.kind}))
+        .catch(error=>toast.error(error instanceof Error?error.message:"Файл Wave Notes повреждён"));
+    });
+    document.body.appendChild(picker);picker.click();
+  };
+  const returnedOriginal=incomingWave?findReturnedOriginal(notes,incomingWave.originId,incomingWave.kind):undefined;
+  const doImportWave=async(mode:"copy"|"replace"|"combine"="copy")=>{
+    if(!incomingWave||transferBusy)return;
+    const original=findReturnedOriginal(notes,incomingWave.originId,incomingWave.kind);
+    if(mode!=="copy"&&(!original||original.kind==="pdf"||incomingWave.kind==="pdf")){
+      toast.error("Для PDF или без исходной заметки можно сохранить отдельную копию");return;
+    }
+    setTransferBusy(true);
+    try{
+      // Import to a fresh ID first. Original remains intact if attachment
+      // extraction, storage or archive validation fails.
+      const incoming=await receiveWaveNote(incomingWave.file,activeFolder==="all"?"all":activeFolder);
+      if(mode==="copy"){
+        toast.success("Заметка получена как отдельная копия");
+      }else if(original){
+        if(mode==="replace"){
+          // Never replace a user's only copy: the backup is a real note,
+          // saved before changing the original.
+          createNote(replacementBackup(original,crypto.randomUUID()));
+          updateNote(original.id,{body:incoming.body,style:incoming.style,title:incoming.title.replace(/ — получено$/,"")});
+          toast.success("Исходная версия сохранена как резервная заметка");
+        }else{
+          updateNote(original.id,{body:combineReturnedBodies(original,incoming)});
+          toast.success("Обе версии объединены. Полученная копия также сохранена");
+        }
+      }
+      setIncomingWave(null);
+    }catch(error){toast.error(error instanceof Error?error.message:"Не удалось получить заметку");}
+    finally{setTransferBusy(false);}
+  };
+  const doExportSelected=async(format:NoteExportFormat)=>{
+    if(transferBusy||selectedNotes.length!==1)return;
+    setTransferBusy(true);
+    try{
+      await shareNoteExport(selectedNotes[0],format);
+      setExportDialog(false);
+      toast.success("Файл подготовлен для экспорта");
+    }catch(error){toast.error(error instanceof Error?error.message:"Ошибка экспорта");}
+    finally{setTransferBusy(false);}
+  };
+  const doShareSelected=async()=>{
+    if(selectedNotes.length!==1||transferBusy)return;
+    setTransferBusy(true);
+    try{await shareWaveNote(selectedNotes[0]);setSelected(new Set());}
+    catch(error){toast.error(error instanceof Error?error.message:"Ошибка передачи файла");}
+    finally{setTransferBusy(false);}
+  };
+  
   const importPdf = async () => {
     const file = await pickPdfFile();
     if (!file) return;
 
+    let importedPdfId: string | null = null;
     try {
       const buffer = await file.arrayBuffer();
       const { PDFDocument } = await import("pdf-lib");
       const document = await PDFDocument.load(buffer, { ignoreEncryption: true });
 
+      const pdfId = crypto.randomUUID();
+      await savePdfFile(pdfId, buffer);
+      importedPdfId = pdfId;
       const note = createNote({
+        id: pdfId,
         kind: "pdf",
         title: file.name.replace(/\.pdf$/i, "") || "PDF",
         folderId: activeFolder === "all" ? "all" : activeFolder,
@@ -168,9 +343,13 @@ function Index() {
         },
       });
 
-      await savePdfFile(note.id, buffer);
+      importedPdfId = null;
       navigate({ to: "/pdf/$id", params: { id: note.id } });
     } catch (error) {
+      if (importedPdfId) {
+        const { deletePdfFile } = await import("@/lib/pdf-files");
+        await deletePdfFile(importedPdfId).catch(console.error);
+      }
       console.error(error);
       toast.error("Не удалось открыть PDF-файл");
     }
@@ -188,14 +367,17 @@ function Index() {
     const value = folderDialog.value.trim();
     if (!value) return;
 
-    if (folderDialog.mode === "add") {
-      const folder = addFolder(value);
-      setActiveFolder(folder.id);
-    } else if (folderDialog.id) {
-      renameFolder(folderDialog.id, value);
+    try {
+      if (folderDialog.mode === "add") {
+        addFolder(value,true);
+      } else if (folderDialog.id) {
+        renameFolder(folderDialog.id, value);
+      }
+      setFolderDialog(null);
+    } catch(error) {
+      // Don't close the rename/create dialog if Android storage is full.
+      toast.error(error instanceof Error ? error.message : "Не удалось сохранить папку");
     }
-
-    setFolderDialog(null);
   };
 
   return (
@@ -206,6 +388,11 @@ function Index() {
           title={t("general")}
           right={
             <>
+              <button type="button" aria-label="Поиск по заметкам" aria-expanded={searchOpen}
+                onClick={()=>setSearchOpen(value=>!value)}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary text-foreground hover:bg-secondary/70">
+                <Search className="h-4 w-4"/>
+              </button>
               {selected.size > 0 && (
                 <div className="flex items-center gap-1.5 animate-in fade-in duration-150">
                   {selected.size === 1 && (
@@ -218,6 +405,33 @@ function Index() {
                       <Pencil className="h-4 w-4" />
                     </button>
                   )}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button type="button" aria-label="Дополнительные действия с заметкой"
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary hover:bg-secondary/70">
+                        <MoreHorizontal className="h-4 w-4"/>
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" sideOffset={6} className="w-56 rounded-xl">
+                      {selected.size===1 && <DropdownMenuItem disabled={copyBusy} onClick={()=>void duplicateSelectedNote()} className="min-h-10 gap-2">
+                        <Copy className="h-4 w-4"/>Создать копию
+                      </DropdownMenuItem>}
+                      {selected.size===1 && <DropdownMenuItem aria-label="Поделиться редактируемой заметкой" disabled={transferBusy}
+                        onClick={()=>void doShareSelected()} className="min-h-10 gap-2">
+                        <Share2 className="h-4 w-4"/>Поделиться заметкой
+                      </DropdownMenuItem>}
+                      {selected.size===1 && selectedNotes[0]?.kind!=="pdf"&&
+                      <DropdownMenuItem disabled={transferBusy} onClick={()=>setExportDialog(true)} className="min-h-10 gap-2">
+                        <Download className="h-4 w-4"/>Экспорт в файл
+                      </DropdownMenuItem>}
+                      <DropdownMenuItem onClick={()=>setColorDialog(true)} className="min-h-10 gap-2">
+                        <Palette className="h-4 w-4"/>Цвет карточки
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={()=>setMoveDialog(true)} className="min-h-10 gap-2">
+                        <FolderInput className="h-4 w-4"/>Переместить в папку
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <button
                     type="button"
                     aria-label={t("delete")}
@@ -234,8 +448,10 @@ function Index() {
                 view={view}
                 sort={sort}
                 onCreateNote={createNoteInCurrentFolder}
+                onCreateChecklist={createChecklistInCurrentFolder}
                 onCreateFolder={() => setFolderDialog({ mode: "add", value: "" })}
                 onImportPdf={() => void importPdf()}
+                onImportWave={importWave}
               />
             </>
           }
@@ -247,26 +463,146 @@ function Index() {
           getLabel={localizedFolderName}
           onSelect={setActiveFolder}
           onRename={(folder) => setFolderDialog({ mode: "rename", id: folder.id, value: folder.name })}
-          onDelete={(folder) => deleteFolder(folder.id)}
+          onDelete={(folder) => {
+            try {
+              moveNotesToFolder(folder.id);
+              deleteFolder(folder.id);
+              toast.success("Заметки перемещены в общую папку");
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : "Не удалось удалить папку");
+            }
+          }}
         />
+        {searchOpen && <div className="mx-3 mt-2 rounded-xl border border-border bg-secondary/40 p-2" role="search">
+          <div className="flex items-center gap-2">
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground"/>
+            <Input aria-label="Поиск по названию и содержимому" autoComplete="off" value={searchTerm}
+              onChange={event=>setSearchTerm(event.target.value)} placeholder="Найти заметку или @todo..." className="h-10 min-w-0 flex-1"/>
+            <button type="button" aria-label="Очистить поиск" className="h-10 shrink-0 px-2 text-xs text-muted-foreground"
+              onClick={()=>{setSearchTerm("");setSearchFilter("all")}}>Сброс</button>
+          </div>
+          <div className="no-scrollbar mt-2 flex gap-2 overflow-x-auto pb-1">
+            {([["all","Все"],["todo","Задачи"],["images","Фото"],["reminders","Напоминания"],["overdue","Просрочены"],["upcoming","Ближайшие 7 дней"],["pending","Незавершённые"],["audio","Аудио"],["drawings","Рисунки"],["pages","Страницы"],["pinned","Закреплённые"],["locked","Защищённые"]] as const).map(([value,label])=>
+              <button key={value} type="button" aria-pressed={searchFilter===value}
+                onClick={()=>setSearchFilter(value)}
+                className={`min-h-9 shrink-0 rounded-full border px-3 text-xs ${searchFilter===value?"border-primary bg-primary text-primary-foreground":"border-border bg-background"}`}>{label}</button>
+            )}
+            {activeFolder!=="all"&&<button type="button" aria-pressed={searchAllFolders}
+              onClick={()=>setSearchAllFolders(value=>!value)}
+              className={`min-h-9 shrink-0 rounded-full border px-3 text-xs ${searchAllFolders?"border-primary bg-primary text-primary-foreground":"border-border bg-background"}`}>
+              {searchAllFolders?"По всем папкам":"Только эта папка"}
+            </button>}
+          </div>
+          {searchFilter==="locked"&&<p className="px-1 text-xs text-muted-foreground">Защита отдельных заметок пока не добавлена.</p>}
+        </div>}
 
       </div>
 
       {hydrated && status !== "error" && filteredNotes.length === 0 ? (
-        <main className="mx-auto flex w-full min-h-0 max-w-xl flex-1 flex-col items-center justify-center overflow-hidden overscroll-none px-4 pb-[130px] pt-4 touch-none">
+        <main
+          className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-4 [-webkit-overflow-scrolling:touch]"
+          style={{ marginBottom: "var(--wave-bottom-nav-occlusion, 104px)" }}
+        >
+          {searchOpen ? <p className="py-8 text-center text-sm text-muted-foreground">Совпадений не найдено</p> : <NativeAdCard slotKey="home-first" />}
         </main>
       ) : (
-        <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-[130px] pt-4 [-webkit-overflow-scrolling:touch]">
+        <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-4 [-webkit-overflow-scrolling:touch]" style={{ marginBottom: "var(--wave-bottom-nav-occlusion, 104px)" }}>
           {!hydrated ? (
             <LoadingState />
           ) : status === "error" ? (
             <DatabaseErrorState message={databaseError} />
           ) : (
-            <NotesGrid view={view} notes={filteredNotes} selected={selected} onToggle={toggleSelected} onOpen={openNote} />
+            <>
+              {!searchOpen&&dueNotes.length>0&&<section aria-label="Просроченные напоминания"
+                className="mb-3 rounded-xl border border-amber-400/30 bg-secondary/50 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold">Напоминания к выполнению</h2>
+                  <button type="button" className="rounded-lg px-2 py-1 text-xs text-primary"
+                    onClick={()=>{setSearchOpen(true);setSearchFilter("overdue");setSearchTerm("");}}>
+                    Показать все
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {dueNotes.map(note=><div key={note.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-background/70 p-2">
+                    <button type="button" onClick={()=>openNote(note)}
+                      className="min-w-0 flex-1 text-left text-xs">
+                      <span className="block truncate font-semibold">{note.title}</span>
+                      <span className="text-muted-foreground">{reminderLabel(note.reminderAt)}</span>
+                    </button>
+                    <button type="button" onClick={()=>changeDueReminder(note.id,"tomorrow")}
+                      className="rounded-md border border-border px-2 py-2 text-xs">Завтра</button>
+                    <button type="button" onClick={()=>changeDueReminder(note.id,"clear")}
+                      className="rounded-md border border-border px-2 py-2 text-xs">Снять</button>
+                  </div>)}
+                </div>
+                <p className="mt-2 text-[11px] text-muted-foreground">Напоминания отображаются внутри приложения; Android-уведомления пока не включены.</p>
+              </section>}
+              <NotesGrid view={view} notes={filteredNotes} selected={selected} searchQuery={searchOpen?searchTerm:""} onToggle={toggleSelected} onOpen={openNote}
+              onMove={(id,target)=>{try{if(moveNoteBefore(id,target))toast.success("Порядок заметок сохранён");}catch(error){toast.error(error instanceof Error?error.message:"Не удалось переместить");}}} />
+            </>
           )}
         </main>
       )}
 
+      <Dialog open={Boolean(incomingWave)} onOpenChange={open=>{if(!open&&!transferBusy)setIncomingWave(null)}}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader><DialogTitle>Получить заметку Wave Notes</DialogTitle></DialogHeader>
+          <p className="text-sm">{incomingWave?.title}</p>
+          <p className="text-xs text-muted-foreground">
+            {returnedOriginal ? "Найдена исходная заметка. Можно сохранить копию, объединить обе версии или заменить исходную с созданием резервной копии." : "Исходная заметка не найдена. Полученный файл будет сохранён отдельно; другие заметки не изменятся."}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" disabled={transferBusy} onClick={()=>setIncomingWave(null)}>Отмена</Button>
+            <Button disabled={transferBusy} onClick={()=>void doImportWave("copy")}>Сохранить копию</Button>
+            {returnedOriginal?.kind!=="pdf"&&returnedOriginal&&<>
+              <Button variant="outline" disabled={transferBusy} onClick={()=>void doImportWave("combine")}>Объединить</Button>
+              <Button variant="destructive" disabled={transferBusy} onClick={()=>void doImportWave("replace")}>Заменить с резервной копией</Button>
+            </>}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={exportDialog} onOpenChange={open=>{if(!transferBusy)setExportDialog(open)}}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader><DialogTitle>Экспорт заметки</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Выберите формат копии. Галочка в редакторе по-прежнему сохраняет заметку только внутри Wave Notes.</p>
+          <div className="grid gap-2">
+            <Button disabled={transferBusy} variant="outline" onClick={()=>void doExportSelected("txt")}>TXT — простой текст</Button>
+            <Button disabled={transferBusy} variant="outline" onClick={()=>void doExportSelected("html")}>HTML — текст с оформлением</Button>
+            <Button disabled={transferBusy} variant="outline" onClick={()=>void doExportSelected("docx")}>Word (.docx) — редактируемый документ</Button>
+            <Button disabled={transferBusy} variant="outline" onClick={()=>void doExportSelected("png")}>PNG — изображение заметки</Button>
+            <Button disabled={transferBusy} variant="outline" onClick={()=>void doExportSelected("pdf")}>PDF — многостраничный документ</Button>
+          </div>
+          <p className="text-xs text-muted-foreground">PNG сохраняет читаемый текст, но не интерактивные элементы. Для полного оформления и вложений используйте .wnote.</p>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={colorDialog} onOpenChange={setColorDialog}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader><DialogTitle>Цвет карточки</DialogTitle></DialogHeader>
+          <p className="text-xs text-muted-foreground">Изменяется только карточка снаружи, цвет листа внутри заметки остаётся прежним.</p>
+          <div className="grid grid-cols-5 gap-3">
+            {["", "#FDE68A", "#DCE8E1", "#DCE6F3", "#FFE1D7", "#EDE0F7", "#303947", "#293D33", "#3A3046", "#EFE8DF"].map(color=>
+              <button type="button" key={color} aria-label={color?"Выбрать цвет "+color:"Вернуть стандартный цвет"}
+                onClick={()=>{
+                  try{selectedNotes.forEach(note=>updateNote(note.id,{cardColor:color||undefined}));setSelected(new Set());setColorDialog(false);toast.success("Цвет карточки изменён");}
+                  catch(error){toast.error(error instanceof Error?error.message:"Не удалось изменить цвет");}
+                }}
+                className="h-11 rounded-xl border border-border shadow-sm"
+                style={{backgroundColor:color||"#1D222B"}}>{!color&&<span className="text-xs text-white">Сброс</span>}</button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={moveDialog} onOpenChange={setMoveDialog}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader><DialogTitle>Переместить заметку</DialogTitle></DialogHeader>
+          <div className="max-h-64 space-y-1 overflow-y-auto">
+            {folders.map(folder=><button type="button" key={folder.id} onClick={()=>{
+              try{selectedNotes.forEach(note=>updateNote(note.id,{folderId:folder.id}));setSelected(new Set());setMoveDialog(false);toast.success("Заметки перемещены");}
+              catch(error){toast.error(error instanceof Error?error.message:"Не удалось переместить");}
+            }} className="flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm hover:bg-secondary">{localizedFolderName(folder)}</button>)}
+          </div>
+        </DialogContent>
+      </Dialog>
       <Dialog open={!!folderDialog} onOpenChange={(open) => !open && setFolderDialog(null)}>
         <DialogContent className="max-w-sm rounded-2xl">
           <DialogHeader>
@@ -334,9 +670,13 @@ function Index() {
               variant="destructive"
               className="rounded-full"
               onClick={() => {
-                selected.forEach((id) => deleteNote(id));
-                setSelected(new Set());
-                setConfirmDelete(false);
+                try {
+                  selected.forEach((id) => deleteNote(id));
+                  setSelected(new Set());
+                  setConfirmDelete(false);
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Ошибка удаления");
+                }
               }}
             >
               {t("delete")}
@@ -356,19 +696,25 @@ function TopContextMenu({
   view,
   sort,
   onCreateNote,
+  onCreateChecklist,
   onCreateFolder,
   onImportPdf,
+  onImportWave,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   view: ViewMode;
   sort: SortMode;
   onCreateNote: () => void;
+  onCreateChecklist: () => void;
   onCreateFolder: () => void;
   onImportPdf: () => void;
+  onImportWave: () => void;
 }) {
   const t = useT();
-
+  const [expanded, setExpanded] = useState<"view" | "sort" | null>(null);
+  useEffect(() => { if (!open) setExpanded(null); }, [open]);
+  
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
@@ -385,6 +731,10 @@ function TopContextMenu({
           <Plus className="h-4 w-4 text-primary" />
           {t("add_note")}
         </DropdownMenuItem>
+        <DropdownMenuItem onClick={onCreateChecklist} className="gap-2 py-2.5">
+          <ListChecks className="h-4 w-4 text-primary"/>
+          Создать список дел
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={onCreateFolder} className="gap-2 py-2.5">
           <FolderPlus className="h-4 w-4 text-primary" />
           {t("add_folder")}
@@ -393,16 +743,36 @@ function TopContextMenu({
           <FileType2 className="h-4 w-4 text-destructive" />
           {t("add_pdf")}
         </DropdownMenuItem>
+        <DropdownMenuItem onClick={onImportWave} className="gap-2 py-2.5">
+          <FileInput className="h-4 w-4 text-primary"/>
+          Получить заметку Wave Notes
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{t("view")}</DropdownMenuLabel>
-        <ViewItem current={view} value="list" label={t("list")} icon={<List className="h-4 w-4" />} />
-        <ViewItem current={view} value="grid" label={t("grid")} icon={<LayoutGrid className="h-4 w-4" />} />
-        <ViewItem current={view} value="table" label={t("table")} icon={<Table2 className="h-4 w-4" />} />
-        <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">{t("sort")}</DropdownMenuLabel>
-        <SortItem current={sort} value="created" label={t("by_created")} icon={<CalendarPlus className="h-4 w-4" />} />
-        <SortItem current={sort} value="updated" label={t("by_updated")} icon={<CalendarClock className="h-4 w-4" />} />
-        <SortItem current={sort} value="alpha" label={t("alpha")} icon={<ArrowDownAZ className="h-4 w-4" />} />
+        <button type="button" aria-expanded={expanded === "view"} aria-controls="wave-view-options"
+          onClick={() => setExpanded(v => v === "view" ? null : "view")}
+          className="flex w-full items-center justify-between rounded-lg px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:bg-secondary/60">
+          {t("view")} <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform duration-150 ${expanded === "view" ? "rotate-180" : ""}`}/>
+        </button>
+        {expanded === "view" && (
+          <div id="wave-view-options" className="pl-2">
+            <ViewItem current={view} value="list" label={t("list")} icon={<List className="h-4 w-4" />} />
+            <ViewItem current={view} value="grid" label={t("grid")} icon={<LayoutGrid className="h-4 w-4" />} />
+            <ViewItem current={view} value="table" label={t("table")} icon={<Table2 className="h-4 w-4" />} />
+          </div>
+        )}
+        <button type="button" aria-expanded={expanded === "sort"} aria-controls="wave-sort-options"
+          onClick={() => setExpanded(v => v === "sort" ? null : "sort")}
+          className="flex w-full items-center justify-between rounded-lg px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:bg-secondary/60">
+          {t("sort")} <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform duration-150 ${expanded === "sort" ? "rotate-180" : ""}`}/>
+        </button>
+        {expanded === "sort" && (
+          <div id="wave-sort-options" className="pl-2">
+            <SortItem current={sort} value="created" label={t("by_created")} icon={<CalendarPlus className="h-4 w-4" />} />
+            <SortItem current={sort} value="updated" label={t("by_updated")} icon={<CalendarClock className="h-4 w-4" />} />
+            <SortItem current={sort} value="alpha" label={t("alpha")} icon={<ArrowDownAZ className="h-4 w-4" />} />
+            <SortItem current={sort} value="manual" label="Мой порядок" icon={<List className="h-4 w-4" />} />
+          </div>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -605,14 +975,18 @@ function NotesGrid({
   view,
   notes,
   selected,
+  searchQuery,
   onToggle,
   onOpen,
+  onMove,
 }: {
   view: ViewMode;
   notes: Note[];
   selected: Set<string>;
+  searchQuery:string;
   onToggle: (id: string) => void;
   onOpen: (note: Note) => void;
+  onMove: (sourceId:string,targetId:string) => void;
 }) {
   return (
     <div className={view === "grid"
@@ -620,16 +994,25 @@ function NotesGrid({
       : view === "table"
         ? "flex flex-col gap-2"
         : "flex flex-col gap-3 md:grid md:grid-cols-2 md:gap-4 lg:grid-cols-3"}>
-      {notes.map((note) => (
+      <div className="col-span-full min-w-0"><NativeAdCard slotKey="home-first" /></div>
+      {notes.map((note, index) => (
+        <Fragment key={note.id}>
           <NoteCard
-            key={note.id}
+            searchQuery={searchQuery}
             note={note}
             view={view}
             selected={selected.has(note.id)}
             selectionMode={selected.size > 0}
             onToggle={() => onToggle(note.id)}
             onOpen={() => onOpen(note)}
+            onMove={targetId=>onMove(note.id,targetId)}
           />
+          {(index + 1) % 5 === 0 && (
+            <div className="col-span-full min-w-0">
+              <NativeAdCard slotKey={`home-after-${Math.floor((index + 1) / 5) * 5}`} />
+            </div>
+          )}
+        </Fragment>
       ))}
     </div>
   );

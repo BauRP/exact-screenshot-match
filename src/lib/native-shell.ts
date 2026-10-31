@@ -12,19 +12,25 @@ function isNative(): boolean {
 }
 
 /**
- * Makes the native system status bar transparent and lets the web view draw
- * beneath it, so the clock / Wi-Fi / battery icons stay crisp and visible on
- * top of the app UI (standard modern Android edge-to-edge behaviour).
+ * Keeps application content separate from Android system status icons.
  */
 export function NativeShellBoot() {
+  useEffect(() => {
+    if (!isNative()) return;
+    document.documentElement.classList.add("wave-native-android");
+    return () => document.documentElement.classList.remove("wave-native-android");
+  }, []);
+
   useEffect(() => {
     if (!isNative()) return;
 
     void (async () => {
       try {
         const { StatusBar, Style } = await import("@capacitor/status-bar");
-        await StatusBar.setOverlaysWebView({ overlay: true });
-        await StatusBar.setBackgroundColor({ color: "#00000000" });
+        // Native MainActivity owns edge-to-edge and insets on every API.
+        // Calling setOverlaysWebView(false) would reconfigure the Window and
+        // cause double/incorrect safe-area padding on some Android versions.
+        await StatusBar.setBackgroundColor({ color: "#0B0E13" });
         await StatusBar.setStyle({ style: Style.Dark });
         await StatusBar.show();
       } catch (error) {

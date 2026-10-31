@@ -1,0 +1,11 @@
+import {strict as assert} from "node:assert";
+import {noteMatchesSearch} from "../src/lib/note-search";
+const note={id:"a",title:"Тест",body:"<p>Пример</p>",createdAt:1,updatedAt:1,pinned:true};
+assert.equal(noteMatchesSearch(note,"","pinned"),true);
+assert.equal(noteMatchesSearch({...note,pinned:false},"","pinned"),false);
+assert.equal(noteMatchesSearch({...note,body:'<div data-audio-note="true"></div>'},"","audio"),true);
+assert.equal(noteMatchesSearch({...note,body:'<div data-wave-drawing="true"></div>'},"","drawings"),true);
+assert.equal(noteMatchesSearch({...note,body:'<div data-wave-page-break="true"></div>'},"","pages"),true);
+assert.equal(noteMatchesSearch({...note,body:"<p>Текст</p>"},"","drawings"),false);
+assert.equal(noteMatchesSearch(note,"@pinned"),true);
+console.log("Rich note filters passed");

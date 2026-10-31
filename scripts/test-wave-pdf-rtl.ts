@@ -1,0 +1,13 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+const exp=readFileSync("src/lib/note-export.ts","utf8");
+const home=readFileSync("src/routes/index.tsx","utf8");
+const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
+const direction=readFileSync("src/lib/wave-text-direction.ts","utf8");
+const check=readFileSync("src/lib/wave-checklist.ts","utf8");
+for(const word of ['"pdf"','pdfBlob(note)','PDFDocument.create()','pdf.embedPng(','pdf.addPage(','application/pdf','data-wave-image'])assert.ok(exp.includes(word),word);
+assert.ok(home.includes('doExportSelected("pdf")'));
+for(const word of ['WaveTextDirection,','Направление текста справа налево','textDirection:next'])assert.ok(editor.includes(word),word);
+for(const word of ['addGlobalAttributes','getAttribute("dir")','renderHTML'])assert.ok(direction.includes(word),word);
+assert.ok(check.includes('"Mod-Shift-Enter"'));
+console.log("PDF, RTL and checklist enhancements wired");

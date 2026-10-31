@@ -13,24 +13,15 @@
     <!-- Микрофон для записи аудио-заметок (AudioNode.tsx) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- Доступ к медиафайлам — Android 13+ (API 33+) -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
-
-    <!-- Доступ к хранилищу — Android 12 и ниже -->
-    <uses-permission
-        android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
-    <uses-permission
-        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="29" />
-
-    <!-- Управление хранилищем -->
-    <uses-permission
-        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
-        tools:ignore="ScopedStorage" />
+    <!-- System Photo Picker and ACTION_GET_CONTENT grant access only to chosen media.
+         Explicitly remove broad grants also when contributed by Android libraries. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" />
 
     <!-- Биометрия для защиты заметок (src/lib/app-lock.tsx) -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
@@ -64,17 +55,17 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="Wave Notes"
-        android:requestLegacyExternalStorage="true"
         android:resizeableActivity="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
 
-        <!-- Иконка уведомлений Firebase -->
-        <meta-data
-            android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@drawable/ic_notification" />
+        <!-- Google Mobile Ads application ID; native ad unit ID is separate. -->
+        <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="@string/admob_app_id" />
+        <!-- Suppress repeated test-only Google Native Ad Validator success popups.
+             Continue using TEST inventory; the placement was already validated. -->
+        <meta-data android:name="com.google.android.gms.ads.flag.NATIVE_AD_DEBUGGER_ENABLED" android:value="false" />
 
         <!-- Главная активность приложения -->
         <activity
@@ -91,13 +82,6 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Оптимизация под экраны современных телефонов -->
-            <meta-data
-                android:name="android.max_aspect"
-                android:value="2.4" />
-            <meta-data
-                android:name="android.min_aspect"
-                android:value="1.0" />
         </activity>
 
         <!-- Провайдер файлов для работы с медиа и экспортом -->

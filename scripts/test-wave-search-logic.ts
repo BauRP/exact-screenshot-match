@@ -1,0 +1,15 @@
+import {strict as assert} from "node:assert";
+import {normalizeSearchText,noteSearchSnippet,noteMatchesSearch,readableText} from "../src/lib/note-search";
+assert.equal(normalizeSearchText("Ёж  ПРИШЁЛ"),"еж пришел");
+assert.equal(normalizeSearchText("  КАЗАХСТАН   "), "казахстан");
+const note={id:"a",title:"Рабочие заметки",body:"<p>Большой жёлтый дневник о поездке.</p>",createdAt:1,updatedAt:1};
+assert.equal(noteMatchesSearch(note,"желтый"),true);
+assert.equal(noteMatchesSearch(note,"поездке большой"),true);
+assert.equal(noteMatchesSearch(note,"неизвестное"),false);
+assert.ok(noteSearchSnippet(note,"дневник").includes("дневник"));
+assert.equal(noteSearchSnippet({...note,body:""},"дневник"),"");
+const concealed='<p>Обычный текст <span data-wave-tape="true">Секретный ответ</span> открыт.</p>';
+assert.equal(readableText(concealed).includes("Секретный ответ"),false);
+assert.equal(noteMatchesSearch({...note,body:concealed},"Секретный"),false);
+assert.equal(noteSearchSnippet({...note,body:concealed},"ответ").includes("Секретный"),false);
+console.log("Cyrillic normalization, word-order-independent search and snippets passed");

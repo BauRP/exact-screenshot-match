@@ -9,7 +9,7 @@ const FeedbackInput = z.object({
 const CHAT_ID = "8345856853";
 
 export const sendFeedback = createServerFn({ method: "POST" })
-  .inputValidator((data) => FeedbackInput.parse(data))
+  .validator((data) => FeedbackInput.parse(data))
   .handler(async ({ data }) => {
     const token = process.env.TELEGRAM_BOT_TOKEN;
     if (!token) {

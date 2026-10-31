@@ -1,23 +1,35 @@
-name: Build Android APK
+name: Android APK - Wave Notes
 
+# One click in Actions -> Run workflow. Pushing the staging branch tests the setup.
 on:
-  push:
-    branches: [main, master]
-  pull_request:
-    branches: [main, master]
   workflow_dispatch:
+  push:
+    branches:
+      - main
+      - chatgpt/external-apk-build-20261025
+      - chatgpt/super-notes-stability-20261025
+    # Infrastructure-only commits should not produce yet another identical APK.
+    paths-ignore:
+      - '.github/workflows/android-ocr-emulator.yml'
+      - 'scripts/prepare-android-emulator.sh'
+      - 'scripts/test-android-emulator-sdk-retry.sh'
+      - 'scripts/run-android-emulator-tests.sh'
+      - 'scripts/disable-android-intro-for-ci.mjs'
 
 permissions:
   contents: write
 
+concurrency:
+  group: super-notes-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
-    name: Assemble APK
+    name: Build and publish APK
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-
+    timeout-minutes: 45
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -33,182 +45,316 @@ jobs:
       - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
-          distribution: "temurin"
-          java-version: "21"
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            android-overlay/app/build.gradle
+            android-overlay/variables.gradle
 
-      - name: Setup Android SDK
+      - name: Setup Android SDK 36
         uses: android-actions/setup-android@v3
         with:
           packages: "platform-tools platforms;android-36 build-tools;36.0.0"
 
-      - name: Install web dependencies
-        run: bun install --frozen-lockfile
+      - name: Install dependencies
+        run: bun install
 
-      - name: Build web assets
-        run: bun run build
-
-      - name: Install Capacitor CLI
-        run: bun add -d @capacitor/cli
-
-      - name: Verify Capacitor web assets
+      - name: Verify compact native ad icon and clipping on Android
         run: |
-          test -f dist/client/index.html
-          test -d dist/client/assets
+          node scripts/patch-admob-native-layout.mjs
+          node scripts/verify-admob-native-layout.mjs
 
-      - name: Add Android platform
-        run: |
-          if [ ! -d "android" ]; then
-            npx cap add android
-          fi
+      - name: Build app
         env:
-          CI: true
-
-      - name: Debug web assets
+          # Developer APK only. Real Play releases never expose this UI.
+          VITE_ADMOB_DIAGNOSTICS: "true"
         run: |
-          echo "Listing files in dist/client:"
-          ls -R dist/client
+          set -euo pipefail
+          bun run build
+          test -s dist/client/index.html
+          test -n "$(find dist/client/assets -name '*.js' -print -quit)"
+          test -n "$(find dist/client/assets -name '*.css' -print -quit)"
 
-      - name: Sync Capacitor
-        run: npx cap sync android
+      - name: TypeScript static checks
+        run: bunx tsc --noEmit
 
-      - name: Apply Android overlay (icons, styles, colors)
+      - name: Verify yellow new-note defaults and Save button
+        run: bun scripts/test-note-default-save.ts
+
+      - name: Verify premium Android intro and timeout safeguards
+        run: bun scripts/test-launch-intro.ts
+
+      - name: Verify PDF text editing preserves original on taps and rotates with page
+        run: bun scripts/test-pdf-page-editor.ts
+
+      - name: Verify backup PIN, migration and Android biometric gate
+        run: bun scripts/test-app-lock.ts
+
+      - name: Verify diagnostic screen separation and cross-route retry
+        run: bun scripts/test-admob-diagnostics.ts
+
+      - name: Verify dark and light native ads styling
+        run: bun scripts/test-admob-themes.ts
+
+      - name: Verify consent withdrawal interrupts native advertising
+        run: bun scripts/test-admob-consent-change.ts
+
+      - name: Verify separate page mood, palette and paper ruling
+        run: bun scripts/test-wave-paper.ts
+
+      - name: Verify compact selected actions and mobile list continuation
+        run: bun scripts/test-wave-editor-menu.ts
+
+      - name: Verify single-file Wave Notes transfer without overwrites
+        run: bun scripts/test-wave-transfer.ts
+
+      - name: Verify overdue inbox, snooze and dismiss
+        run: bun scripts/test-wave-reminder-inbox.ts
+
+      - name: Verify reminder shortcuts and next-seven-day filters
+        run: bun scripts/test-wave-reminder-shortcuts.ts
+
+      - name: Execute offline reminder and checklist logic unit tests
+        run: bun scripts/test-wave-reminder-logic.ts
+
+      - name: Verify saved checklist summaries and pending filters
+        run: bun scripts/test-wave-checklist-summary.ts
+
+      - name: Verify reminder metadata, due status and offline filters
+        run: bun scripts/test-wave-reminders.ts
+
+      - name: Test real ProseMirror child offsets
+        run: bun scripts/test-wave-child-offset.ts
+
+      - name: Execute page boundary and nested block movement regression
+        run: bun scripts/test-wave-section-pages-motion.ts
+
+      - name: Verify page labels and bulk section checklist commands
+        run: bun scripts/test-wave-bulk-pages.ts
+
+      - name: Verify nested sections, page navigation and export
+        run: bun scripts/test-wave-nested-pages.ts
+
+      - name: Verify live editor settings and page navigation
+        run: bun scripts/test-wave-live-editor-preferences.ts
+
+      - name: Verify customizable toolbar and page breaks
+        run: bun scripts/test-wave-toolbar-pages.ts
+
+      - name: Test nested section outline indentation
+        run: bun scripts/test-wave-outline-depth.ts
+
+      - name: Verify outline navigation and safe block movement
+        run: bun scripts/test-wave-outline.ts
+
+      - name: Execute drawing eraser geometry and serialization tests
+        run: bun scripts/test-wave-ink-geometry.ts
+
+      - name: Verify named pages and audio playback controls
+        run: bun scripts/test-wave-page-audio-controls.ts
+
+      - name: Verify audio error messages and retry action
+        run: bun scripts/test-wave-audio-retry.ts
+
+      - name: Verify offline photo retry and continuous erasing
+        run: bun scripts/test-wave-image-retry-erase.ts
+
+      - name: Check reversible drawing clear and protected Tape exports
+        run: bun scripts/test-wave-safe-exports-and-ink-clear.ts
+
+      - name: Verify editor ink and photo annotations
+        run: bun scripts/test-wave-ink.ts
+
+      - name: Verify offline formatted browser paste
+        run: bun scripts/test-wave-smart-paste.ts
+
+      - name: Verify camera clipboard and drop image ingestion
+        run: bun scripts/test-wave-image-ingestion.ts
+
+      - name: Verify detached attachment cleanup after durable writes
+        run: bun scripts/test-wave-attachment-reclaim.ts
+
+      - name: Verify offline note image storage, exchange and cleanup
+        run: bun scripts/test-wave-images.ts
+
+      - name: Verify real PDF export RTL writing and task shortcuts
+        run: bun scripts/test-wave-pdf-rtl.ts
+
+      - name: Verify real offline TXT HTML and DOCX document export
+        run: bun scripts/test-wave-document-export.ts
+
+      - name: Verify reminder update tracking and hidden answer safety
+        run: bun scripts/test-wave-reminder-tape-safety.ts
+
+      - name: Execute in-note single and bulk replacement tests
+        run: bun scripts/test-wave-find-replace.ts
+
+      - name: Verify nested hidden Tape text in previews and search
+        run: bun scripts/test-wave-tape-nested.ts
+
+      - name: Execute offline Cyrillic note search unit tests
+        run: bun scripts/test-wave-search-logic.ts
+
+      - name: Execute rich note filter tests
+        run: bun scripts/test-wave-rich-filters.ts
+
+      - name: Verify offline note search and scoped filters
+        run: bun scripts/test-wave-note-search.ts
+
+      - name: Verify safe return-note conflicts and audio cleanup
+        run: bun scripts/test-wave-return-conflicts.ts
+
+      - name: Verify all note web links leave Wave Notes for Android browser
+        run: bun scripts/test-external-note-links.ts
+
+      - name: Verify note learning blocks and slash commands
+        run: bun scripts/test-wave-blocks.ts
+
+      - name: Verify checklist markup, persistence and note editor compatibility
+        run: bun scripts/test-wave-checklist.ts
+
+      - name: Verify compact menu, in-note search and editor settings
+        run: bun scripts/test-wave-editor-search.ts
+
+      - name: Verify persistent feed, three-dot menu and three display modes
+        run: bun scripts/test-admob-menu-grid.ts
+
+      - name: Verify consent reuse and clipping for every native ad slot
+        run: bun scripts/test-admob-session-layout.ts
+
+      - name: Verify Google UMP and native ad error diagnostics
+        run: bun scripts/test-admob-error-guide.ts
+
+      - name: Verify backup triggers only on committed edits
+        run: bun scripts/test-backup-save-triggers.ts
+
+      - name: Verify local backup auto-update and 24-hour deletion protection
+        run: bun scripts/test-internal-backup.ts
+
+      - name: Verify ZIP backup restores custom folders and hidden system tabs
+        run: bun scripts/test-folder-zip-restore.ts
+
+      - name: Verify OCR selection and mixed-language safeguards
+        run: bun scripts/test-ocr-logic.ts
+
+      - name: Verify multilingual OCR line-merging matrix
+        run: bun scripts/test-ocr-merge-matrix.ts
+
+      - name: Verify OCR note storage and error handling
+        run: bun scripts/test-ocr-persistence.ts
+
+      - name: Verify OCR saved notes survive a cold restart
+        run: bun scripts/test-ocr-cold-start.ts
+
+      - name: Verify corrupted notes cannot be overwritten at startup
+        run: bun scripts/test-ocr-corrupt-start.ts
+
+      - name: Verify many long mixed-language OCR notes survive storage
+        run: bun scripts/test-ocr-stress.ts
+
+      - name: Verify OCR creates note before opening the editor
+        run: bun scripts/test-ocr-save-navigation.ts
+
+      - name: Verify failed editor navigation does not lose saved notes
+        run: bun scripts/test-ocr-navigation-failure.ts
+
+      - name: Verify camera/gallery OCR and manual PDF workflows remain separate
+        run: bun scripts/test-feature-boundaries.ts
+
+      - name: Verify complete OCR-to-note handoff
+        run: bun scripts/test-ocr-pipeline.ts
+
+      - name: Verify safe partial OCR note recovery
+        run: bun scripts/test-ocr-partial.ts
+
+      - name: Cache verified build-time OCR language files
+        uses: actions/cache@v4
+        with:
+          path: android-overlay/app/src/main/assets/tessdata
+          key: supernotes-tessdata-87416418657359cb625c412a48b6e1d6d41c29bd-git-verified
+
+      - name: Prepare bundled offline OCR models
+        run: bash scripts/prepare-ocr-models.sh
+
+      - name: Prepare Android project
         run: |
-          if [ -d "android-overlay/app/src/main/res" ]; then
-            mkdir -p android/app/src/main/res
-            cp -R android-overlay/app/src/main/res/. android/app/src/main/res/
-          fi
+          set -euo pipefail
+          npx cap add android
+          npx cap sync android
 
-      - name: Fix Duplicate Resources
-        run: |
-          echo "Проверяем наличие дубликатов ресурсов..."
-          COLORS_FILE="android/app/src/main/res/values/colors.xml"
-          BG_FILE="android/app/src/main/res/values/ic_launcher_background.xml"
-          
-          if [ -f "$BG_FILE" ] && [ -f "$COLORS_FILE" ]; then
-            if grep -q "ic_launcher_background" "$COLORS_FILE"; then
-              echo "Найден дубликат ic_launcher_background! Удаляем лишний файл..."
-              rm "$BG_FILE"
-            fi
-          fi
-
-      - name: Configure SDK versions
-        run: |
-          cat > android/variables.gradle <<'EOF'
-          ext {
-              minSdkVersion = 24
-              compileSdkVersion = 36
-              targetSdkVersion = 36
-              androidxActivityVersion = '1.11.0'
-              androidxAppCompatVersion = '1.7.1'
-              androidxCoordinatorLayoutVersion = '1.3.0'
-              androidxCoreVersion = '1.17.0'
-              androidxCoreKTXVersion = '1.15.0'
-              androidxFragmentVersion = '1.8.9'
-              coreSplashScreenVersion = '1.2.0'
-              androidxWebkitVersion = '1.14.0'
-              junitVersion = '4.13.2'
-              androidxJunitVersion = '1.3.0'
-              androidxEspressoCoreVersion = '3.7.0'
-              cordovaAndroidVersion = '14.0.1'
-              kotlin_version = '2.2.20'
-              }
-          EOF
-
-      - name: Apply Android native sources (print plugin, MainActivity)
-        run: |
-          if [ -d "android-overlay/app/src/main/java" ]; then
-            mkdir -p android/app/src/main/java
-            cp -R android-overlay/app/src/main/java/. android/app/src/main/java/
-          fi
-
-      - name: Apply Android app module overlay (gradle, proguard)
-        run: |
+          cp -R android-overlay/app/src/main/res/. android/app/src/main/res/
+          mkdir -p android/app/src/main/assets
+          cp -R android-overlay/app/src/main/assets/. android/app/src/main/assets/
+          cp -R android-overlay/app/src/main/java/. android/app/src/main/java/
           cp android-overlay/app/build.gradle android/app/build.gradle
           cp android-overlay/app/proguard-rules.pro android/app/proguard-rules.pro
           cp android-overlay/app/src/main/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
-          grep -q "com.google.android.gms.ads.APPLICATION_ID" android/app/src/main/AndroidManifest.xml
+          cp android-overlay/variables.gradle android/variables.gradle
 
-      - name: Grant gradlew execute permission
-        run: chmod +x android/gradlew
+          # Native AdMob is configured in the overlay (no legacy ad banners).
+          grep -q 'com.google.android.gms.ads.APPLICATION_ID' android/app/src/main/AndroidManifest.xml
+          grep -q 'ca-app-pub-9902253594429663~4405601673' android/app/src/main/res/values/admob.xml
 
-      - name: Build debug APK
+          # Capacitor and our custom resources can declare the same launcher color.
+          if test -f android/app/src/main/res/values/ic_launcher_background.xml &&
+             grep -q 'ic_launcher_background' android/app/src/main/res/values/colors.xml; then
+            rm android/app/src/main/res/values/ic_launcher_background.xml
+          fi
+
+          test -s android/app/src/main/assets/public/index.html
+
+      - name: Compile APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
-
-      - name: Build release APK (unsigned)
-        working-directory: android
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
-        continue-on-error: true
-
-      - name: Create Release & Upload APK (Official GitHub Link)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_RUN_NUMBER: ${{ github.run_number }}
-          GITHUB_REF_NAME: ${{ github.ref_name }}
         run: |
-          python3 - <<'PY'
-          import os
-          import urllib.request
-          import json
-          from pathlib import Path
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
-          github_token = os.environ.get("GITHUB_TOKEN")
-          repository = os.environ.get("GITHUB_REPOSITORY")
-          run_number = os.environ.get("GITHUB_RUN_NUMBER")
-          ref_name = os.environ.get("GITHUB_REF_NAME", "main")
+      - name: Verify APK
+        run: |
+          set -euo pipefail
+          test -s android/app/build/outputs/apk/debug/app-debug.apk
+          mkdir -p output
+          cp android/app/build/outputs/apk/debug/app-debug.apk output/SuperNotes-debug.apk
+          unzip -t output/SuperNotes-debug.apk >/dev/null
+          unzip -l output/SuperNotes-debug.apk | grep -F 'assets/tessdata/rus.traineddata'
+          unzip -l output/SuperNotes-debug.apk | grep -F 'assets/tessdata/kaz.traineddata'
+          unzip -l output/SuperNotes-debug.apk | grep -F 'assets/public/index.html'
+          ls -lh output/SuperNotes-debug.apk
+          sha256sum output/SuperNotes-debug.apk | tee output/SuperNotes-debug.apk.sha256
+          echo "## Проверка APK" >> "$GITHUB_STEP_SUMMARY"
+          echo "Source commit: \`$GITHUB_SHA\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "SHA-256: \`$(cut -d' ' -f1 output/SuperNotes-debug.apk.sha256)\`" >> "$GITHUB_STEP_SUMMARY"
 
-          apk_files = list(Path("android/app/build/outputs/apk").rglob("*.apk"))
-          if not apk_files:
-              raise SystemExit("КРИТИЧЕСКАЯ ОШИБКА: APK файл не найден!")
-          apk_path = apk_files[0]
-
-          headers = {
-              "Authorization": f"Bearer {github_token}",
-              "Accept": "application/vnd.github+json",
-              "Content-Type": "application/json",
-              "X-GitHub-Api-Version": "2022-11-28"
-          }
-
-          tag_name = f"build-{run_number}"
-          release_data = json.dumps({
-              "tag_name": tag_name,
-              "target_commitish": ref_name,
-              "name": f"APK Build #{run_number}",
-              "body": "Автоматическая сборка APK для приложения.",
-              "draft": False,
-              "prerelease": True
-          }).encode("utf-8")
-
-          print("Создание релиза на GitHub...")
-          req = urllib.request.Request(f"https://api.github.com/repos/{repository}/releases", data=release_data, headers=headers, method="POST")
-          try:
-              with urllib.request.urlopen(req) as resp:
-                  release_json = json.loads(resp.read().decode("utf-8"))
-          except urllib.error.HTTPError as e:
-              print(f"Ошибка API GitHub: {e.code} - {e.read().decode('utf-8')}")
-              raise
-
-          upload_url_template = release_json["upload_url"]
-          upload_url = upload_url_template.split("{")[0] + f"?name={apk_path.name}"
-
-          print("Загрузка APK файла в релиз...")
-          file_data = apk_path.read_bytes()
-          upload_headers = {
-              "Authorization": f"Bearer {github_token}",
-              "Content-Type": "application/vnd.android.package-archive",
-              "Content-Length": str(len(file_data))
-          }
-
-          req_upload = urllib.request.Request(upload_url, data=file_data, headers=upload_headers, method="POST")
-          with urllib.request.urlopen(req_upload) as resp_upload:
-              asset_json = json.loads(resp_upload.read().decode("utf-8"))
-
-          download_url = asset_json["browser_download_url"]
-
-          summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-          with open(summary_path, "a", encoding="utf-8") as f:
-              f.write("## 📱 Готовый файл APK:\n\n")
-              f.write(f"[🚀 НАЖМИ СЮДА, ЧТОБЫ СКАЧАТЬ APK]({download_url})\n")
-          print(f"Ссылка успешно создана: {download_url}")
-          PY
+      # No actions/upload-artifact: keeps GitHub Actions artifact storage unused.
+      # The app is published as ONE replaceable GitHub Release asset instead.
+      - name: Publish APK with a download link
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_NAME" = "main" ]; then
+            TAG="super-notes-latest"
+            TITLE="Wave Notes - latest APK"
+          elif [ "$GITHUB_REF_NAME" = "chatgpt/super-notes-stability-20261025" ]; then
+            TAG="super-notes-stability-test"
+            TITLE="Wave Notes - stability test APK"
+          else
+            TAG="super-notes-preview"
+            TITLE="Wave Notes - test APK"
+          fi
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "$TITLE" --notes "Wave Notes test APK. Back up your notes before installation." --prerelease
+          fi
+          # Preserve the legacy APK URL. Publish the checksum of the SAME
+          # successfully verified binary; allow comparison after download.
+          gh release upload "$TAG" output/SuperNotes-debug.apk output/SuperNotes-debug.apk.sha256 --clobber
+          CHECKSUM="$(cut -d' ' -f1 output/SuperNotes-debug.apk.sha256)"
+          gh release edit "$TAG" --title "$TITLE" --prerelease --notes "Wave Notes TEST/debug APK. Source commit: $GITHUB_SHA. SHA-256: $CHECKSUM. The APK and checksum are from the same verified build. Back up local notes before installation; debug signatures may differ. Android emulator and physical-device OCR acceptance require separate checks."
+          DOWNLOAD="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/SuperNotes-debug.apk"
+          CHECKSUM_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/SuperNotes-debug.apk.sha256"
+          echo "## Скачать APK" >> "$GITHUB_STEP_SUMMARY"
+          echo "[Скачать Wave Notes APK]($DOWNLOAD)" >> "$GITHUB_STEP_SUMMARY"
+          echo "[SHA-256 контрольная сумма]($CHECKSUM_URL)" >> "$GITHUB_STEP_SUMMARY"
+          echo "APK download: $DOWNLOAD"
