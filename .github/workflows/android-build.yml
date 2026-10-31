@@ -109,6 +109,9 @@ jobs:
       - name: Verify single-file Wave Notes transfer without overwrites
         run: bun scripts/test-wave-transfer.ts
 
+      - name: Verify customizable toolbar and page breaks
+        run: bun scripts/test-wave-toolbar-pages.ts
+
       - name: Verify outline navigation and safe block movement
         run: bun scripts/test-wave-outline.ts
 
