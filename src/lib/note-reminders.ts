@@ -37,28 +37,42 @@ export function reminderLabel(time:unknown,now=Date.now()):string{
  * time so "tomorrow at 09:00" remains tomorrow across DST changes.
  */
 export type ReminderPreset="hour"|"tomorrow"|"week";
-export function reminderPresetTime(preset:ReminderPreset,now=Date.now()):number{
- const date=new Date(now);
- if(preset==="hour")date.setHours(date.getHours()+1);
- else if(preset==="tomorrow"){date.setDate(date.getDate()+1);date.setHours(9,0,0,0);}
- else if(preset==="week"){date.setDate(date.getDate()+7);date.setHours(9,0,0,0);}
- const epoch=validReminderTime(date.getTime());
- if(epoch===undefined)throw Error("Дата напоминания выходит за допустимые границы");
- return epoch;
+/** Exact durations use milliseconds, not setHours/setMinutes: local daylight
+ * saving changes must never make "in one hour" mean zero or two hours. */
+function reminderAfterDuration(now:number,milliseconds:number):number{
+ const epoch=validReminderTime(now);
+ const target=epoch===undefined?undefined:validReminderTime(epoch+milliseconds);
+ if(target===undefined)throw Error("Дата напоминания выходит за допустимые границы");
+ return target;
 }
-/** Offline snooze shortcuts. Calendar days preserve the local hour across DST. */
+export function reminderPresetTime(preset:ReminderPreset,now=Date.now()):number{
+ if(preset==="hour")return reminderAfterDuration(now,60*60_000);
+ const epoch=validReminderTime(now);
+ if(epoch===undefined)throw Error("Дата напоминания выходит за допустимые границы");
+ const date=new Date(epoch);
+ if(preset==="tomorrow"){date.setDate(date.getDate()+1);date.setHours(9,0,0,0);}
+ else if(preset==="week"){date.setDate(date.getDate()+7);date.setHours(9,0,0,0);}
+ else throw Error("Неизвестный вариант напоминания");
+ const result=validReminderTime(date.getTime());
+ if(result===undefined)throw Error("Дата напоминания выходит за допустимые границы");
+ return result;
+}
+/** Offline snooze shortcuts. Exact short durations; calendar days keep local dates. */
 export type ReminderSnooze="quarter"|"hour"|"threeHours"|"tomorrow"|"threeDays"|"week";
-export function snoozeReminderTime(choice:ReminderSnooze,now=Date.now()):number {
- const date=new Date(now);
- if(choice==="quarter")date.setMinutes(date.getMinutes()+15);
- else if(choice==="hour")date.setHours(date.getHours()+1);
- else if(choice==="threeHours")date.setHours(date.getHours()+3);
- else if(choice==="tomorrow"){date.setDate(date.getDate()+1);date.setHours(9,0,0,0);}
+export function snoozeReminderTime(choice:ReminderSnooze,now=Date.now()):number{
+ if(choice==="quarter")return reminderAfterDuration(now,15*60_000);
+ if(choice==="hour")return reminderAfterDuration(now,60*60_000);
+ if(choice==="threeHours")return reminderAfterDuration(now,3*60*60_000);
+ const epoch=validReminderTime(now);
+ if(epoch===undefined)throw Error("Дата напоминания выходит за допустимые границы");
+ const date=new Date(epoch);
+ if(choice==="tomorrow"){date.setDate(date.getDate()+1);date.setHours(9,0,0,0);}
  else if(choice==="threeDays"){date.setDate(date.getDate()+3);date.setHours(9,0,0,0);}
- else {date.setDate(date.getDate()+7);date.setHours(9,0,0,0);}
- const valid=validReminderTime(date.getTime());
- if(valid===undefined)throw Error("Дата напоминания выходит за допустимые границы");
- return valid;
+ else if(choice==="week"){date.setDate(date.getDate()+7);date.setHours(9,0,0,0);}
+ else throw Error("Неизвестный вариант напоминания");
+ const result=validReminderTime(date.getTime());
+ if(result===undefined)throw Error("Дата напоминания выходит за допустимые границы");
+ return result;
 }
 export function reminderIsUpcoming(time:unknown,days=7,now=Date.now()):boolean{
  const due=validReminderTime(time);
