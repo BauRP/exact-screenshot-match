@@ -109,6 +109,9 @@ jobs:
       - name: Verify single-file Wave Notes transfer without overwrites
         run: bun scripts/test-wave-transfer.ts
 
+      - name: Verify overdue inbox, snooze and dismiss
+        run: bun scripts/test-wave-reminder-inbox.ts
+
       - name: Verify reminder shortcuts and next-seven-day filters
         run: bun scripts/test-wave-reminder-shortcuts.ts
 
