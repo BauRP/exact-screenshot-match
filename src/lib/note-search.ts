@@ -15,10 +15,24 @@ export function parseNoteQuery(input:string, selected:NoteSearchFilter="all"):Pa
   return {filter:match?match[1].toLowerCase() as NoteSearchFilter:selected,
     query:match?trimmed.slice(match[0].length).trim():trimmed};
 }
-function readableText(html:string):string {
+export function readableText(html:string):string {
   return html.replace(/<[^>]+>/g," ").replace(/&(?:nbsp|#160);/gi," ")
     .replace(/&amp;/gi,"&").replace(/&lt;/gi,"<").replace(/&gt;/gi,">")
     .replace(/&quot;/gi,'"').replace(/&#39;/gi,"'").replace(/\s+/g," ");
+}
+/** Script-friendly Russian/Kazakh lookup. Do not modify saved note spelling. */
+export function normalizeSearchText(value:string):string {
+ return value.normalize("NFKC").toLocaleLowerCase().replace(/ё/g,"е")
+  .replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();
+}
+export function noteSearchSnippet(note:Note,query:string,maxLength=155):string {
+ const source=readableText(note.body||"").trim();
+ if(!source)return "";
+ const normalized=normalizeSearchText(source),needle=normalizeSearchText(parseNoteQuery(query).query);
+ const match=needle?normalized.indexOf(needle):-1;
+ const offset=match<0?0:Math.max(0,match-40);
+ const fragment=source.slice(offset,offset+Math.max(30,maxLength));
+ return (offset?"…":"")+fragment+(offset+fragment.length<source.length?"…":"");
 }
 export function noteMatchesSearch(note:Note,input:string,selected:NoteSearchFilter="all"):boolean {
   const {query,filter}=parseNoteQuery(input,selected);
@@ -31,5 +45,7 @@ export function noteMatchesSearch(note:Note,input:string,selected:NoteSearchFilt
   if(filter==="pending"&&checklistSummary(body).pending===0)return false;
   if(filter==="todo"&&!/data-type=["']wave-check-item|<ul\b[^>]*data-type=["']taskList|data-type=["']taskItem/i.test(body))return false;
   if(!query)return true;
-  return (note.title+" "+readableText(body)).toLocaleLowerCase().includes(query.toLocaleLowerCase());
+  const haystack=normalizeSearchText(note.title+" "+readableText(body));
+  const tokens=normalizeSearchText(query).split(" ").filter(Boolean);
+  return tokens.every(token=>haystack.includes(token));
 }
