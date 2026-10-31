@@ -17,7 +17,13 @@ const blocks=new Set(["P","DIV","H1","H2","H3","H4","H5","H6","LI","UL","OL","PR
 const keep=new Set(["P","BR","DIV","H1","H2","H3","H4","H5","H6","STRONG","B","EM","I","U","S","DEL","SPAN","A","OL","UL","LI","BLOCKQUOTE","PRE","CODE","HR","TABLE","THEAD","TBODY","TR","TH","TD","SECTION","ASIDE"]);
 const isColor=(s:string)=>/^#[0-9a-f]{3,8}$/i.test(s.trim());
 function parseBody(note:Note):HTMLElement {
-  return new DOMParser().parseFromString(note.body||"","text/html").body;
+  const body=new DOMParser().parseFromString(note.body||"","text/html").body;
+  // Export/share is an external disclosure: hidden Tape answers must not
+  // appear in TXT, HTML, Word, PNG or PDF even with nested formatting.
+  body.querySelectorAll("[data-wave-tape]").forEach(node=>{
+    node.replaceWith(body.ownerDocument.createTextNode("[Скрытый ответ]"));
+  });
+  return body;
 }
 function plainNode(node:Node):string{
   if(node.nodeType===3)return node.textContent||"";
