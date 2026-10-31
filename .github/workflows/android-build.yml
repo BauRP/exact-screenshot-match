@@ -166,6 +166,9 @@ jobs:
       - name: Verify audio error messages and retry action
         run: bun scripts/test-wave-audio-retry.ts
 
+      - name: Check saved image alignment and drag resizing
+        run: bun scripts/test-wave-image-layout.ts
+
       - name: Verify offline photo retry and continuous erasing
         run: bun scripts/test-wave-image-retry-erase.ts
 
