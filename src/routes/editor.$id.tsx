@@ -67,7 +67,8 @@ import { WaveImage } from "@/components/editor/WaveImage";
 import { WaveDrawing } from "@/components/editor/WaveDrawing";
 import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection} from "@/lib/wave-text-direction";
-import {collectNoteOutline} from "@/lib/note-outline";
+import {collectNoteOutline,notePagePositions,noteCurrentPage} from "@/lib/note-outline";
+import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos} from "@/lib/wave-block-motion";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
 import { useFolders, type Folder } from "@/lib/folders-store";
@@ -349,6 +350,8 @@ function EditorPage() {
   const handleCanvasBg = (c: string) => {setCanvasBg(c);setPaperMood("solid");};
   const hits=findOpen&&editor?findWords(editor.state.doc,findQuery,prefs.caseSensitive):[];
   const outline=outlineOpen&&editor?collectNoteOutline(editor.state.doc):[];
+  const pagePositions=editor?notePagePositions(editor.state.doc):[0];
+  const currentPage=editor?noteCurrentPage(editor.state.doc,editor.state.selection.from):1;
   const setSearchDecoration=(query:string,active:number)=>{
     if(editor)editor.view.dispatch(editor.state.tr.setMeta(noteSearchKey,{query,active,caseSensitive:prefs.caseSensitive}));
   };
@@ -908,6 +911,22 @@ function EditorPage() {
               <span className="w-5 text-center">{item.icon}</span>{item.label}
             </button>)}
           </div>}
+        {editor&&<div className="mt-2 flex flex-wrap items-center gap-1 rounded-lg border border-border px-2 py-1" aria-label="Страницы и перемещение блоков">
+          <span className="mr-1 text-xs text-muted-foreground">Страница {currentPage}/{pagePositions.length}</span>
+          <button type="button" aria-label="Предыдущая страница" disabled={currentPage<=1}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>editor.chain().focus().setTextSelection(pagePositions[currentPage-2]).run()}>‹</button>
+          <button type="button" aria-label="Следующая страница" disabled={currentPage>=pagePositions.length}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>editor.chain().focus().setTextSelection(pagePositions[currentPage]).run()}>›</button>
+          <span className="mx-1 h-4 w-px bg-border"/>
+          <button type="button" aria-label="Поднять блок" title="Поднять выбранный блок" className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>moveSelectedWaveBlock(editor,"up")}>↑</button>
+          <button type="button" aria-label="Опустить блок" title="Опустить выбранный блок" className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>moveSelectedWaveBlock(editor,"down")}>↓</button>
+          <button type="button" aria-label="Вынести блок из раздела" title="Вынести блок из вложенного раздела" className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>liftWaveBlock(editor,()=>selectedWaveBlockPos(editor))}>↗</button>
+        </div>}
         {outlineOpen&&<div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-border bg-card p-2"
           role="navigation" aria-label="Оглавление заметки">
           <p className="px-2 pb-1 text-xs text-muted-foreground">Заголовки и разделы</p>
