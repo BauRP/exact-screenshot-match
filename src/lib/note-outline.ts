@@ -1,10 +1,17 @@
 import type {Node as PMNode} from "@tiptap/pm/model";
 export type OutlineItem={pos:number;depth:number;title:string;type:"heading"|"fold"|"page"};
 /** Navigation is derived from actual document content, without modifying it. */
+/** Determine structural nesting rather than giving every fold the same depth. */
+export function sectionDepth(doc:PMNode,pos:number):number{
+ const resolved=doc.resolve(Math.max(0,Math.min(pos,doc.content.size)));
+ let count=0;
+ for(let d=0;d<=resolved.depth;d++)if(resolved.node(d).type.name==="waveFold")count++;
+ return count;
+}
 export function collectNoteOutline(doc:PMNode):OutlineItem[]{
  const items:OutlineItem[]=[];
  let page=1;
- doc.descendants((node,pos)=>{
+ doc.descendants((node,pos,parent)=>{
   if(node.type.name==="wavePageBreak"){
    page+=1;
    items.push({pos,depth:1,title:(String(node.attrs.label||"").trim()||"Страница "+page),type:"page"});
@@ -12,7 +19,7 @@ export function collectNoteOutline(doc:PMNode):OutlineItem[]{
    const title=node.textContent.trim();
    if(title)items.push({pos,depth:Math.max(1,Math.min(6,Number(node.attrs.level)||2)),title:title.slice(0,140),type:"heading"});
   }else if(node.type.name==="waveFold"){
-   items.push({pos,depth:2,title:String(node.attrs.title||"Раздел").slice(0,140),type:"fold"});
+   items.push({pos,depth:Math.min(6,2+sectionDepth(doc,pos)),title:String(node.attrs.title||"Раздел").slice(0,140),type:"fold"});
   }
  });
  return items;
