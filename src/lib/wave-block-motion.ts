@@ -94,3 +94,42 @@ export function liftWaveBlock(editor:Editor,getPos:()=>number|undefined):boolean
  editor.view.dispatch(editor.state.tr.replaceWith(sectionStart,sectionStart+section.nodeSize,replacement).scrollIntoView());
  return true;
 }
+
+/** Place the selected block inside the immediately preceding folded section.
+ * All node content (including images, audio references and marks) is reused.
+ * ProseMirror schema validation rejects forbidden parent/child combinations. */
+export function nestSelectedWaveBlock(editor:Editor):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const pos=selectedWaveBlockPos(editor);
+ if(pos===undefined||pos<0)return false;
+ const {doc}=editor.state,$pos=doc.resolve(pos),parent=$pos.parent,index=$pos.index();
+ if(index<1||index>=parent.childCount||
+    parent.content.offsetAt(index)!==$pos.parentOffset)return false;
+ const previous=parent.child(index-1),moving=parent.child(index);
+ if(previous.type.name!=="waveFold")return false;
+ // Do not make a deeply nested structure unusable on a small phone.
+ let nestedDepth=0;
+ for(let i=0;i<=$pos.depth;i++)if($pos.node(i).type.name==="waveFold")nestedDepth++;
+ if(nestedDepth>=5)return false;
+ const childContent=previous.content.append(Fragment.from(moving));
+ if(!previous.type.validContent(childContent))return false;
+ const wrapped=previous.type.create({...previous.attrs,collapsed:false},childContent,previous.marks);
+ const replacement=Fragment.from(wrapped);
+ if(!parent.canReplace(index-1,index+1,replacement))return false;
+ const start=pos-previous.nodeSize;
+ editor.view.dispatch(editor.state.tr.replaceWith(start,pos+moving.nodeSize,replacement).scrollIntoView());
+ return true;
+}
+
+/** Duplicate selected block in place. This is a document edit, not a note copy. */
+export function duplicateSelectedWaveBlock(editor:Editor):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const pos=selectedWaveBlockPos(editor);
+ if(pos===undefined||pos<0)return false;
+ const {doc}=editor.state,$pos=doc.resolve(pos),parent=$pos.parent,index=$pos.index();
+ if(index>=parent.childCount||parent.content.offsetAt(index)!==$pos.parentOffset)return false;
+ const node=parent.child(index);
+ if(!parent.canReplace(index+1,index+1,Fragment.from(node)))return false;
+ editor.view.dispatch(editor.state.tr.insert(pos+node.nodeSize,node).scrollIntoView());
+ return true;
+}
