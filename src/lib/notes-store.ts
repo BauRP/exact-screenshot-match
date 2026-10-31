@@ -521,12 +521,14 @@ export function nextDefaultNoteTitle(base: string): string {
 }
 
 /** Fields whose change means the note content was actually modified. */
-const CONTENT_FIELDS = ["title", "body", "pdf", "style"] as const;
+const CONTENT_FIELDS = ["title", "body", "pdf", "style", "reminderAt"] as const;
 
 function touchesContent(note: Note, patch: Partial<Note>): boolean {
   return CONTENT_FIELDS.some((field) => {
     if (!(field in patch)) return false;
     const next = patch[field];
+    // Clearing a saved reminder is a real edit, not a no-op.
+    if (field === "reminderAt") return next !== note.reminderAt;
     if (next === undefined) return false;
     if (field === "style" || field === "pdf") {
       return JSON.stringify({ ...(note[field] as object), ...(next as object) }) !== JSON.stringify(note[field] ?? {});
