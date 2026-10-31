@@ -83,7 +83,7 @@ import {inspectWaveFile,receiveWaveNote,shareWaveNote} from "@/lib/note-transfer
 import {findReturnedOriginal,combineReturnedBodies,replacementBackup} from "@/lib/wave-note-conflicts";
 import {noteMatchesSearch,type NoteSearchFilter} from "@/lib/note-search";
 import {shareNoteExport,type NoteExportFormat} from "@/lib/note-export";
-import {reminderIsDue,reminderPresetTime,reminderLabel} from "@/lib/note-reminders";
+import {reminderIsDue,snoozeReminderTime,reminderLabel,type ReminderSnooze} from "@/lib/note-reminders";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -234,9 +234,9 @@ function Index() {
   const dueNotes=useMemo(()=>notes.filter(note=>
     (activeFolder==="all"||(note.folderId??"all")===activeFolder)&&reminderIsDue(note.reminderAt)
   ).sort((a,b)=>(a.reminderAt??0)-(b.reminderAt??0)).slice(0,3),[notes,activeFolder,reminderMinute]);
-  const changeDueReminder=(id:string,operation:"tomorrow"|"clear")=>{
+  const changeDueReminder=(id:string,operation:ReminderSnooze|"clear")=>{
     try{
-      updateNote(id,{reminderAt:operation==="clear"?undefined:reminderPresetTime("tomorrow")});
+      updateNote(id,{reminderAt:operation==="clear"?undefined:snoozeReminderTime(operation)});
       toast.success(operation==="clear"?"Напоминание снято":"Перенесено на завтра");
     }catch(error){toast.error(error instanceof Error?error.message:"Не удалось изменить напоминание");}
   };
@@ -529,8 +529,21 @@ function Index() {
                       <span className="block truncate font-semibold">{note.title}</span>
                       <span className="text-muted-foreground">{reminderLabel(note.reminderAt)}</span>
                     </button>
-                    <button type="button" onClick={()=>changeDueReminder(note.id,"tomorrow")}
-                      className="rounded-md border border-border px-2 py-2 text-xs">Завтра</button>
+                    <select aria-label={"Отложить напоминание: "+note.title}
+                      className="max-w-32 rounded-md border border-border bg-background px-1 py-2 text-xs"
+                      defaultValue="" onChange={event=>{
+                        const value=event.target.value as ReminderSnooze;
+                        if(value)changeDueReminder(note.id,value);
+                        event.target.value="";
+                      }}>
+                      <option value="" disabled>Отложить</option>
+                      <option value="quarter">15 минут</option>
+                      <option value="hour">1 час</option>
+                      <option value="threeHours">3 часа</option>
+                      <option value="tomorrow">Завтра 09:00</option>
+                      <option value="threeDays">Через 3 дня</option>
+                      <option value="week">Через неделю</option>
+                    </select>
                     <button type="button" onClick={()=>changeDueReminder(note.id,"clear")}
                       className="rounded-md border border-border px-2 py-2 text-xs">Снять</button>
                   </div>)}
