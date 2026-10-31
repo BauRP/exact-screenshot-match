@@ -15,9 +15,35 @@ export function parseNoteQuery(input:string, selected:NoteSearchFilter="all"):Pa
   return {filter:match?match[1].toLowerCase() as NoteSearchFilter:selected,
     query:match?trimmed.slice(match[0].length).trim():trimmed};
 }
+/** Remove Tape-marked spans (and all nested markup) from previews.
+ * A single regex would stop at the first inner </span> and reveal the rest.
+ * This scanner is pure and also runs in the Node-based CI tests. */
+export function concealTapeHtml(html:string):string{
+ const tag=/<\\/?span\\b[^>]*>/gi;
+ let out="",last=0,hiddenDepth=0;
+ const spans:boolean[]=[];
+ for(const match of html.matchAll(tag)){
+  const at=match.index,token=match[0];
+  if(hiddenDepth===0)out+=html.slice(last,at);
+  if(/^<\\/span/i.test(token)){
+   const hidden=spans.pop()===true;
+   if(hidden)hiddenDepth=Math.max(0,hiddenDepth-1);
+   else if(hiddenDepth===0)out+=token;
+  }else{
+   const hidden=hiddenDepth>0||/\\bdata-wave-tape(?:\\s|=|>)/i.test(token);
+   if(hidden&&hiddenDepth===0)out+=" [Скрытый ответ] ";
+   spans.push(hidden);
+   if(hidden)hiddenDepth++;
+   else out+=token;
+  }
+  last=at+token.length;
+ }
+ if(hiddenDepth===0)out+=html.slice(last);
+ return out;
+}
 export function readableText(html:string):string {
   // Do not reveal deliberately concealed Tape answers in list previews/search.
-  return html.replace(/<span\b[^>]*data-wave-tape(?:\s|=|>)[^>]*>[\s\S]*?<\/span>/gi," [Скрытый ответ] ")
+  return concealTapeHtml(html)
     .replace(/<[^>]+>/g," ").replace(/&(?:nbsp|#160);/gi," ")
     .replace(/&amp;/gi,"&").replace(/&lt;/gi,"<").replace(/&gt;/gi,">")
     .replace(/&quot;/gi,'"').replace(/&#39;/gi,"'").replace(/\s+/g," ");
