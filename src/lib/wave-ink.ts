@@ -54,6 +54,11 @@ export function inkStrokeAt(strokes:InkStroke[],point:InkPoint,radius=22):number
 function segmentCrosses(a:InkPoint,b:InkPoint,c:InkPoint,d:InkPoint):boolean {
  const cross=(p:InkPoint,q:InkPoint,z:InkPoint)=>(q[0]-p[0])*(z[1]-p[1])-(q[1]-p[1])*(z[0]-p[0]);
  const x=cross(a,b,c),y=cross(a,b,d),u=cross(c,d,a),v=cross(c,d,b);
+ // Collinear but distant segments do not intersect.
+ if(x===0&&y===0&&u===0&&v===0){
+  return Math.max(Math.min(a[0],b[0]),Math.min(c[0],d[0]))<=Math.min(Math.max(a[0],b[0]),Math.max(c[0],d[0]))&&
+    Math.max(Math.min(a[1],b[1]),Math.min(c[1],d[1]))<=Math.min(Math.max(a[1],b[1]),Math.max(c[1],d[1]));
+ }
  return ((x>=0&&y<=0)||(x<=0&&y>=0))&&((u>=0&&v<=0)||(u<=0&&v>=0));
 }
 export function inkStrokeAlong(strokes:InkStroke[],from:InkPoint,to:InkPoint,radius=22):number{
