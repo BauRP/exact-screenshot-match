@@ -552,13 +552,13 @@ async function reclaimDetachedAttachments(previousBody:string):Promise<void>{
     const usedImages=new Set(state.notes.flatMap(note=>imageIdsInHtml(note.body)));
     const staleAudio=[...new Set(audioIdsInHtml(previousBody))].filter(id=>!usedAudio.has(id));
     const staleImages=[...new Set(imageIdsInHtml(previousBody))].filter(id=>!usedImages.has(id));
+    // Recheck once against the latest state; it may have changed while
+    // IndexedDB was opening (e.g. a copied note restored a reference).
+    const latestAudio=new Set(state.notes.flatMap(note=>audioIdsInHtml(note.body)));
+    const latestImages=new Set(state.notes.flatMap(note=>imageIdsInHtml(note.body)));
     const results=await Promise.allSettled([
-      ...staleAudio.map(async id=>{
-        if(!state.notes.some(note=>audioIdsInHtml(note.body).includes(id)))await deleteAudioFile(id);
-      }),
-      ...staleImages.map(async id=>{
-        if(!state.notes.some(note=>imageIdsInHtml(note.body).includes(id)))await deleteImageFile(id);
-      }),
+      ...staleAudio.filter(id=>!latestAudio.has(id)).map(id=>deleteAudioFile(id)),
+      ...staleImages.filter(id=>!latestImages.has(id)).map(id=>deleteImageFile(id)),
     ]);
     for(const result of results)if(result.status==="rejected")
       console.error("Unable to reclaim unused note attachment",result.reason);
