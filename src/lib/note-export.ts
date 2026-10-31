@@ -24,6 +24,7 @@ function plainNode(node:Node):string{
   if(node.nodeType!==1)return "";
   const el=node as Element,tag=el.tagName;
   if(tag==="BR")return "\n";
+  if(el.hasAttribute("data-wave-page-break"))return "\n\n--- Новая страница ---\n\n";
   if(tag==="IMG")return "[Изображение — сохраните .wnote для передачи вложения]";
   if(tag==="AUDIO")return "[Аудиозапись — сохраните .wnote для передачи вложения]";
   const inner=Array.from(node.childNodes).map(plainNode).join("");
@@ -43,6 +44,9 @@ function sanitizedBody(note:Note):string{
     const el=node as HTMLElement, tag=el.tagName;
     if(["SCRIPT","STYLE","IFRAME","OBJECT","EMBED","FORM","META","LINK","SVG"].includes(tag))return doc.createTextNode("");
     if(tag==="IMG"||tag==="AUDIO")return doc.createTextNode("[Вложение — используйте .wnote]");
+    if(el.hasAttribute("data-wave-page-break")){
+      const page=doc.createElement("div");page.setAttribute("style","break-after:page;page-break-after:always;border-top:1px dashed #888;margin:24px 0");return page;
+    }
     const safeTag=keep.has(tag)?tag.toLowerCase():"span";
     const out=doc.createElement(safeTag);
     if(tag==="A"){
@@ -120,6 +124,7 @@ function wordBody(note:Note):string{
     }
     if(node.nodeType!==1)return;
     const el=node as Element,tag=el.tagName;
+    if(el.hasAttribute("data-wave-page-break")){paragraphs.push("<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>");return;}
     if(["P","H1","H2","H3","H4","H5","H6","LI","BLOCKQUOTE","PRE"].includes(tag)||el.getAttribute("data-type")==="wave-check-item"){
       const prefix=el.getAttribute("data-type")==="wave-check-item"?(el.getAttribute("data-done")==="true"?"[x] ":"[ ] "):tag==="LI"?"• ":"";
       paragraphs.push(wordParagraph(docxRun(prefix)+inlineWord(node),/^H[1-6]$/.test(tag)));
@@ -166,6 +171,9 @@ function exportItems(note:Note):ExportItem[]{
    const width=Number(el.getAttribute("data-width"))||320;
    items.push({kind:"image",id,ink:el.getAttribute("data-ink")||"[]",width:Math.min(720,Math.max(120,width))});
    return;
+  }
+  if(el.hasAttribute("data-wave-page-break")){
+   items.push({kind:"text",text:"— Новая страница —",heading:false});return;
   }
   if(el.hasAttribute("data-wave-drawing")){
    items.push({kind:"drawing",ink:el.getAttribute("data-wave-ink")||"[]"});
