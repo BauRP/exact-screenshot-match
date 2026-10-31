@@ -77,7 +77,7 @@ import {
 import { useT } from "@/lib/i18n";
 import { APP_FONTS, fontNameFromCss } from "@/lib/app-fonts";
 import { InNoteSearch, noteSearchKey, findWords } from "@/lib/in-note-search";
-import { readEditorPreferences } from "@/lib/editor-preferences";
+import { readEditorPreferences,type EditorTool } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
@@ -156,6 +156,7 @@ function EditorPage() {
   const [findActive,setFindActive]=useState(0);
   const [checkShape,setCheckShape]=useState<CheckShape>("square");
   const [prefs]=useState(()=>readEditorPreferences());
+  const toolVisible=(tool:EditorTool)=>!prefs.hiddenToolbar.includes(tool);
   const [slashText,setSlashText]=useState<string|null>(null);
 
   const [currentFontFamily, setCurrentFontFamily] = useState(FONTS[0].value);
@@ -726,7 +727,7 @@ function EditorPage() {
           >
             <Redo2 className="h-4 w-4" />
           </button>
-          <button
+                    {toolVisible("audio")&&<button
             onClick={recording ? stopRecording : startRecording}
             disabled={startingAudio}
             className={`grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary ${
@@ -735,19 +736,19 @@ function EditorPage() {
             aria-label={t("audio")}
           >
             {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-          </button>
-          <button type="button" onClick={()=>editor?.chain().focus().insertWaveDrawing().run()}
+          </button>}
+          {toolVisible("drawing")&&<button type="button" onClick={()=>editor?.chain().focus().insertWaveDrawing().run()}
             aria-label="Добавить рисунок" className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
             <PenTool className="h-4 w-4"/>
-          </button>
-          <button type="button" onClick={addCameraImage} aria-label="Сфотографировать для заметки"
+          </button>}
+          {toolVisible("camera")&&<button type="button" onClick={addCameraImage} aria-label="Сфотографировать для заметки"
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
             <Camera className="h-4 w-4"/>
-          </button>
-          <button type="button" onClick={addImage} aria-label="Добавить фотографию из галереи"
+          </button>}
+          {toolVisible("gallery")&&<button type="button" onClick={addImage} aria-label="Добавить фотографию из галереи"
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
             <ImagePlus className="h-4 w-4"/>
-          </button>
+          </button>}
           <button
             onClick={handlePin}
             className={`grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary ${
@@ -758,17 +759,17 @@ function EditorPage() {
             <Star className="h-4 w-4" fill={pinned ? "currentColor" : "none"} />
           </button>
 
-          <button type="button" aria-label="Оглавление заметки" aria-expanded={outlineOpen}
+          {toolVisible("outline")&&<button type="button" aria-label="Оглавление заметки" aria-expanded={outlineOpen}
             onClick={()=>setOutlineOpen(open=>!open)}
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
             <ListTree className="h-4 w-4"/>
-          </button>
-          <button type="button" onClick={()=>findOpen?dismissFind():setFindOpen(true)}
+          </button>}
+          {toolVisible("search")&&<button type="button" onClick={()=>findOpen?dismissFind():setFindOpen(true)}
             aria-label="Найти в заметке" aria-expanded={findOpen}
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
             <Search className="h-4 w-4"/>
-          </button>
-          <Popover>
+          </button>}
+          {toolVisible("checklist")&&<Popover>
             <PopoverTrigger asChild>
               <button type="button" aria-label="Добавить список дел" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
                 <ListChecks className="h-4 w-4"/>
@@ -821,7 +822,7 @@ function EditorPage() {
               </button>)}
             </PopoverContent>
           </Popover>
-          <Popover>
+          {toolVisible("insert")&&<Popover>
             <PopoverTrigger asChild>
               <button type="button" aria-label="Вставить блок" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
                 <Blocks className="h-4 w-4"/>
@@ -837,7 +838,7 @@ function EditorPage() {
                 <span className="w-5 text-center">{item.icon}</span>{item.label}
               </button>)}
             </PopoverContent>
-          </Popover>
+          </Popover>}
           <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
           {editor && (
             <>
