@@ -1,5 +1,6 @@
 import type {Editor} from "@tiptap/react";
 import type {Node as PMNode} from "@tiptap/pm/model";
+import type {CheckShape} from "./wave-checklist";
 
 export type ChecklistCounts={total:number;done:number;pending:number};
 export function countDocumentTasks(doc:PMNode):ChecklistCounts{
@@ -27,4 +28,21 @@ export function setDocumentTasksDone(editor:Editor,done:boolean):number{
  for(const item of updates)tr=tr.setNodeMarkup(item.pos,undefined,item.attrs);
  editor.view.dispatch(tr.scrollIntoView());
  return updates.length;
+}
+
+/** Change the saved marker of the current task, without inserting a new row.
+ * A single transaction makes this change undoable and preserves task text. */
+export function setSelectedChecklistShape(editor:Editor,shape:CheckShape):boolean{
+ if(!editor.isEditable||editor.isDestroyed||
+    !["square","circle","diamond","check"].includes(shape))return false;
+ const {$from}=editor.state.selection;
+ for(let depth=$from.depth;depth>0;depth--){
+  const node=$from.node(depth);
+  if(node.type.name!=="waveChecklistItem")continue;
+  const pos=$from.before(depth);
+  if(node.attrs.shape===shape)return true;
+  editor.view.dispatch(editor.state.tr.setNodeMarkup(pos,undefined,{...node.attrs,shape}).scrollIntoView());
+  return true;
+ }
+ return false;
 }
