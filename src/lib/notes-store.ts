@@ -1,3 +1,4 @@
+import {validReminderTime} from "./note-reminders";
 import { useSyncExternalStore } from "react";
 import { markBackupDirty } from "./backup-signals";
 import { NEW_NOTE_YELLOW,NEW_NOTE_INK } from "./note-appearance";
@@ -68,6 +69,7 @@ export type Note = {
   createdAt: number;
   updatedAt: number;
   pinned?: boolean;
+  reminderAt?: number;
   folderId?: string;
   cardColor?: string;
   manualOrder?: number;
@@ -169,6 +171,7 @@ function normalizeNote(input: unknown): Note | null {
     createdAt,
     updatedAt,
     pinned: input.pinned === true,
+    reminderAt: validReminderTime(input.reminderAt),
     folderId,
     cardColor: typeof input.cardColor === "string" && /^#[0-9a-f]{6}$/i.test(input.cardColor) ? input.cardColor : undefined,
     manualOrder: typeof input.manualOrder === "number" && Number.isSafeInteger(input.manualOrder) && input.manualOrder>=0 ? input.manualOrder : undefined,
@@ -473,6 +476,7 @@ export function createNote(partial?: Partial<Note>): Note {
     createdAt: partial?.createdAt ?? now,
     updatedAt: partial?.updatedAt ?? now,
     pinned: partial?.pinned ?? false,
+    reminderAt: validReminderTime(partial?.reminderAt),
     folderId: partial?.folderId ?? "all",
     cardColor: partial?.cardColor,
     manualOrder: partial?.manualOrder,
