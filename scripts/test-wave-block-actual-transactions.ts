@@ -1,10 +1,11 @@
 import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection} from "@tiptap/pm/state";
-import {moveSelectedWaveBlock,nestSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,duplicateSelectedWaveBlock} from "../src/lib/wave-block-motion";
+import {moveSelectedWaveBlock,nestSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,duplicateSelectedWaveBlock,setSelectedCalloutKind} from "../src/lib/wave-block-motion";
 const schema=new Schema({
  nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},
  waveFold:{group:"block",content:"block+",attrs:{title:{default:"Section"},collapsed:{default:false}}},
+ waveCallout:{group:"block",content:"block+",attrs:{kind:{default:"important"}}},
  text:{group:"inline"}},marks:{}
 });
 const p=(t:string)=>schema.nodes.paragraph.create(null,schema.text(t));
@@ -37,5 +38,11 @@ assert.equal(state.doc.child(2).textContent,"inside");
 select("last");
 assert.equal(duplicateSelectedWaveBlock(editor),true);
 assert.deepEqual(top(),["first","second","waveFold","last","last"]);
+const last=state.doc.content.size;
+state=state.apply(state.tr.insert(last,schema.nodes.waveCallout.create({kind:"important"},[p("important text")])));
+select("important text");
+assert.equal(setSelectedCalloutKind(editor,"warning"),true);
+assert.equal(state.doc.lastChild?.attrs.kind,"warning");
+assert.equal(state.doc.lastChild?.textContent,"important text");
 assert.equal(state.doc.check(),undefined);
 console.log("Actual ProseMirror move, nesting, outdent and duplicate transactions passed");
