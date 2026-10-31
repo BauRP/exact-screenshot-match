@@ -537,7 +537,7 @@ function Index() {
                 </div>
                 <p className="mt-2 text-[11px] text-muted-foreground">Напоминания отображаются внутри приложения; Android-уведомления пока не включены.</p>
               </section>}
-              <NotesGrid view={view} notes={filteredNotes} selected={selected} onToggle={toggleSelected} onOpen={openNote}
+              <NotesGrid view={view} notes={filteredNotes} selected={selected} searchQuery={searchOpen?searchTerm:""} onToggle={toggleSelected} onOpen={openNote}
               onMove={(id,target)=>{try{if(moveNoteBefore(id,target))toast.success("Порядок заметок сохранён");}catch(error){toast.error(error instanceof Error?error.message:"Не удалось переместить");}}} />
             </>
           )}
@@ -974,6 +974,7 @@ function NotesGrid({
   view,
   notes,
   selected,
+  searchQuery,
   onToggle,
   onOpen,
   onMove,
@@ -981,6 +982,7 @@ function NotesGrid({
   view: ViewMode;
   notes: Note[];
   selected: Set<string>;
+  searchQuery:string;
   onToggle: (id: string) => void;
   onOpen: (note: Note) => void;
   onMove: (sourceId:string,targetId:string) => void;
@@ -995,6 +997,7 @@ function NotesGrid({
       {notes.map((note, index) => (
         <Fragment key={note.id}>
           <NoteCard
+            searchQuery={searchQuery}
             note={note}
             view={view}
             selected={selected.has(note.id)}
