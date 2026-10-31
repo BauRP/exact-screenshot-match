@@ -151,6 +151,9 @@ jobs:
       - name: Execute drawing eraser geometry and serialization tests
         run: bun scripts/test-wave-ink-geometry.ts
 
+      - name: Verify audio error messages and retry action
+        run: bun scripts/test-wave-audio-retry.ts
+
       - name: Verify editor ink and photo annotations
         run: bun scripts/test-wave-ink.ts
 
