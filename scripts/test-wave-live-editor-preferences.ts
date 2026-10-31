@@ -1,0 +1,10 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+const pref=readFileSync("src/lib/editor-preferences.ts","utf8");
+const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
+const settings=readFileSync("src/routes/settings.tsx","utf8");
+for(const m of ["EDITOR_PREFS_CHANGED","window.dispatchEvent(new Event(EDITOR_PREFS_CHANGED))"])assert.ok(pref.includes(m),m);
+for(const m of ["window.addEventListener(EDITOR_PREFS_CHANGED,refresh)","window.addEventListener(\"storage\",refresh)","setPrefs(readEditorPreferences())","setSearchDecoration(findQuery,findActive)","targetPos=Math.min(editor.state.doc.content.size"])assert.ok(editor.includes(m),m);
+assert.ok(settings.includes("saveEditorPreferences(patch)"));
+assert.ok(!editor.includes("editor.view.domAtPos(item.pos+1)"));
+console.log("Live editor preferences, search highlight and page navigation wiring passed");
