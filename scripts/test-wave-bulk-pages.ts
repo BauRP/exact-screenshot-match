@@ -1,0 +1,18 @@
+import {strict as assert} from "node:assert";
+import {Schema} from "@tiptap/pm/model";
+import {renameCurrentPage,collectNoteOutline} from "../src/lib/note-outline";
+import {readFileSync} from "node:fs";
+const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},wavePageBreak:{group:"block",atom:true,attrs:{label:{default:""}}},text:{group:"inline"}},marks:{}});
+const p=schema.nodes.paragraph.create(null,schema.text("Hello"));
+const page=schema.nodes.wavePageBreak.create({label:"Задачи"});
+const doc=schema.nodes.doc.create(null,[p,page,p]);
+const next=renameCurrentPage(doc,p.nodeSize+1,"Новый план");
+assert.deepEqual(next,{pos:p.nodeSize,label:"Новый план"});
+assert.equal(renameCurrentPage(doc,0,"x"),undefined);
+assert.equal(collectNoteOutline(doc).some(item=>item.type==="page"&&item.title==="Задачи"),true);
+const checklist=readFileSync("src/lib/wave-checklist-batch.ts","utf8");
+const folds=readFileSync("src/lib/wave-section-batch.ts","utf8");
+const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
+for(const source of [checklist,folds])assert.ok(source.includes("editor.view.dispatch(tr)"));
+for(const marker of ["setAllChecklistItems(editor,true)","setAllChecklistItems(editor,false)","setAllFoldSections(editor,true)","setAllFoldSections(editor,false)","Переименовать текущую страницу"])assert.ok(editor.includes(marker),marker);
+console.log("Saved page labels and bulk task/section commands checked");
