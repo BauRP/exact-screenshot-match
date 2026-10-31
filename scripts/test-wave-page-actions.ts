@@ -1,0 +1,24 @@
+import {strict as assert} from "node:assert";
+import {Schema} from "@tiptap/pm/model";
+import {EditorState,TextSelection} from "@tiptap/pm/state";
+import {duplicateCurrentPage,moveCurrentPage,topLevelPageRanges} from "../src/lib/wave-page-actions";
+const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},wavePageBreak:{group:"block",atom:true,attrs:{label:{default:""}}},waveFold:{group:"block",content:"block+"},text:{group:"inline"}},marks:{}});
+const p=(s:string)=>schema.nodes.paragraph.create(null,schema.text(s));
+const page=(s:string)=>schema.nodes.wavePageBreak.create({label:s});
+let state=EditorState.create({schema,doc:schema.nodes.doc.create(null,[p("one"),page("second"),p("two"),page("third"),p("three")])});
+const editor={isEditable:true,isDestroyed:false,get state(){return state;},view:{dispatch(tr:any){state=state.apply(tr);}}} as any;
+const choose=(index:number)=>{const pages=topLevelPageRanges(state.doc);state=state.apply(state.tr.setSelection(TextSelection.create(state.doc,pages[index].bodyStart+1)));};
+assert.equal(topLevelPageRanges(state.doc).length,3);
+choose(1);assert.equal(duplicateCurrentPage(editor),true);
+assert.equal(topLevelPageRanges(state.doc).length,4);
+assert.equal(state.doc.textContent,"onetwotwothree");
+assert.ok(state.doc.textContent.includes("three"));
+choose(2);assert.equal(moveCurrentPage(editor,"down"),true);
+assert.equal(state.doc.textContent,"onetwothreetwo");
+assert.equal(moveCurrentPage(editor,"up"),false); // Selection no longer inside moved page: must reselect
+choose(3);assert.equal(moveCurrentPage(editor,"up"),true);
+assert.equal(state.doc.textContent,"onetwotwothree");
+choose(0);assert.equal(moveCurrentPage(editor,"up"),false);
+const nested=schema.nodes.doc.create(null,[p("x"),schema.nodes.waveFold.create(null,[page("nested"),p("y")])]);
+assert.deepEqual(topLevelPageRanges(nested),[]);
+console.log("Safe page duplication and reordering passed");
