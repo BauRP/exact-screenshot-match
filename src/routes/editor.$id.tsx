@@ -878,10 +878,10 @@ function EditorPage() {
               style={{paddingLeft:Math.min(item.depth,5)*8+8}}
               onClick={()=>{
                 if(!editor)return;
-                editor.chain().focus().setTextSelection(item.pos+1).run();
+                editor.chain().focus().setTextSelection(Math.min(editor.state.doc.content.size,item.pos+(item.type==="page"?0:1))).run();
                 editor.view.domAtPos(item.pos+1).node.parentElement?.scrollIntoView({block:"nearest",behavior:"smooth"});
               }}>
-              {item.type==="fold"?"▸ ":"§ "}{item.title}
+              {item.type==="page"?"▤ ":item.type==="fold"?"▸ ":"§ "}{item.title}
             </button>)}
         </div>}
         {findOpen && <div role="search" aria-label="Поиск внутри заметки"
