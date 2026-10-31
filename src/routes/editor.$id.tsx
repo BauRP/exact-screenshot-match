@@ -35,6 +35,7 @@ import {
   EyeOff,
   CalendarDays,
   ImagePlus,
+  Camera,
   PenTool,
   ListTree,
 } from "lucide-react";
@@ -65,6 +66,7 @@ import { WaveImage } from "@/components/editor/WaveImage";
 import { WaveDrawing } from "@/components/editor/WaveDrawing";
 import {collectNoteOutline} from "@/lib/note-outline";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
+import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
 import { useFolders, type Folder } from "@/lib/folders-store";
 import {
   DropdownMenu,
@@ -136,6 +138,9 @@ function EditorPage() {
   const settleRecordingRef = useRef<{ resolve: () => void; reject: (reason?: unknown) => void } | null>(null);
   const createdAudioIdsRef=useRef(new Set<string>());
   const createdImageIdsRef=useRef(new Set<string>());
+  const pendingImagesRef=useRef(new Set<Promise<void>>());
+  const enqueueImageRef=useRef<((load:()=>Promise<Blob>)=>void)|null>(null);
+  const imageSessionRef=useRef(true);
   const committedNoteRef=useRef(false);
   const cleanupNewAudio=async(keep: string[] = [])=>{
     const retained=new Set(keep);
@@ -250,6 +255,16 @@ function EditorPage() {
         });
         return true;
       },
+      handlePaste(_view,event){
+        const file=clipboardImage(event);
+        if(!file)return false;
+        event.preventDefault();enqueueImageRef.current?.(()=>Promise.resolve(file));return true;
+      },
+      handleDrop(_view,event){
+        const file=droppedImage(event);
+        if(!file)return false;
+        event.preventDefault();enqueueImageRef.current?.(()=>Promise.resolve(file));return true;
+      },
       attributes: {
         class:
           "sn-tiptap min-h-full w-full whitespace-pre-wrap break-words outline-none",
@@ -307,7 +322,10 @@ function EditorPage() {
         recorderRef.current?.state === "recording" && recorderRef.current.stop();
         streamRef.current?.getTracks().forEach((t) => t.stop());
       } catch {}
+      imageSessionRef.current=false;
       if (!committedNoteRef.current) {
+        void Promise.allSettled([...pendingImagesRef.current]).then(()=>
+          Promise.allSettled([...createdImageIdsRef.current].map(id=>deleteImageFile(id))));
         // Native Back or page teardown can bypass the editor's Cancel button.
         const pending=recordingWriteRef.current;
         void (pending ? pending.catch(()=>undefined) : Promise.resolve()).then(()=>
@@ -392,6 +410,7 @@ function EditorPage() {
   const handleDiscard = async () => {
     if (recorderRef.current?.state === "recording" || nativeRecordingRef.current) stopRecording();
     await recordingWriteRef.current?.catch(()=>undefined);
+    await Promise.allSettled([...pendingImagesRef.current]);
     await cleanupNewAudio();
     await Promise.allSettled([...createdImageIdsRef.current].map(id=>deleteImageFile(id)));
     createdImageIdsRef.current.clear();
@@ -409,6 +428,8 @@ function EditorPage() {
     if (startingAudioRef.current) throw new Error("Подождите, пока микрофон включится.");
     if (recorderRef.current?.state === "recording" || nativeRecordingRef.current) stopRecording();
     if (recordingWriteRef.current) await recordingWriteRef.current;
+    // Never commit note markup before pending camera/gallery/clipboard writes settle.
+    await Promise.allSettled([...pendingImagesRef.current]);
     const body = editor?.getHTML() ?? "";
     const plain = (editor?.getText() ?? "").trim();
     const hasImages=imageIdsInHtml(body).length>0;
@@ -497,25 +518,38 @@ function EditorPage() {
     return f.name;
   };
 
+  const enqueueImage=(load:()=>Promise<Blob>)=>{
+    if(!editor||savingRef.current)return;
+    const job=(async()=>{
+      let imageId:string|null=null;
+      try{
+        const valid=await verifiedNoteImage(await load());
+        if(!imageSessionRef.current||editor.isDestroyed)return;
+        imageId=await saveImageFile(valid);
+        createdImageIdsRef.current.add(imageId);
+        if(!imageSessionRef.current||editor.isDestroyed||!editor.chain().focus().insertWaveImage(imageId).run()){
+          throw Error("Не удалось вставить фотографию");
+        }
+      }catch(error){
+        if(imageId){await deleteImageFile(imageId).catch(console.error);createdImageIdsRef.current.delete(imageId);}
+        if(imageSessionRef.current)toast.error(error instanceof Error?error.message:"Не удалось добавить изображение");
+      }
+    })();
+    pendingImagesRef.current.add(job);
+    void job.finally(()=>pendingImagesRef.current.delete(job));
+  };
   const addImage=()=>{
     if(!editor||savingRef.current)return;
     const picker=document.createElement("input");
     picker.type="file";picker.accept="image/jpeg,image/png,image/webp";picker.style.display="none";
     picker.addEventListener("change",()=>{
       const file=picker.files?.[0];picker.remove();
-      if(!file)return;
-      void (async()=>{
-        try{
-          const id=await saveImageFile(file);
-          createdImageIdsRef.current.add(id);
-          if(editor.isDestroyed||!editor.chain().focus().insertWaveImage(id).run()){
-            throw Error("Не удалось вставить фотографию");
-          }
-        }catch(error){toast.error(error instanceof Error?error.message:"Ошибка добавления фото");}
-      })();
+      if(file)enqueueImage(()=>Promise.resolve(file));
     },{once:true});
     document.body.append(picker);picker.click();
   };
+  enqueueImageRef.current=enqueueImage;
+  const addCameraImage=()=>enqueueImage(takeNotePhoto);
   const attachAudio = async (blob: Blob) => {
     if (!blob.size) throw new Error("Пустая аудиозапись");
     const audioId=await saveAudioFile(blob);
@@ -703,6 +737,10 @@ function EditorPage() {
           <button type="button" onClick={()=>editor?.chain().focus().insertWaveDrawing().run()}
             aria-label="Добавить рисунок" className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
             <PenTool className="h-4 w-4"/>
+          </button>
+          <button type="button" onClick={addCameraImage} aria-label="Сфотографировать для заметки"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
+            <Camera className="h-4 w-4"/>
           </button>
           <button type="button" onClick={addImage} aria-label="Добавить фотографию из галереи"
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
