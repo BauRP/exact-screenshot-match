@@ -1,8 +1,8 @@
 /** Safe offline import of formatted HTML from browsers and other apps.
  * The clipboard is untrusted; never load remote images or execute embeds.
  * Tiptap will parse the returned small allowlisted HTML into editor nodes. */
-const allowed=new Set(["P","DIV","BR","H1","H2","H3","H4","H5","H6","UL","OL","LI","BLOCKQUOTE","STRONG","B","EM","I","U","S","DEL","CODE","PRE","A","SPAN","HR"]);
-const forbidden=new Set(["SCRIPT","STYLE","IFRAME","OBJECT","EMBED","FORM","INPUT","META","LINK","SVG","MATH","VIDEO","AUDIO","NOSCRIPT"]);
+const allowed=new Set(["P","DIV","BR","H1","H2","H3","H4","H5","H6","UL","OL","LI","TABLE","THEAD","TBODY","TFOOT","TR","TH","TD","BLOCKQUOTE","STRONG","B","EM","I","U","S","DEL","CODE","PRE","A","SPAN","HR"]);
+const forbidden=new Set(["SCRIPT","STYLE","IFRAME","OBJECT","EMBED","FORM","INPUT","META","LINK","SVG","MATH","VIDEO","AUDIO","NOSCRIPT","TEMPLATE","BUTTON","SELECT","TEXTAREA"]);
 const textBlock=new Set(["P","DIV","H1","H2","H3","H4","H5","H6","BLOCKQUOTE","PRE"]);
 export const MAX_PASTE_HTML=250_000;
 
@@ -36,7 +36,11 @@ export function safeBrowserClipboardHtml(html:string):string{
    if(["left","right","center","justify"].includes(align))out.style.textAlign=align;
    if(element.getAttribute("dir")==="rtl")out.setAttribute("dir","rtl");
   }
-  if(tag==="SPAN"){
+  if(tag==="OL"&&/^\d{1,5}$/.test(element.getAttribute("start")||""))out.setAttribute("start",element.getAttribute("start")!);
+ if(tag==="TH"||tag==="TD"){
+  for(const attr of ["rowspan","colspan"]){const raw=element.getAttribute(attr)||"";if(/^\d{1,2}$/.test(raw)&&Number(raw)>=1&&Number(raw)<=20)out.setAttribute(attr,raw);}
+ }
+ if(tag==="SPAN"){
    const ink=element.style.color;
    if(/^#[0-9a-f]{6}$/i.test(ink))out.style.color=ink;
   }
