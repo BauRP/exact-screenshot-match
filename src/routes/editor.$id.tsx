@@ -5,6 +5,7 @@ import { saveAudioFile, deleteAudioFile, audioIdsInHtml } from "@/lib/audio-file
 import { ColorGrid, PALETTE } from "@/components/ColorGrid";
 import {NEW_NOTE_INK,editorBackground,editorInk} from "@/lib/note-appearance";
 import { noteCaretColor } from "@/lib/note-caret-color";
+import {parseReminderInput,toReminderInput} from "@/lib/note-reminders";
 import { nativeAudioAvailable, startNativeAudio, stopNativeAudio } from "@/lib/native-audio";
 import {
   ArrowLeft,
@@ -124,6 +125,7 @@ function EditorPage() {
 
   const [title, setTitle] = useState(note?.title ?? "");
   const [pinned, setPinnedLocal] = useState(!!note?.pinned);
+  const [reminderAt,setReminderAt]=useState<string>(()=>toReminderInput(note?.reminderAt));
   const [folderId, setFolderId] = useState<string>(
     note?.folderId ?? folderParam ?? "all",
   );
@@ -174,6 +176,7 @@ function EditorPage() {
     syncedRef.current = true;
     setTitle(note.title);
     setPinnedLocal(!!note.pinned);
+    setReminderAt(toReminderInput(note.reminderAt));
     setFolderId(note.folderId ?? "all");
     if (note.style?.background) setCanvasBg(note.style.background);
     if (note.style?.paperMood) setPaperMood(note.style.paperMood);
@@ -442,6 +445,8 @@ function EditorPage() {
     const hasImages=imageIdsInHtml(body).length>0;
     const hasDrawing=body.includes("data-wave-drawing");
     const typedTitle = title.trim();
+    const reminderValue=reminderAt?parseReminderInput(reminderAt):undefined;
+    if(reminderAt&&reminderValue===undefined)throw new Error("Укажите правильную дату и время напоминания");
 
     if (isNew) {
       // A note that was opened and left blank is cancelled entirely.
@@ -457,6 +462,7 @@ function EditorPage() {
         body,
         folderId,
         pinned,
+        reminderAt:reminderValue,
         // Preserve dark default ink when the new yellow note is reopened.
         style: { background: canvasBg, color: NEW_NOTE_INK, paperMood, paperRule },
       });
@@ -466,6 +472,7 @@ function EditorPage() {
         body,
         folderId,
         pinned,
+        reminderAt:reminderValue,
         style: { background: canvasBg, paperMood, paperRule },
       });
     }
@@ -674,6 +681,22 @@ function EditorPage() {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" aria-label="Напоминание" className="grid h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-secondary">
+                <CalendarDays className="h-4 w-4"/>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" sideOffset={8} className="w-64 rounded-xl p-3">
+              <p className="mb-2 text-sm font-semibold">Напоминание к заметке</p>
+              <input type="datetime-local" aria-label="Дата и время напоминания" value={reminderAt}
+                onChange={event=>setReminderAt(event.target.value)}
+                className="w-full rounded-lg border border-border bg-background p-2 text-sm"/>
+              <button type="button" onClick={()=>setReminderAt("")}
+                className="mt-2 rounded-lg border border-border px-3 py-2 text-xs">Убрать напоминание</button>
+              <p className="mt-2 text-xs text-muted-foreground">Дата сохраняется без интернета. Системные уведомления пока не включены.</p>
+            </PopoverContent>
+          </Popover>
           <button
             type="button"
             onClick={handleSave}
