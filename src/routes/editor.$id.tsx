@@ -68,7 +68,7 @@ import { WaveDrawing } from "@/components/editor/WaveDrawing";
 import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection} from "@/lib/wave-text-direction";
 import {collectNoteOutline,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
-import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind} from "@/lib/wave-block-motion";
+import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
 import {safeBrowserClipboardHtml} from "@/lib/wave-smart-paste";
@@ -987,6 +987,9 @@ function EditorPage() {
             <option value="warning">Предупреждение</option>
             <option value="info">Информация</option>
           </select>
+          <button type="button" aria-label="Переместить раздел вверх" title="Переместить весь раздел вверх" className="rounded-md border px-2 py-1 text-xs" onClick={()=>moveContainingWaveSection(editor,"up")}>Раздел ↑</button>
+          <button type="button" aria-label="Переместить раздел вниз" title="Переместить весь раздел вниз" className="rounded-md border px-2 py-1 text-xs" onClick={()=>moveContainingWaveSection(editor,"down")}>Раздел ↓</button>
+          <button type="button" aria-label="Дублировать раздел" title="Дублировать раздел со всеми блоками" className="rounded-md border px-2 py-1 text-xs" onClick={()=>duplicateContainingWaveSection(editor)}>Раздел ⧉</button>
           <button type="button" aria-label="Вынести блок из раздела" title="Вынести блок из вложенного раздела" className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>liftWaveBlock(editor,()=>selectedWaveBlockPos(editor))}>↗</button>
         </div>}
