@@ -284,10 +284,18 @@ function EditorPage() {
         if(file){event.preventDefault();enqueueImageRef.current?.(()=>Promise.resolve(file));return true;}
         const html=event.clipboardData?.getData("text/html")||"";
         if(!html)return false;
-        event.preventDefault();
         const cleaned=safeBrowserClipboardHtml(html);
-        if(cleaned){const container=document.createElement("div");container.innerHTML=cleaned;const slice=PMDOMParser.fromSchema(_view.state.schema).parseSlice(container);_view.dispatch(_view.state.tr.replaceSelection(slice).scrollIntoView());}
-        return true;
+        // If HTML is rejected or cannot be represented, allow the editor to
+        // paste text/plain normally. Never silently discard clipboard text.
+        if(!cleaned)return false;
+        try{
+          const container=document.createElement("div");container.innerHTML=cleaned;
+          const slice=PMDOMParser.fromSchema(_view.state.schema).parseSlice(container);
+          if(!slice.content.size)return false;
+          event.preventDefault();
+          _view.dispatch(_view.state.tr.replaceSelection(slice).scrollIntoView());
+          return true;
+        }catch{return false;}
       },
       handleDrop(_view,event){
         const file=droppedImage(event);
