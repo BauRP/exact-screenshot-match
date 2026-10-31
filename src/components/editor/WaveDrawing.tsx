@@ -3,7 +3,6 @@ import {NodeViewWrapper,ReactNodeViewRenderer,type NodeViewProps} from "@tiptap/
 import {useState} from "react";
 import {WaveInkCanvas} from "@/components/editor/WaveInkCanvas";
 import {moveWaveBlock} from "@/lib/wave-block-motion";
-import {parseInk} from "@/lib/wave-ink";
 declare module "@tiptap/core"{
  interface Commands<ReturnType>{waveDrawing:{insertWaveDrawing:()=>ReturnType}}
 }
@@ -20,8 +19,6 @@ function DrawingView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewPr
       <button type="button" onClick={()=>setEditing(v=>!v)}
         aria-label={editing?"Завершить рисование":"Редактировать рисунок"}
         className="rounded-lg bg-secondary px-3 py-2 text-xs">{editing?"Готово":"Рисовать"}</button>
-      <button type="button" disabled={!parseInk(strokes).length}
-        onClick={()=>updateAttributes({strokes:"[]"})} className="rounded-lg border px-3 py-2 text-xs">Очистить</button>
       <button type="button" onClick={()=>moveWaveBlock(editor,getPos,"up")} aria-label="Поднять рисунок"
         className="rounded-lg border px-3 py-2 text-xs">↑</button>
       <button type="button" onClick={()=>moveWaveBlock(editor,getPos,"down")} aria-label="Опустить рисунок"
