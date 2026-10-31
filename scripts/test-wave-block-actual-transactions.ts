@@ -1,7 +1,7 @@
 import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection} from "@tiptap/pm/state";
-import {moveSelectedWaveBlock,nestSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,duplicateSelectedWaveBlock,setSelectedCalloutKind} from "../src/lib/wave-block-motion";
+import {moveSelectedWaveBlock,nestSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "../src/lib/wave-block-motion";
 const schema=new Schema({
  nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},
  waveFold:{group:"block",content:"block+",attrs:{title:{default:"Section"},collapsed:{default:false}}},
@@ -44,5 +44,14 @@ select("important text");
 assert.equal(setSelectedCalloutKind(editor,"warning"),true);
 assert.equal(state.doc.lastChild?.attrs.kind,"warning");
 assert.equal(state.doc.lastChild?.textContent,"important text");
+select("inside");
+assert.equal(moveContainingWaveSection(editor,"up"),true);
+assert.equal(state.doc.firstChild?.type.name,"waveFold");
+assert.equal(state.doc.firstChild?.textContent,"inside");
+select("inside");
+assert.equal(duplicateContainingWaveSection(editor),true);
+assert.equal(state.doc.child(0).type.name,"waveFold");
+assert.equal(state.doc.child(1).type.name,"waveFold");
+assert.equal(state.doc.child(0).textContent,state.doc.child(1).textContent);
 assert.equal(state.doc.check(),undefined);
 console.log("Actual ProseMirror move, nesting, outdent and duplicate transactions passed");
