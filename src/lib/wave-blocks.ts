@@ -34,29 +34,101 @@ export const WaveFold=Node.create({
  addNodeView(){
   return ({node,editor,getPos})=>{
    let current=node;
-   const root=document.createElement("section");root.className="wave-fold";
-   const header=document.createElement("button");header.type="button";header.contentEditable="false";
-   header.className="wave-fold-heading";
-   const body=document.createElement("div");body.className="wave-fold-body";
-   root.append(header,body);
-   const paint=()=>{
-     header.textContent=(current.attrs.collapsed?"▸ ":"▾ ")+String(current.attrs.title||"Раздел");
-     header.setAttribute("aria-expanded",current.attrs.collapsed?"false":"true");
-     root.setAttribute("data-collapsed",current.attrs.collapsed?"true":"false");
-     root.setAttribute("data-title",String(current.attrs.title||"Раздел"));
-     body.hidden=!!current.attrs.collapsed;
+   const root=document.createElement("section");
+   root.className="wave-fold";
+   const heading=document.createElement("div");
+   heading.className="wave-fold-heading";
+   heading.contentEditable="false";
+   const toggle=document.createElement("button");
+   toggle.type="button";
+   toggle.className="wave-fold-toggle";
+   toggle.setAttribute("aria-label","Свернуть или развернуть раздел");
+   const title=document.createElement("span");
+   title.className="wave-fold-title";
+   const rename=document.createElement("button");
+   rename.type="button";
+   rename.className="wave-fold-rename";
+   rename.setAttribute("aria-label","Переименовать раздел");
+   rename.textContent="✎";
+   const child=document.createElement("button");
+   child.type="button";
+   child.className="wave-fold-nest";
+   child.setAttribute("aria-label","Добавить вложенный раздел");
+   child.textContent="+";
+   const input=document.createElement("input");
+   input.type="text";
+   input.className="wave-fold-title-input";
+   input.maxLength=100;
+   input.setAttribute("aria-label","Название раздела");
+   input.hidden=true;
+   const body=document.createElement("div");
+   body.className="wave-fold-body";
+   heading.append(toggle,title,rename,child,input);
+   root.append(heading,body);
+   const position=()=>typeof getPos==="function"?getPos():undefined;
+   const updateAttrs=(patch:Record<string,unknown>)=>{
+    const pos=position();
+    if(typeof pos!=="number"||!editor.isEditable)return;
+    editor.view.dispatch(editor.view.state.tr.setNodeMarkup(pos,undefined,{...current.attrs,...patch}));
    };
-   header.addEventListener("pointerdown",event=>event.preventDefault());
-   header.addEventListener("click",event=>{
-     event.preventDefault();event.stopPropagation();
-     const pos=typeof getPos==="function"?getPos():undefined;
-     if(typeof pos!=="number")return;
-     editor.view.dispatch(editor.view.state.tr.setNodeMarkup(pos,undefined,{...current.attrs,collapsed:!current.attrs.collapsed}));
+   const paint=()=>{
+     const collapsed=!!current.attrs.collapsed;
+     const name=String(current.attrs.title||"Раздел").slice(0,100);
+     toggle.textContent=collapsed?"▸":"▾";
+     toggle.setAttribute("aria-expanded",collapsed?"false":"true");
+     title.textContent=name;
+     if(input.hidden)input.value=name;
+     root.dataset.collapsed=String(collapsed);
+     root.dataset.title=name;
+     body.hidden=collapsed;
+     rename.hidden=!editor.isEditable;
+     child.hidden=!editor.isEditable;
+   };
+   const finishRename=(accept:boolean)=>{
+     if(input.hidden)return;
+     const value=input.value.trim().slice(0,100);
+     input.hidden=true;
+     title.hidden=false;
+     if(accept&&value&&value!==current.attrs.title)updateAttrs({title:value});
+     paint();
+   };
+   heading.addEventListener("pointerdown",e=>{
+     if(!(e.target instanceof HTMLInputElement))e.preventDefault();
+   });
+   toggle.addEventListener("click",e=>{
+     e.preventDefault();e.stopPropagation();
+     updateAttrs({collapsed:!current.attrs.collapsed});
+   });
+   rename.addEventListener("click",e=>{
+     e.preventDefault();e.stopPropagation();
+     if(!editor.isEditable)return;
+     title.hidden=true;
+     input.hidden=false;
+     input.value=String(current.attrs.title||"Раздел");
+     input.focus();input.select();
+   });
+   input.addEventListener("keydown",e=>{
+     e.stopPropagation();
+     if(e.key==="Enter"){e.preventDefault();finishRename(true);}
+     if(e.key==="Escape"){e.preventDefault();finishRename(false);}
+   });
+   input.addEventListener("blur",()=>finishRename(true));
+   child.addEventListener("click",e=>{
+     e.preventDefault();e.stopPropagation();
+     const pos=position();
+     if(typeof pos!=="number"||!editor.isEditable)return;
+     const insertAt=pos+current.nodeSize-1;
+     const section={type:"waveFold",attrs:{title:"Вложенный раздел",collapsed:false},
+       content:[{type:"paragraph"}]};
+     editor.chain().insertContentAt(insertAt,section).run();
+     if(current.attrs.collapsed)updateAttrs({collapsed:false});
    });
    paint();
-   return {dom:root,contentDOM:body,
+   return {
+    dom:root,contentDOM:body,
     update(next){if(next.type!==current.type)return false;current=next;paint();return true;},
-    stopEvent(event){return header.contains(event.target as globalThis.Node);}};
+    stopEvent(event){return heading.contains(event.target as globalThis.Node);},
+   };
   };
  },
 });
