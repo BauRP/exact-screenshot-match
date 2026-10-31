@@ -7,16 +7,25 @@ export type NoteSearchState={query:string;active:number;caseSensitive:boolean};
 export type FoundWord={from:number;to:number};
 export const noteSearchKey=new PluginKey<NoteSearchState>("wave-in-note-search");
 const EMPTY:NoteSearchState={query:"",active:0,caseSensitive:false};
+/** Search only visible editable text. A Tape mark is a confidential answer:
+ * never find or replace it, even when a query spans neighbouring text nodes.
+ * U+FFFC is a hard boundary for hidden and embedded content. */
 export function findWords(doc:PMNode,query:string,caseSensitive=false):FoundWord[]{
- if(!query||query.length>100)return [];
+ if(!query||query.length>100||query.includes("\uFFFC"))return [];
  const matches:FoundWord[]=[];
  const needle=caseSensitive?query:query.toLowerCase();
  doc.descendants((node,pos)=>{
   if(!node.isTextblock||matches.length>=200)return;
   let text="";const offsets:number[]=[];
   node.forEach((child,offset)=>{
-   if(child.isText){const part=child.text||"";text+=part;for(let i=0;i<part.length;i++)offsets.push(pos+offset+1+i);}
-   else {text+="\uFFFC";offsets.push(pos+offset+1);}
+   if(child.isText){
+    const part=child.text||"";
+    const concealed=child.marks.some(mark=>mark.type.name==="waveTape");
+    text+=concealed?"\uFFFC".repeat(part.length):part;
+    for(let i=0;i<part.length;i++)offsets.push(pos+offset+1+i);
+   }else{
+    text+="\uFFFC";offsets.push(pos+offset+1);
+   }
   });
   const haystack=caseSensitive?text:text.toLowerCase();
   let from=0;
