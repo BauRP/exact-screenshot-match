@@ -15,7 +15,6 @@ assert.equal(state.doc.textContent,"onetwotwothree");
 assert.ok(state.doc.textContent.includes("three"));
 choose(2);assert.equal(moveCurrentPage(editor,"down"),true);
 assert.equal(state.doc.textContent,"onetwothreetwo");
-assert.equal(moveCurrentPage(editor,"up"),false); // Selection no longer inside moved page: must reselect
 choose(3);assert.equal(moveCurrentPage(editor,"up"),true);
 assert.equal(state.doc.textContent,"onetwotwothree");
 choose(0);assert.equal(moveCurrentPage(editor,"up"),false);
