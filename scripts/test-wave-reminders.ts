@@ -9,7 +9,7 @@ const home=readFileSync("src/routes/index.tsx","utf8");
 for(const marker of ["validReminderTime","parseReminderInput","toReminderInput","reminderIsDue","reminderLabel"])assert.ok(reminders.includes(marker),marker);
 for(const marker of ["reminderAt?: number","validReminderTime(input.reminderAt)","validReminderTime(partial?.reminderAt)"])assert.ok(store.includes(marker),marker);
 for(const marker of ["type=\"datetime-local\"","reminderAt:reminderValue","Убрать напоминание"])assert.ok(editor.includes(marker),marker);
-for(const marker of ["reminderLabel(note.reminderAt)","reminderIsDue(note.reminderAt)"])assert.ok(card.includes(marker),marker);
+for(const marker of ["reminderLabel(note.reminderAt)","const badges=[checklist?.total?"])assert.ok(card.includes(marker),marker);
 for(const marker of ['filter==="reminders"','filter==="overdue"'])assert.ok(search.includes(marker),marker);
 for(const marker of ['["reminders","Напоминания"]','["overdue","Просрочены"]'])assert.ok(home.includes(marker),marker);
 console.log("Local reminder persistence, due indicator and offline filters wired");
