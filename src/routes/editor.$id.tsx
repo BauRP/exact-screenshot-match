@@ -68,7 +68,7 @@ import { WaveDrawing } from "@/components/editor/WaveDrawing";
 import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection} from "@/lib/wave-text-direction";
 import {collectNoteOutline,notePagePositions,noteCurrentPage} from "@/lib/note-outline";
-import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos} from "@/lib/wave-block-motion";
+import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock} from "@/lib/wave-block-motion";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
 import { useFolders, type Folder } from "@/lib/folders-store";
@@ -924,6 +924,10 @@ function EditorPage() {
             onClick={()=>moveSelectedWaveBlock(editor,"up")}>↑</button>
           <button type="button" aria-label="Опустить блок" title="Опустить выбранный блок" className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>moveSelectedWaveBlock(editor,"down")}>↓</button>
+          <button type="button" aria-label="Вложить блок в раздел" title="Переместить блок в предыдущий раздел"
+            className="rounded-md border px-2 py-1 text-xs" onClick={()=>nestSelectedWaveBlock(editor)}>↘</button>
+          <button type="button" aria-label="Дублировать блок" title="Дублировать выбранный блок"
+            className="rounded-md border px-2 py-1 text-xs" onClick={()=>duplicateSelectedWaveBlock(editor)}>⧉</button>
           <button type="button" aria-label="Вынести блок из раздела" title="Вынести блок из вложенного раздела" className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>liftWaveBlock(editor,()=>selectedWaveBlockPos(editor))}>↗</button>
         </div>}
