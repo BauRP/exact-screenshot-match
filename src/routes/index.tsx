@@ -127,6 +127,15 @@ function Index() {
   const [searchTerm,setSearchTerm]=useState("");
   const [searchAllFolders,setSearchAllFolders]=useState(false);
   const [searchFilter,setSearchFilter]=useState<NoteSearchFilter>("all");
+  // Refresh due-state while the list stays open; no polling or network traffic.
+  const [reminderMinute,setReminderMinute]=useState(()=>Math.floor(Date.now()/60000));
+  useEffect(()=>{
+    const timer=window.setInterval(()=>{
+      const minute=Math.floor(Date.now()/60000);
+      setReminderMinute(last=>last===minute?last:minute);
+    },30000);
+    return ()=>window.clearInterval(timer);
+  },[]);
   const [copyBusy,setCopyBusy]=useState(false);
   const [transferBusy,setTransferBusy]=useState(false);
   const [incomingWave,setIncomingWave]=useState<{file:File;title:string;originId:string;kind:"note"|"pdf"}|null>(null);
@@ -219,7 +228,7 @@ function Index() {
   const filteredNotes = useMemo(() => notes.filter((note) => {
     const inScope=searchOpen&&searchAllFolders||activeFolder==="all"||(note.folderId??"all")===activeFolder;
     return inScope && (!searchOpen || noteMatchesSearch(note,searchTerm,searchFilter));
-  }),[activeFolder,notes,searchOpen,searchAllFolders,searchTerm,searchFilter]);
+  }),[activeFolder,notes,searchOpen,searchAllFolders,searchTerm,searchFilter,reminderMinute]);
 
   // Opens an in-memory draft: nothing is stored until the checkmark is tapped.
   const createNoteInCurrentFolder = () => {
