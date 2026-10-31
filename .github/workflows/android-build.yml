@@ -154,6 +154,9 @@ jobs:
       - name: Verify editor ink and photo annotations
         run: bun scripts/test-wave-ink.ts
 
+      - name: Verify offline formatted browser paste
+        run: bun scripts/test-wave-smart-paste.ts
+
       - name: Verify camera clipboard and drop image ingestion
         run: bun scripts/test-wave-image-ingestion.ts
 
