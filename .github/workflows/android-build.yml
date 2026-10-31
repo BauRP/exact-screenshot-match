@@ -133,6 +133,9 @@ jobs:
       - name: Verify outline navigation and safe block movement
         run: bun scripts/test-wave-outline.ts
 
+      - name: Execute drawing eraser geometry and serialization tests
+        run: bun scripts/test-wave-ink-geometry.ts
+
       - name: Verify editor ink and photo annotations
         run: bun scripts/test-wave-ink.ts
 
