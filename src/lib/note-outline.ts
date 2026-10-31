@@ -47,3 +47,22 @@ export function renameCurrentPage(doc:PMNode,selectionPos:number,label:string):{
  if(doc.nodeAt(pos)?.type.name!=="wavePageBreak")return undefined;
  return {pos,label:label.trim().slice(0,80)};
 }
+
+/** The only page divider we remove is the one directly before the active page.
+ * Deleting a divider MERGES pages; it must never delete paragraphs or images. */
+export function currentPageBreakPos(doc:PMNode,selectionPos:number):number|undefined{
+ const page=noteCurrentPage(doc,selectionPos);
+ if(page<=1)return undefined;
+ const position=notePagePositions(doc)[page-1]-1;
+ return doc.nodeAt(position)?.type.name==="wavePageBreak"?position:undefined;
+}
+export function pageDisplayNames(doc:PMNode):string[]{
+ const names=["Страница 1"];
+ let page=1;
+ doc.descendants(node=>{
+  if(node.type.name!=="wavePageBreak")return;
+  page++;
+  names.push(String(node.attrs.label||"").trim().slice(0,80)||"Страница "+page);
+ });
+ return names;
+}
