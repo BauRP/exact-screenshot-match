@@ -69,6 +69,7 @@ import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection} from "@/lib/wave-text-direction";
 import {collectNoteOutline,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
 import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
+import {duplicateCurrentPage,moveCurrentPage} from "@/lib/wave-page-actions";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
 import {safeBrowserClipboardHtml} from "@/lib/wave-smart-paste";
@@ -982,6 +983,14 @@ function EditorPage() {
               if(pos===undefined)return;
               editor.view.dispatch(editor.state.tr.delete(pos,pos+1).scrollIntoView());
             }}>Объединить страницы</button>}
+          <button type="button" aria-label="Дублировать текущую страницу" className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!duplicateCurrentPage(editor))toast("Не удалось дублировать страницу");}}>Копия страницы</button>
+          <button type="button" aria-label="Переместить страницу выше" disabled={currentPage<=2}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>moveCurrentPage(editor,"up")}>Стр. ↑</button>
+          <button type="button" aria-label="Переместить страницу ниже" disabled={currentPage<=1||currentPage>=pagePositions.length}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>moveCurrentPage(editor,"down")}>Стр. ↓</button>
           <span className="mx-1 h-4 w-px bg-border"/>
           <button type="button" aria-label="Поднять блок" title="Поднять выбранный блок" className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>moveSelectedWaveBlock(editor,"up")}>↑</button>
