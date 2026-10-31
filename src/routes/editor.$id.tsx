@@ -67,7 +67,7 @@ import { WaveImage } from "@/components/editor/WaveImage";
 import { WaveDrawing } from "@/components/editor/WaveDrawing";
 import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection} from "@/lib/wave-text-direction";
-import {collectNoteOutline,notePagePositions,noteCurrentPage,renameCurrentPage} from "@/lib/note-outline";
+import {collectNoteOutline,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
 import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock} from "@/lib/wave-block-motion";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
@@ -954,6 +954,17 @@ function EditorPage() {
               if(label===null)return;
               editor.view.dispatch(editor.state.tr.setNodeMarkup(found.pos,undefined,{...editor.state.doc.nodeAt(found.pos)?.attrs,label:label.trim().slice(0,80)}));
             }}>Название страницы</button>}
+          {pagePositions.length>1&&<select aria-label="Выбрать страницу" value={String(currentPage)}
+            onChange={event=>{const index=Number(event.target.value)-1;const pos=pagePositions[index];if(pos!==undefined)editor.chain().focus().setTextSelection(Math.min(pos,editor.state.doc.content.size)).run();}}
+            className="max-w-32 rounded-md border border-border bg-background p-1 text-xs">
+            {pageDisplayNames(editor.state.doc).map((name,index)=><option key={index} value={index+1}>{name}</option>)}
+          </select>}
+          {currentPage>1&&<button type="button" aria-label="Объединить с предыдущей страницей"
+            className="rounded-md border px-2 py-1 text-xs" onClick={()=>{
+              const pos=currentPageBreakPos(editor.state.doc,editor.state.selection.from);
+              if(pos===undefined)return;
+              editor.view.dispatch(editor.state.tr.delete(pos,pos+1).scrollIntoView());
+            }}>Объединить страницы</button>}
           <span className="mx-1 h-4 w-px bg-border"/>
           <button type="button" aria-label="Поднять блок" title="Поднять выбранный блок" className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>moveSelectedWaveBlock(editor,"up")}>↑</button>
