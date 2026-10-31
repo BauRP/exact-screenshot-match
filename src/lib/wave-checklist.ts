@@ -8,7 +8,14 @@ export const WaveChecklistItem=Node.create({
  name:"waveChecklistItem",
  priority:1100,
  addKeyboardShortcuts(){
-  return {Enter:()=>{
+  return {"Mod-Enter":()=>{
+    const {$from}=this.editor.state.selection;
+    if($from.parent.type.name!=="waveChecklistItem")return false;
+    const pos=$from.before();
+    const node=$from.parent;
+    this.editor.view.dispatch(this.editor.state.tr.setNodeMarkup(pos,undefined,{...node.attrs,done:!node.attrs.done}));
+    return true;
+   },Enter:()=>{
     const {$from}=this.editor.state.selection;
     if($from.parent.type.name!=="waveChecklistItem")return false;
     if(!$from.parent.textContent.trim()){
