@@ -84,6 +84,7 @@ import { InNoteSearch, noteSearchKey, findWords } from "@/lib/in-note-search";
 import { readEditorPreferences,type EditorTool } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
+import {setAllFoldSections,countFoldSections} from "@/lib/wave-section-batch";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
 import {openExternalUrl,isSafeExternalUrl} from "@/lib/external-links";
@@ -951,6 +952,12 @@ function EditorPage() {
         </div>}
         {outlineOpen&&<div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-border bg-card p-2"
           role="navigation" aria-label="Оглавление заметки">
+          {editor&&countFoldSections(editor)>0&&<div className="mb-2 flex gap-2 px-2">
+            <button type="button" onClick={()=>setAllFoldSections(editor,false)}
+              className="rounded-md border px-2 py-1.5 text-xs">Раскрыть все</button>
+            <button type="button" onClick={()=>setAllFoldSections(editor,true)}
+              className="rounded-md border px-2 py-1.5 text-xs">Свернуть все</button>
+          </div>}
           <p className="px-2 pb-1 text-xs text-muted-foreground">Заголовки и разделы</p>
           {outline.length===0?<p className="px-2 py-3 text-xs text-muted-foreground">Добавьте заголовок или сворачиваемый раздел.</p>:
             outline.map(item=><button key={item.pos} type="button"
