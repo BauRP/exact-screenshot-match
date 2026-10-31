@@ -570,6 +570,7 @@ function Index() {
             <Button disabled={transferBusy} variant="outline" onClick={()=>void doExportSelected("html")}>HTML — текст с оформлением</Button>
             <Button disabled={transferBusy} variant="outline" onClick={()=>void doExportSelected("docx")}>Word (.docx) — редактируемый документ</Button>
             <Button disabled={transferBusy} variant="outline" onClick={()=>void doExportSelected("png")}>PNG — изображение заметки</Button>
+            <Button disabled={transferBusy} variant="outline" onClick={()=>void doExportSelected("pdf")}>PDF — многостраничный документ</Button>
           </div>
           <p className="text-xs text-muted-foreground">PNG сохраняет читаемый текст, но не интерактивные элементы. Для полного оформления и вложений используйте .wnote.</p>
         </DialogContent>
