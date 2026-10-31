@@ -16,6 +16,7 @@ function ImageView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewProp
  const width=Number(node.attrs.width)||320;
  const [src,setSrc]=useState("");
  const [error,setError]=useState(false);
+ const [retry,setRetry]=useState(0);
  useEffect(()=>{
   let disposed=false,url="";
   setError(false);setSrc("");
@@ -25,7 +26,7 @@ function ImageView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewProp
    url=URL.createObjectURL(blob);setSrc(url);
   }).catch(()=>{if(!disposed)setError(true);});
   return ()=>{disposed=true;if(url)URL.revokeObjectURL(url);};
- },[id]);
+ },[id,retry]);
  return <NodeViewWrapper data-image-id={id} className="wave-image-block my-3" contentEditable={false}>
    <div className="mx-auto w-full max-w-full" style={{width:width+"px"}}>
     {src?<div className="relative aspect-auto w-full overflow-hidden rounded-xl">
@@ -36,7 +37,7 @@ function ImageView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewProp
       </div>
     </div>:
       <div role="status" className="rounded-xl border border-border p-5 text-sm text-muted-foreground">
-        {error?"Фотография не найдена в памяти телефона":"Загрузка фотографии…"}
+        {error?<div className="flex flex-col items-center gap-2"><span>Фотография не найдена в памяти телефона</span><button type="button" className="rounded-lg border border-border px-3 py-2" onClick={()=>setRetry(value=>value+1)}>Повторить загрузку</button></div>:"Загрузка фотографии…"}
       </div>}
     {editor.isEditable&&<div className="mt-2 flex flex-wrap items-center justify-between gap-2">
       <label className="flex items-center gap-2 text-xs text-muted-foreground">
