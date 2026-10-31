@@ -8,7 +8,7 @@ import type {Note} from "./notes-store";
 import {loadImageFile} from "./image-files";
 import {paintInk} from "./wave-ink";
 
-export type NoteExportFormat="txt"|"html"|"docx"|"png";
+export type NoteExportFormat="txt"|"html"|"docx"|"png"|"pdf";
 type Exported={blob:Blob;name:string;mime:string};
 
 const escapeHtml=(s:string)=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -281,6 +281,29 @@ async function pngBlob(note:Note):Promise<Blob>{
   for(const loaded of photoCache.values())loaded.release();
  }
 }
+/**
+ * A real offline PDF built from the rendered PNG snapshot. Unlike .wnote it
+ * is a non-editable visual copy, including images and handwritten annotations.
+ * One compressed image is embedded once and clipped across consecutive A4
+ * pages; this avoids repeatedly rasterizing the entire document.
+ */
+async function pdfBlob(note:Note):Promise<Blob>{
+ const snapshot=await pngBlob(note);
+ const {PDFDocument}=await import("pdf-lib");
+ const pdf=await PDFDocument.create();
+ const image=await pdf.embedPng(new Uint8Array(await snapshot.arrayBuffer()));
+ const pageWidth=595.28,pageHeight=841.89;
+ const renderedHeight=image.height*pageWidth/image.width;
+ const pages=Math.ceil(renderedHeight/pageHeight);
+ if(pages>30)throw Error("Заметка слишком длинная для PDF. Используйте Word");
+ for(let i=0;i<pages;i++){
+  const page=pdf.addPage([pageWidth,pageHeight]);
+  // The PDF page crop hides all portions outside the current page.
+  page.drawImage(image,{x:0,y:pageHeight-renderedHeight+i*pageHeight,width:pageWidth,height:renderedHeight});
+ }
+ const bytes=await pdf.save({useObjectStreams:true});
+ return new Blob([new Uint8Array(bytes)],{type:"application/pdf"});
+}
 function filename(title:string,format:NoteExportFormat):string {
   const name=title.replace(/[<>:"/\\|?*\u0000-\u001f]/g,"").replace(/\s+/g," ").trim().slice(0,70);
   return (name||"Wave Notes")+"-"+Date.now()+"."+format;
@@ -288,10 +311,10 @@ function filename(title:string,format:NoteExportFormat):string {
 export async function buildNoteExport(note:Note,format:NoteExportFormat):Promise<Exported>{
   if(note.kind==="pdf")throw Error("Для PDF используйте исходный PDF либо .wnote");
   if(note.body.length>2_000_000)throw Error("Заметка слишком велика для этого экспорта");
-  const mime=format==="txt"?"text/plain;charset=utf-8":format==="html"?"text/html;charset=utf-8":format==="png"?"image/png":
+  const mime=format==="txt"?"text/plain;charset=utf-8":format==="html"?"text/html;charset=utf-8":format==="png"?"image/png":format==="pdf"?"application/pdf":
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   const blob=format==="txt"?new Blob(["\uFEFF"+plainNoteText(note)],{type:mime}):
-    format==="html"?new Blob([noteHtmlDocument(note)],{type:mime}):format==="png"?await pngBlob(note):await docxBlob(note);
+    format==="html"?new Blob([noteHtmlDocument(note)],{type:mime}):format==="png"?await pngBlob(note):format==="pdf"?await pdfBlob(note):await docxBlob(note);
   return {blob,mime,name:filename(note.title,format)};
 }
 export async function shareNoteExport(note:Note,format:NoteExportFormat):Promise<void>{
