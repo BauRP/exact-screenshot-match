@@ -83,6 +83,7 @@ import { APP_FONTS, fontNameFromCss } from "@/lib/app-fonts";
 import { InNoteSearch, noteSearchKey, findWords } from "@/lib/in-note-search";
 import { readEditorPreferences,type EditorTool } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
+import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
 import {openExternalUrl,isSafeExternalUrl} from "@/lib/external-links";
@@ -813,6 +814,13 @@ function EditorPage() {
               </button>
             </PopoverTrigger>
             <PopoverContent align="start" sideOffset={8} className="w-52 rounded-xl p-2">
+              {editor&&checklistCounts(editor).total>0&&<div className="mb-2 rounded-lg border border-border p-2">
+                <p className="mb-1 text-xs text-muted-foreground">Задачи: {checklistCounts(editor).done}/{checklistCounts(editor).total}</p>
+                <div className="flex gap-1">
+                  <button type="button" onClick={()=>setAllChecklistItems(editor,true)} className="rounded-md bg-secondary px-2 py-2 text-xs">Выполнить все</button>
+                  <button type="button" onClick={()=>setAllChecklistItems(editor,false)} className="rounded-md bg-secondary px-2 py-2 text-xs">Сбросить все</button>
+                </div>
+              </div>}
               <p className="px-2 pb-1 text-xs font-semibold">Форма отметок</p>
               {([{shape:"square",label:"Квадрат",symbol:"□"},{shape:"circle",label:"Круг",symbol:"○"},
                 {shape:"diamond",label:"Ромб",symbol:"◇"},{shape:"check",label:"Галочка",symbol:"✓"}] as const).map(choice=>(
