@@ -13,7 +13,7 @@ assert.ok(runtime.includes('useNativeAdFeed(view, pathname !== "/" || blockingDi
 assert.ok(!index.includes("useNativeAdFeed("), "Home page must not create a second ad feed");
 
 assert.ok(
-  index.includes("setNativeAdDialogBlocked(menuOpen || renameValue !== null || confirmDelete || Boolean(folderDialog))"),
+  index.includes("setNativeAdDialogBlocked(menuOpen || renameValue !== null || confirmDelete || Boolean(folderDialog) || exportDialog || Boolean(incomingWave) || colorDialog || moveDialog)"),
   "A floating native-overlaid popup safely hides the Android ad view without destroying the feed",
 );
 assert.ok(index.includes("<DropdownMenu open={open} onOpenChange={onOpenChange}>"), "Restore Radix dropdown");
