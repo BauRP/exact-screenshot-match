@@ -87,6 +87,7 @@ import {replaceOneInNote,replaceAllInNote} from "@/lib/wave-find-replace";
 import { readEditorPreferences,EDITOR_PREFS_CHANGED,type EditorTool } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
+import {setSelectedChecklistShape} from "@/lib/wave-checklist-actions";
 import {setAllFoldSections,countFoldSections} from "@/lib/wave-section-batch";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
@@ -852,6 +853,22 @@ function EditorPage() {
                   <span className="w-5 text-center text-lg">{choice.symbol}</span>{choice.label}
                 </button>
               ))}
+              <div className="mt-2 border-t border-border pt-2">
+                <label htmlFor="wave-current-check-shape" className="block px-2 pb-1 text-xs font-semibold">Изменить выбранную отметку</label>
+                <select id="wave-current-check-shape" aria-label="Изменить форму выбранной отметки"
+                  defaultValue="" className="w-full rounded-md border border-border bg-background px-2 py-2 text-xs"
+                  onChange={event=>{
+                    if(!editor||!setSelectedChecklistShape(editor,event.target.value as CheckShape))
+                      toast("Поместите курсор внутрь пункта списка");
+                    event.target.value="";
+                  }}>
+                  <option value="" disabled>Форма текущего пункта</option>
+                  <option value="square">Квадрат</option>
+                  <option value="circle">Круг</option>
+                  <option value="diamond">Ромб</option>
+                  <option value="check">Галочка</option>
+                </select>
+              </div>
             </PopoverContent>
           </Popover>}
           <Popover>
