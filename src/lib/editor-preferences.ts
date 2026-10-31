@@ -16,6 +16,7 @@ export type EditorPreferences={
  hiddenToolbar:EditorTool[];
 };
 const KEY="wave.editor.preferences.v1";
+export const EDITOR_PREFS_CHANGED="wave-editor-preferences-changed";
 const ALL=new Set<string>(TOOLBAR_TOOLS.map(tool=>tool.id));
 const DEFAULT:EditorPreferences={spellcheck:true,caseSensitive:false,hiddenToolbar:[]};
 export function validHiddenToolbar(input:unknown):EditorTool[]{
@@ -40,6 +41,9 @@ export function saveEditorPreferences(patch:Partial<EditorPreferences>):EditorPr
   caseSensitive:typeof patch.caseSensitive==="boolean"?patch.caseSensitive:base.caseSensitive,
   hiddenToolbar:patch.hiddenToolbar===undefined?base.hiddenToolbar:validHiddenToolbar(patch.hiddenToolbar),
  };
- if(typeof window!=="undefined")window.localStorage.setItem(KEY,JSON.stringify(next));
+ if(typeof window!=="undefined"){
+  window.localStorage.setItem(KEY,JSON.stringify(next));
+  window.dispatchEvent(new Event(EDITOR_PREFS_CHANGED));
+ }
  return next;
 }
