@@ -157,6 +157,9 @@ jobs:
       - name: Execute drawing eraser geometry and serialization tests
         run: bun scripts/test-wave-ink-geometry.ts
 
+      - name: Verify safe page copy and reorder ProseMirror transactions
+        run: bun scripts/test-wave-page-actions.ts
+
       - name: Verify named pages and audio playback controls
         run: bun scripts/test-wave-page-audio-controls.ts
 
