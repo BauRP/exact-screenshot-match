@@ -145,6 +145,9 @@ jobs:
       - name: Verify real offline TXT HTML and DOCX document export
         run: bun scripts/test-wave-document-export.ts
 
+      - name: Verify reminder update tracking and hidden answer safety
+        run: bun scripts/test-wave-reminder-tape-safety.ts
+
       - name: Execute offline Cyrillic note search unit tests
         run: bun scripts/test-wave-search-logic.ts
 
