@@ -5,7 +5,7 @@ import { saveAudioFile, deleteAudioFile, audioIdsInHtml } from "@/lib/audio-file
 import { ColorGrid, PALETTE } from "@/components/ColorGrid";
 import {NEW_NOTE_INK,editorBackground,editorInk} from "@/lib/note-appearance";
 import { noteCaretColor } from "@/lib/note-caret-color";
-import {parseReminderInput,toReminderInput} from "@/lib/note-reminders";
+import {parseReminderInput,toReminderInput,reminderPresetTime} from "@/lib/note-reminders";
 import { nativeAudioAvailable, startNativeAudio, stopNativeAudio } from "@/lib/native-audio";
 import {
   ArrowLeft,
@@ -692,6 +692,11 @@ function EditorPage() {
               <input type="datetime-local" aria-label="Дата и время напоминания" value={reminderAt}
                 onChange={event=>setReminderAt(event.target.value)}
                 className="w-full rounded-lg border border-border bg-background p-2 text-sm"/>
+              <div className="mt-2 flex gap-1">
+                {([["hour","Через час"],["tomorrow","Завтра"],["week","Через неделю"]] as const).map(([preset,label])=>
+                  <button type="button" key={preset} onClick={()=>setReminderAt(toReminderInput(reminderPresetTime(preset)))}
+                    className="min-h-9 rounded-md border border-border px-2 text-[11px]">{label}</button>)}
+              </div>
               <button type="button" onClick={()=>setReminderAt("")}
                 className="mt-2 rounded-lg border border-border px-3 py-2 text-xs">Убрать напоминание</button>
               <p className="mt-2 text-xs text-muted-foreground">Дата сохраняется без интернета. Системные уведомления пока не включены.</p>
