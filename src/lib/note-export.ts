@@ -5,6 +5,8 @@
  */
 import {zip} from "fflate";
 import type {Note} from "./notes-store";
+import {loadImageFile} from "./image-files";
+import {paintInk} from "./wave-ink";
 
 export type NoteExportFormat="txt"|"html"|"docx"|"png";
 type Exported={blob:Blob;name:string;mime:string};
@@ -143,52 +145,133 @@ async function docxBlob(note:Note):Promise<Blob>{
   return new Blob([packed.slice().buffer],{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
 }
 /**
- * Offline long-form image export. Capture a readable textual snapshot without
- * pretending to preserve unsupported interactive blocks or binary attachments.
- * Cap canvas height before allocation to avoid WebView OOM.
+ * A raster copy of the note (text, photos, standalone drawings, photo ink).
+ * Native .wnote remains the lossless editable format. Keep a strict pixel
+ * budget for low-memory Android WebViews rather than creating giant canvases.
  */
-async function pngBlob(note:Note):Promise<Blob>{
-  const lines=plainNoteText(note).replace(/\r/g,"").split("\n");
-  const width=1080, pad=60, font=32, lineHeight=48;
-  const canvas=document.createElement("canvas");
-  const ctx=canvas.getContext("2d");
-  if(!ctx)throw Error("Графический экспорт недоступен на устройстве");
-  ctx.font=font+"px sans-serif";
-  const wraps:string[]=[];
-  const maxWidth=width-2*pad;
-  for(const input of lines){
-    if(!input){wraps.push("");continue;}
-    let current="";
-    const parts=input.match(/\S+\s*|\s+/g)||[];
-    for(const part of parts){
-      const candidate=current+part;
-      if(current&&ctx.measureText(candidate).width>maxWidth){
-        wraps.push(current.trimEnd());current="";
-      }
-      // Break extremely long words without losing characters.
-      for(const ch of part){
-        if(ctx.measureText(current+ch).width>maxWidth&&current){
-          wraps.push(current);current="";
-        }
-        current+=ch;
-      }
-      if(wraps.length>1100)throw Error("Заметка слишком длинная для изображения. Используйте TXT, HTML или Word");
-    }
-    wraps.push(current.trimEnd());
+type ExportItem={kind:"text";text:string;heading:boolean}|{kind:"image";id:string;ink:string;width:number}|{kind:"drawing";ink:string};
+function exportItems(note:Note):ExportItem[]{
+ const body=parseBody(note),items:ExportItem[]=[];
+ const visit=(node:Node):void=>{
+  if(node.nodeType===3){
+   const value=(node.textContent||"").trim();
+   if(value)items.push({kind:"text",text:value,heading:false});
+   return;
   }
-  const height=Math.max(320,pad*2+wraps.length*lineHeight);
-  if(height>12000)throw Error("Заметка слишком длинная для PNG. Используйте HTML или Word");
-  canvas.width=width;canvas.height=height;
-  const c=canvas.getContext("2d");if(!c)throw Error("Не удалось создать изображение");
-  const bg=note.style?.background;
-  const ink=note.style?.color;
-  c.fillStyle=bg&&isColor(bg)?bg:"#ffffff";
-  c.fillRect(0,0,width,height);
-  c.fillStyle=ink&&isColor(ink)?ink:"#20242b";
-  c.font=font+"px sans-serif";
-  c.textBaseline="top";
-  wraps.forEach((text,i)=>{if(text)c.fillText(text,pad,pad+i*lineHeight);});
+  if(node.nodeType!==1)return;
+  const el=node as Element,tag=el.tagName;
+  if(el.hasAttribute("data-wave-image")){
+   const id=el.getAttribute("data-image-id")||"";
+   if(!/^[\w-]{1,128}$/.test(id))throw Error("У фотографии отсутствует идентификатор");
+   const width=Number(el.getAttribute("data-width"))||320;
+   items.push({kind:"image",id,ink:el.getAttribute("data-ink")||"[]",width:Math.min(720,Math.max(120,width))});
+   return;
+  }
+  if(el.hasAttribute("data-wave-drawing")){
+   items.push({kind:"drawing",ink:el.getAttribute("data-wave-ink")||"[]"});
+   return;
+  }
+  if(["H1","H2","H3","H4","H5","H6","P","LI","BLOCKQUOTE","PRE"].includes(tag)){
+   let value=el.textContent||"";
+   if(tag==="LI")value="• "+value;
+   if(value.trim())items.push({kind:"text",text:value.trim(),heading:tag.startsWith("H")});
+   return;
+  }
+  if(tag==="BR"){items.push({kind:"text",text:"",heading:false});return;}
+  if(el.hasAttribute("data-audio-note")){
+   items.push({kind:"text",text:"[Аудиозапись сохранена внутри .wnote]",heading:false});return;
+  }
+  Array.from(el.childNodes).forEach(visit);
+ };
+ Array.from(body.childNodes).forEach(visit);
+ return items;
+}
+async function loadExportImage(id:string):Promise<{image:HTMLImageElement;release:()=>void}>{
+ const blob=await loadImageFile(id);
+ if(!blob)throw Error("Невозможно экспортировать: фотография не найдена");
+ const url=URL.createObjectURL(blob);
+ try{
+  const image=await new Promise<HTMLImageElement>((resolve,reject)=>{
+   const element=new Image();
+   element.onload=()=>resolve(element);
+   element.onerror=()=>reject(Error("Не удалось открыть фотографию для экспорта"));
+   element.src=url;
+  });
+  return {image,release:()=>URL.revokeObjectURL(url)};
+ }catch(error){URL.revokeObjectURL(url);throw error;}
+}
+async function pngBlob(note:Note):Promise<Blob>{
+ const width=1080,pad=60,lineHeight=46,maxHeight=12000;
+ const working=document.createElement("canvas");
+ const measure=working.getContext("2d");
+ if(!measure)throw Error("Графический экспорт недоступен на устройстве");
+ measure.font="30px sans-serif";
+ const items:ExportItem[]=[{kind:"text",text:note.title,heading:true},...exportItems(note)];
+ type RenderLine={kind:"text";text:string;font:number;y:number}|{kind:"image"|"drawing";item:ExportItem;y:number;height:number};
+ const rows:RenderLine[]=[];
+ let cursor=pad;
+ const addLine=(line:string,font:number)=>{
+  if(cursor+lineHeight+pad>maxHeight)throw Error("Заметка слишком длинная для PNG. Используйте Word или HTML");
+  rows.push({kind:"text",text:line,font,y:cursor});cursor+=lineHeight;
+ };
+ const photoCache=new Map<string,{image:HTMLImageElement;release:()=>void}>();
+ try{
+  for(const item of items){
+   if(item.kind==="text"){
+    const font=item.heading?38:30;
+    measure.font=font+"px sans-serif";
+    let text="",hasText=false;
+    for(const word of item.text.split(/(\s+)/)){
+     if(!word)continue;
+     if(text&&measure.measureText(text+word).width>width-pad*2){
+      addLine(text.trimEnd(),font);text="";hasText=true;
+     }
+     for(const ch of word){
+      if(text&&measure.measureText(text+ch).width>width-pad*2){
+       addLine(text,font);text="";hasText=true;
+      }
+      text+=ch;
+     }
+    }
+    if(text||!hasText)addLine(text.trimEnd(),font);
+    cursor+=15;
+    continue;
+   }
+   let height=width-pad*2;
+   if(item.kind==="image"){
+    if(!photoCache.has(item.id))photoCache.set(item.id,await loadExportImage(item.id));
+    const image=photoCache.get(item.id)!.image;
+    height=Math.round((width-pad*2)*image.naturalHeight/Math.max(image.naturalWidth,1));
+    height=Math.max(80,Math.min(height,2500));
+   }else height=600;
+   if(cursor+height+pad>maxHeight)throw Error("Слишком много фотографий для одного PNG. Используйте .wnote");
+   rows.push({kind:item.kind,item,y:cursor,height});cursor+=height+22;
+  }
+  const canvas=document.createElement("canvas");
+  canvas.width=width;canvas.height=Math.max(320,cursor+pad);
+  const ctx=canvas.getContext("2d");if(!ctx)throw Error("Не удалось создать изображение");
+  const paper=note.style?.background||"";
+  ctx.fillStyle=isColor(paper)?paper:"#ffffff";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.textBaseline="top";
+  for(const row of rows){
+   if(row.kind==="text"){
+    ctx.fillStyle=isColor(note.style?.color||"")?note.style!.color!:"#20242b";
+    ctx.font=(row.font===38?"bold ":"")+row.font+"px sans-serif";
+    ctx.fillText(row.text,pad,row.y);
+   }else if(row.item.kind==="drawing"){
+    ctx.fillStyle="#ffffff";ctx.fillRect(pad,row.y,width-pad*2,row.height);
+    paintInk(ctx,row.item.ink,pad,row.y,width-pad*2,row.height);
+   }else if(row.item.kind==="image"){
+    const pic=photoCache.get(row.item.id)!.image;
+    ctx.drawImage(pic,pad,row.y,width-pad*2,row.height);
+    paintInk(ctx,row.item.ink,pad,row.y,width-pad*2,row.height);
+   }
+  }
   return await new Promise<Blob>((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error("PNG не удалось сохранить")),"image/png"));
+ }finally{
+  for(const loaded of photoCache.values())loaded.release();
+ }
 }
 function filename(title:string,format:NoteExportFormat):string {
   const name=title.replace(/[<>:"/\\|?*\u0000-\u001f]/g,"").replace(/\s+/g," ").trim().slice(0,70);
