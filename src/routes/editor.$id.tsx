@@ -791,7 +791,7 @@ function EditorPage() {
                 </button>
               ))}
             </PopoverContent>
-          </Popover>
+          </Popover>}
           <Popover>
             <PopoverTrigger asChild>
               <button type="button" aria-label="Оформление листа" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
