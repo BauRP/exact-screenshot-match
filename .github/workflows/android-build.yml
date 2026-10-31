@@ -157,6 +157,9 @@ jobs:
       - name: Verify audio error messages and retry action
         run: bun scripts/test-wave-audio-retry.ts
 
+      - name: Verify offline photo retry and continuous erasing
+        run: bun scripts/test-wave-image-retry-erase.ts
+
       - name: Verify editor ink and photo annotations
         run: bun scripts/test-wave-ink.ts
 
