@@ -408,6 +408,8 @@ function EditorPage() {
 
   /** Back = discard: nothing typed in this session reaches the notes list. */
   const handleDiscard = async () => {
+    if(savingRef.current)return;
+    imageSessionRef.current=false;
     if (recorderRef.current?.state === "recording" || nativeRecordingRef.current) stopRecording();
     await recordingWriteRef.current?.catch(()=>undefined);
     await Promise.allSettled([...pendingImagesRef.current]);
@@ -519,7 +521,7 @@ function EditorPage() {
   };
 
   const enqueueImage=(load:()=>Promise<Blob>)=>{
-    if(!editor||savingRef.current)return;
+    if(!editor||savingRef.current||!imageSessionRef.current)return;
     const job=(async()=>{
       let imageId:string|null=null;
       try{
