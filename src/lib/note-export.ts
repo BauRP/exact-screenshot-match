@@ -49,6 +49,7 @@ function sanitizedBody(note:Note):string{
     }
     const safeTag=keep.has(tag)?tag.toLowerCase():"span";
     const out=doc.createElement(safeTag);
+    if(["P","H1","H2","H3","H4","H5","H6"].includes(tag)&&el.getAttribute("dir")==="rtl")out.setAttribute("dir","rtl");
     if(tag==="A"){
       const href=el.getAttribute("href")||"";
       try{const url=new URL(href);if(["https:","http:"].includes(url.protocol)){
