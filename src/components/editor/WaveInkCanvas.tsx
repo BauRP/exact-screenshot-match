@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from "react";
 import type {PointerEvent as ReactPointerEvent} from "react";
-import {inkStrokeAt,inkStrokeAlong,parseInk,serializeInk,type InkPoint,type InkStroke} from "@/lib/wave-ink";
+import {inkStrokeAt,inkStrokeIndicesAlong,parseInk,serializeInk,type InkPoint,type InkStroke} from "@/lib/wave-ink";
 
 /** Per-drawing undo/redo also works for ink layered over a photograph. */
 export function WaveInkCanvas({value,onChange,editable,active=false}:{
@@ -51,10 +51,12 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
     Math.round(Math.min(1000,Math.max(0,(e.clientY-rect.top)/Math.max(rect.height,1)*1000)))];
  };
  const erase=(point:InkPoint,previous:InkPoint|null=null)=>{
-   const at=previous?inkStrokeAlong(current.current,previous,point):inkStrokeAt(current.current,point);
-   if(at<0)return;
+   const hits=previous?inkStrokeIndicesAlong(current.current,previous,point):
+     (()=>{const result=inkStrokeAt(current.current,point);return result<0?[]:[result];})();
+   if(!hits.length)return;
    markChanged();
-   replace(current.current.filter((_,i)=>i!==at));
+   const removed=new Set(hits);
+   replace(current.current.filter((_,i)=>!removed.has(i)));
  };
  const start=(e:ReactPointerEvent<SVGSVGElement>)=>{
   if(!editable||!active||gesture.current!==null||(current.current.length>=120&&tool!=="eraser"))return;
