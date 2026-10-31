@@ -12,7 +12,7 @@ for(const term of ["addNodeView","ReactNodeViewRenderer(ImageView)","insertWaveI
 for(const term of ["WaveImage,","addImage","Добавить фотографию из галереи","createdImageIdsRef","await saveImageFile(valid)","imageIdsInHtml(body)"])assert.ok(editor.includes(term),term);
 for(const term of ["audioIds,imageIds,hasPdf","generatedImages","saveNewImageFile","loadImageFile(id)","deleteImageFile(id)"])assert.ok(transfer.includes(term),term);
 for(const term of ["addedImageIds","saveNewImageFile(copiedId,photo)","deleteImageFile(id)"])assert.ok(home.includes(term),term);
-for(const term of ["stillUsed=new Set(nextNotes.flatMap(note=>imageIdsInHtml(note.body)))","imageIds.map(id=>deleteImageFile(id))"])assert.ok(store.includes(term),term);
+for(const term of ["latestImages=new Set(state.notes.flatMap(note=>imageIdsInHtml(note.body)))","staleImages.filter(id=>!latestImages.has(id)).map(id=>deleteImageFile(id))"])assert.ok(store.includes(term),term);
 for(const term of ["imageBlobFromBytes","rewrittenImages","imageIds = uniqueIds","newImageIds","saveNewImageFile(destinationId","imageIds.map"])assert.ok(backup.includes(term),term);
 assert.ok(files.includes("export function imageBlobFromBytes"));
 console.log("Offline photo storage, editor insert, safe copy/exchange and attachment cleanup wiring verified");
