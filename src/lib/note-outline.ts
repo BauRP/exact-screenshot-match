@@ -7,7 +7,7 @@ export function collectNoteOutline(doc:PMNode):OutlineItem[]{
  doc.descendants((node,pos)=>{
   if(node.type.name==="wavePageBreak"){
    page+=1;
-   items.push({pos,depth:1,title:"Страница "+page,type:"page"});
+   items.push({pos,depth:1,title:(String(node.attrs.label||"").trim()||"Страница "+page),type:"page"});
   }else if(node.type.name==="heading"){
    const title=node.textContent.trim();
    if(title)items.push({pos,depth:Math.max(1,Math.min(6,Number(node.attrs.level)||2)),title:title.slice(0,140),type:"heading"});
