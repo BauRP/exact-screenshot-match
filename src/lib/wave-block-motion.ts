@@ -1,5 +1,13 @@
-import { Fragment } from "@tiptap/pm/model";
+import { Fragment, type Node as PMNode } from "@tiptap/pm/model";
 import type { Editor } from "@tiptap/react";
+
+/** A Fragment has no offsetAt API; sum child sizes in the active schema. */
+export function waveChildOffset(parent:PMNode,index:number):number {
+  let offset=0;
+  for(let i=0;i<index;i++)offset+=parent.child(i).nodeSize;
+  return offset;
+}
+
 
 /**
  * Reorder only direct siblings inside the same parent. Never splice through a
@@ -26,7 +34,7 @@ export function moveWaveBlock(
 
   // getPos() must be a node boundary at this depth.
   if (index >= parent.childCount) return false;
-  if (parent.content.offsetAt(index) !== siblingOffset) return false;
+  if (waveChildOffset(parent,index) !== siblingOffset) return false;
 
   const nextIndex = direction === "up" ? index - 1 : index + 1;
   if (nextIndex < 0 || nextIndex >= parent.childCount) return false;
@@ -56,7 +64,7 @@ export function selectedWaveBlockPos(editor:Editor):number|undefined {
   if(parent.type.name!=="doc"&&parent.type.name!=="waveFold")continue;
   const index=$from.index(depth);
   if(index>=parent.childCount)return undefined;
-  return $from.start(depth)+parent.content.offsetAt(index);
+  return $from.start(depth)+waveChildOffset(parent,index);
  }
  return undefined;
 }
@@ -78,7 +86,7 @@ export function liftWaveBlock(editor:Editor,getPos:()=>number|undefined):boolean
  const section=$pos.parent;
  if(section.type.name!=="waveFold"||$pos.depth<1)return false;
  const index=$pos.index();
- if(index>=section.childCount||section.content.offsetAt(index)!==$pos.parentOffset)return false;
+ if(index>=section.childCount||waveChildOffset(section,index)!==$pos.parentOffset)return false;
  const moving=section.child(index);
  const sectionStart=$pos.before($pos.depth);
  const outer=doc.resolve(sectionStart),outerIndex=outer.index();
@@ -104,7 +112,7 @@ export function nestSelectedWaveBlock(editor:Editor):boolean{
  if(pos===undefined||pos<0)return false;
  const {doc}=editor.state,$pos=doc.resolve(pos),parent=$pos.parent,index=$pos.index();
  if(index<1||index>=parent.childCount||
-    parent.content.offsetAt(index)!==$pos.parentOffset)return false;
+    waveChildOffset(parent,index)!==$pos.parentOffset)return false;
  const previous=parent.child(index-1),moving=parent.child(index);
  if(previous.type.name!=="waveFold")return false;
  // Do not make a deeply nested structure unusable on a small phone.
@@ -127,7 +135,7 @@ export function duplicateSelectedWaveBlock(editor:Editor):boolean{
  const pos=selectedWaveBlockPos(editor);
  if(pos===undefined||pos<0)return false;
  const {doc}=editor.state,$pos=doc.resolve(pos),parent=$pos.parent,index=$pos.index();
- if(index>=parent.childCount||parent.content.offsetAt(index)!==$pos.parentOffset)return false;
+ if(index>=parent.childCount||waveChildOffset(parent,index)!==$pos.parentOffset)return false;
  const node=parent.child(index);
  if(!parent.canReplace(index+1,index+1,Fragment.from(node)))return false;
  editor.view.dispatch(editor.state.tr.insert(pos+node.nodeSize,node).scrollIntoView());
