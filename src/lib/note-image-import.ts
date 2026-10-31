@@ -22,7 +22,6 @@ export async function takeNotePhoto():Promise<Blob>{
     quality:85,
     allowEditing:false,
     saveToGallery:false,
-    correctOrientation:true,
   });
   if(!photo.webPath)throw new Error("Камера не вернула фотографию");
   const response=await fetch(photo.webPath);
