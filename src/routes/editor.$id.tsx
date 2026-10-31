@@ -67,7 +67,7 @@ import { WaveImage } from "@/components/editor/WaveImage";
 import { WaveDrawing } from "@/components/editor/WaveDrawing";
 import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection} from "@/lib/wave-text-direction";
-import {collectNoteOutline,notePagePositions,noteCurrentPage} from "@/lib/note-outline";
+import {collectNoteOutline,notePagePositions,noteCurrentPage,renameCurrentPage} from "@/lib/note-outline";
 import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock} from "@/lib/wave-block-motion";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
@@ -927,6 +927,16 @@ function EditorPage() {
           <button type="button" aria-label="Следующая страница" disabled={currentPage>=pagePositions.length}
             className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
             onClick={()=>editor.chain().focus().setTextSelection(pagePositions[currentPage]).run()}>›</button>
+          {currentPage>1&&<button type="button" aria-label="Переименовать текущую страницу"
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{
+              const found=renameCurrentPage(editor.state.doc,editor.state.selection.from,"");
+              if(!found)return;
+              const current=String(editor.state.doc.nodeAt(found.pos)?.attrs.label||"");
+              const label=window.prompt("Название страницы (до 80 символов)",current);
+              if(label===null)return;
+              editor.view.dispatch(editor.state.tr.setNodeMarkup(found.pos,undefined,{...editor.state.doc.nodeAt(found.pos)?.attrs,label:label.trim().slice(0,80)}));
+            }}>Название страницы</button>}
           <span className="mx-1 h-4 w-px bg-border"/>
           <button type="button" aria-label="Поднять блок" title="Поднять выбранный блок" className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>moveSelectedWaveBlock(editor,"up")}>↑</button>
