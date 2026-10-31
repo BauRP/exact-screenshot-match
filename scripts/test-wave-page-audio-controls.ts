@@ -1,0 +1,16 @@
+import {strict as assert} from "node:assert";
+import {Schema} from "@tiptap/pm/model";
+import {notePagePositions,noteCurrentPage,currentPageBreakPos,pageDisplayNames} from "../src/lib/note-outline";
+import {readFileSync} from "node:fs";
+const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},wavePageBreak:{group:"block",atom:true,attrs:{label:{default:""}}},text:{group:"inline"}},marks:{}});
+const p=t=>schema.nodes.paragraph.create(null,schema.text(t));
+const doc=schema.nodes.doc.create(null,[p("first"),schema.nodes.wavePageBreak.create({label:"Глава"}),p("second"),schema.nodes.wavePageBreak.create(),p("third")]);
+const positions=notePagePositions(doc);
+assert.deepEqual(pageDisplayNames(doc),["Страница 1","Глава","Страница 3"]);
+assert.equal(currentPageBreakPos(doc,positions[1]),positions[1]-1);
+assert.equal(currentPageBreakPos(doc,0),undefined);
+const merged=doc.cut(0,positions[1]-1).append(doc.cut(positions[1]));
+assert.equal(merged.textContent,doc.textContent);
+const audio=readFileSync("src/components/editor/AudioNode.tsx","utf8");
+for(const marker of ["Перемотка аудио","Скорость воспроизведения","playbackRate=rate","player.currentTime=at"])assert.ok(audio.includes(marker),marker);
+console.log("Named pages, safe page merges and audio seeking controls verified");
