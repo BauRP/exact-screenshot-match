@@ -537,8 +537,37 @@ function touchesContent(note: Note, patch: Partial<Note>): boolean {
   });
 }
 
+/**
+ * Reclaim binary files only after the new note body has been durably stored.
+ * A second live-reference check protects files still shared by copied notes.
+ * Cleanup failures are logged, never converted into false "Save failed" UI.
+ */
+async function reclaimDetachedAttachments(previousBody:string):Promise<void>{
+  if(!previousBody)return;
+  try{
+    const [{audioIdsInHtml,deleteAudioFile},{imageIdsInHtml,deleteImageFile}]=await Promise.all([
+      import("./audio-files"),import("./image-files"),
+    ]);
+    const usedAudio=new Set(state.notes.flatMap(note=>audioIdsInHtml(note.body)));
+    const usedImages=new Set(state.notes.flatMap(note=>imageIdsInHtml(note.body)));
+    const staleAudio=[...new Set(audioIdsInHtml(previousBody))].filter(id=>!usedAudio.has(id));
+    const staleImages=[...new Set(imageIdsInHtml(previousBody))].filter(id=>!usedImages.has(id));
+    const results=await Promise.allSettled([
+      ...staleAudio.map(async id=>{
+        if(!state.notes.some(note=>audioIdsInHtml(note.body).includes(id)))await deleteAudioFile(id);
+      }),
+      ...staleImages.map(async id=>{
+        if(!state.notes.some(note=>imageIdsInHtml(note.body).includes(id)))await deleteImageFile(id);
+      }),
+    ]);
+    for(const result of results)if(result.status==="rejected")
+      console.error("Unable to reclaim unused note attachment",result.reason);
+  }catch(error){console.error("Unused attachment cleanup failed",error);}
+}
+
 export function updateNote(id: string, patch: Partial<Note>) {
   ensureReadyForMutation();
+  const oldBody=state.notes.find(note=>note.id===id)?.body;
   let changed = false;
   const nextNotes = state.notes.map((note) => {
     if (note.id !== id) return note;
@@ -558,6 +587,9 @@ export function updateNote(id: string, patch: Partial<Note>) {
   if (!changed) return;
   persistNotes(nextNotes);
   commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
+  if(typeof patch.body==="string"&&oldBody!==undefined&&patch.body!==oldBody){
+    void reclaimDetachedAttachments(oldBody);
+  }
 }
 
 export function togglePin(id: string) {
@@ -581,23 +613,12 @@ export function deleteNote(id: string) {
   if (nextNotes.length === state.notes.length) return;
   persistNotes(nextNotes);
   commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
-  // Binary attachments are removed only after the note change was persisted.
+  // Binary cleanup never affects still-referenced files in another note.
   if (target?.kind === "pdf") {
-    void import("./pdf-files").then((module) => module.deletePdfFile(id)).catch((error) => console.error("Unable to remove PDF", error));
+    void import("./pdf-files").then(module=>module.deletePdfFile(id))
+      .catch(error=>console.error("Unable to remove PDF",error));
   }
-  if (target?.body) {
-    void import("./image-files").then(async ({imageIdsInHtml,deleteImageFile})=>{
-      const stillUsed=new Set(nextNotes.flatMap(note=>imageIdsInHtml(note.body)));
-      await Promise.all(imageIdsInHtml(target.body).filter(id=>!stillUsed.has(id)).map(id=>deleteImageFile(id)));
-    }).catch(error=>console.error("Unable to delete image attachments",error));
-  }
-  if (target?.body) {
-    void import("./audio-files").then(async ({ audioIdsInHtml, deleteAudioFile }) => {
-      const stillUsed = new Set(nextNotes.flatMap((item) => audioIdsInHtml(item.body)));
-      const ids = audioIdsInHtml(target.body).filter((audioId) => !stillUsed.has(audioId));
-      await Promise.all(ids.map((audioId) => deleteAudioFile(audioId)));
-    }).catch((error) => console.error("Unable to delete audio files", error));
-  }
+  if(target?.body)void reclaimDetachedAttachments(target.body);
 }
 
 
