@@ -26,6 +26,8 @@ export function paperAppearance(mood:PaperMood,rule:PaperRule):{backgroundImage?
   ? `linear-gradient(to right,${line} 1px,transparent 1px),linear-gradient(to bottom,${line} 1px,transparent 1px)`
   :rule==="dots"?"radial-gradient(rgba(66,84,112,.22) 1px,transparent 1.3px)":"";
  const layers=[overlay,theme].filter(Boolean);
+ const sizes=rule==="grid"?["24px 24px","24px 24px"]:rule==="dots"?["20px 20px"]:[];
+ if(theme&&sizes.length)sizes.push("auto");
  return {backgroundImage:layers.length?layers.join(","):undefined,
-   backgroundSize:rule==="grid"?"24px 24px,24px 24px,auto":rule==="dots"?"20px 20px,auto":undefined};
+   backgroundSize:sizes.length?sizes.join(","):undefined};
 }
