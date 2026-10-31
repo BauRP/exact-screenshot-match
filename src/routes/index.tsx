@@ -462,7 +462,7 @@ function Index() {
               onClick={()=>{setSearchTerm("");setSearchFilter("all")}}>Сброс</button>
           </div>
           <div className="no-scrollbar mt-2 flex gap-2 overflow-x-auto pb-1">
-            {([["all","Все"],["todo","Задачи"],["images","Фото"],["reminders","Напоминания"],["overdue","Просрочены"],["locked","Защищённые"]] as const).map(([value,label])=>
+            {([["all","Все"],["todo","Задачи"],["images","Фото"],["reminders","Напоминания"],["overdue","Просрочены"],["pending","Незавершённые"],["locked","Защищённые"]] as const).map(([value,label])=>
               <button key={value} type="button" aria-pressed={searchFilter===value}
                 onClick={()=>setSearchFilter(value)}
                 className={`min-h-9 shrink-0 rounded-full border px-3 text-xs ${searchFilter===value?"border-primary bg-primary text-primary-foreground":"border-border bg-background"}`}>{label}</button>
