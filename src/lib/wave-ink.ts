@@ -30,9 +30,21 @@ export function serializeInk(strokes:InkStroke[]):string{
  if(text.length>120000||parseInk(text).length!==strokes.length)throw Error("Рисунок слишком большой или повреждён");
  return text;
 }
+/** Hit-test a whole line segment; the previous point-only eraser missed long strokes. */
+function segmentDistance(p:InkPoint,a:InkPoint,b:InkPoint):number{
+ const dx=b[0]-a[0],dy=b[1]-a[1],squared=dx*dx+dy*dy;
+ if(squared===0)return Math.hypot(p[0]-a[0],p[1]-a[1]);
+ const t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/squared));
+ return Math.hypot(p[0]-a[0]-dx*t,p[1]-a[1]-dy*t);
+}
 export function inkStrokeAt(strokes:InkStroke[],point:InkPoint,radius=22):number{
  for(let i=strokes.length-1;i>=0;i--){
-  if(strokes[i].points.some(p=>Math.hypot(p[0]-point[0],p[1]-point[1])<radius+strokes[i].width/2))return i;
+  const stroke=strokes[i],points=stroke.points;
+  const threshold=radius+stroke.width/2;
+  if(points.length===1&&Math.hypot(point[0]-points[0][0],point[1]-points[0][1])<=threshold)return i;
+  for(let j=1;j<points.length;j++){
+   if(segmentDistance(point,points[j-1],points[j])<=threshold)return i;
+  }
  }
  return -1;
 }
