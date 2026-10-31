@@ -36,3 +36,29 @@ export function inkStrokeAt(strokes:InkStroke[],point:InkPoint,radius=22):number
  }
  return -1;
 }
+
+/** Render saved vector strokes at any bounded destination size. */
+export function paintInk(ctx:CanvasRenderingContext2D,encoded:string,x:number,y:number,width:number,height:number):void{
+ const strokes=parseInk(encoded);
+ ctx.save();
+ ctx.beginPath();ctx.rect(x,y,width,height);ctx.clip();
+ for(const stroke of strokes){
+  const points=stroke.points;
+  if(!points.length)continue;
+  ctx.beginPath();
+  ctx.strokeStyle=stroke.color;
+  ctx.fillStyle=stroke.color;
+  ctx.lineCap="round";ctx.lineJoin="round";
+  ctx.lineWidth=stroke.width*width/1000;
+  ctx.globalAlpha=stroke.tool==="marker"?0.4:1;
+  for(let i=0;i<points.length;i++){
+   const px=x+points[i][0]*width/1000,py=y+points[i][1]*height/1000;
+   if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
+  }
+  if(points.length===1){
+   ctx.arc(x+points[0][0]*width/1000,y+points[0][1]*height/1000,ctx.lineWidth/2,0,Math.PI*2);
+   ctx.fill();
+  }else ctx.stroke();
+ }
+ ctx.restore();
+}
