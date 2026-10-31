@@ -178,6 +178,9 @@ jobs:
       - name: Execute in-note single and bulk replacement tests
         run: bun scripts/test-wave-find-replace.ts
 
+      - name: Verify nested hidden Tape text in previews and search
+        run: bun scripts/test-wave-tape-nested.ts
+
       - name: Execute offline Cyrillic note search unit tests
         run: bun scripts/test-wave-search-logic.ts
 
