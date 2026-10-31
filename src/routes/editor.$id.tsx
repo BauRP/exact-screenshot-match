@@ -72,6 +72,7 @@ import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWav
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
 import {safeBrowserClipboardHtml} from "@/lib/wave-smart-paste";
+import {DOMParser as PMDOMParser} from "@tiptap/pm/model";
 import { useFolders, type Folder } from "@/lib/folders-store";
 import {
   DropdownMenu,
@@ -280,7 +281,7 @@ function EditorPage() {
         if(!html)return false;
         event.preventDefault();
         const cleaned=safeBrowserClipboardHtml(html);
-        if(cleaned)_view.dispatch(_view.state.tr.replaceSelectionWith(_view.state.schema.text(event.clipboardData?.getData("text/plain")||""),false));
+        if(cleaned){const container=document.createElement("div");container.innerHTML=cleaned;const slice=PMDOMParser.fromSchema(_view.state.schema).parseSlice(container);_view.dispatch(_view.state.tr.replaceSelection(slice).scrollIntoView());}
         return true;
       },
       handleDrop(_view,event){
