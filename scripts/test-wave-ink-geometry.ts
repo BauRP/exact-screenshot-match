@@ -6,6 +6,7 @@ assert.equal(inkStrokeAt([line],[500,100],5),-1);
 assert.equal(inkStrokeAt([line],[995,2],5),0);
 assert.equal(inkStrokeAlong([line],[500,-10],[500,10],5),0);
 assert.equal(inkStrokeAlong([line],[500,100],[500,110],5),-1);
+assert.equal(inkStrokeAlong([line],[1100,0],[1200,0],5),-1);
 assert.deepEqual(parseInk(serializeInk([line])),[line]);
 assert.deepEqual(parseInk('not-json'),[]);
 console.log("Ink eraser line-segment and serialization tests passed");
