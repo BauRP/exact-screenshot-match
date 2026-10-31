@@ -363,6 +363,7 @@ function EditorPage() {
   const setSearchDecoration=(query:string,active:number)=>{
     if(editor)editor.view.dispatch(editor.state.tr.setMeta(noteSearchKey,{query,active,caseSensitive:prefs.caseSensitive}));
   };
+  useEffect(()=>{if(editor&&findOpen)setSearchDecoration(findQuery,findActive);},[prefs.caseSensitive,editor,findOpen,findQuery,findActive]);
   const dismissFind=()=>{setFindOpen(false);setFindQuery("");setFindActive(0);setSearchDecoration("",0);};
   const stepFind=(step:number)=>{
     if(!editor||!hits.length)return;
@@ -972,7 +973,8 @@ function EditorPage() {
               onClick={()=>{
                 if(!editor)return;
                 editor.chain().focus().setTextSelection(Math.min(editor.state.doc.content.size,item.pos+(item.type==="page"?0:1))).run();
-                editor.view.domAtPos(item.pos+1).node.parentElement?.scrollIntoView({block:"nearest",behavior:"smooth"});
+                const targetPos=Math.min(editor.state.doc.content.size,item.pos+(item.type==="page"?0:1));
+                try{const dom=editor.view.domAtPos(targetPos).node;const el=dom instanceof Element?dom:dom.parentElement;el?.scrollIntoView({block:"nearest",behavior:"smooth"});}catch{/* the editor still moved the selection */}
               }}>
               {item.type==="page"?"▤ ":item.type==="fold"?"▸ ":"§ "}{item.title}
             </button>)}
