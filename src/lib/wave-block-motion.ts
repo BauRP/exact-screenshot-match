@@ -156,3 +156,29 @@ export function setSelectedCalloutKind(editor:Editor,kind:"important"|"tip"|"war
  }
  return false;
 }
+
+/** Nearest enclosing section, including its title, child blocks and media.
+ * Moving a normal paragraph uses different commands; this moves the WHOLE section. */
+export function containingWaveSectionPos(editor:Editor):number|undefined{
+ const {$from}=editor.state.selection;
+ for(let depth=$from.depth;depth>0;depth--){
+  if($from.node(depth).type.name==="waveFold")return $from.before(depth);
+ }
+ return undefined;
+}
+export function moveContainingWaveSection(editor:Editor,direction:"up"|"down"):boolean{
+ const pos=containingWaveSectionPos(editor);
+ return pos===undefined?false:moveWaveBlock(editor,()=>pos,direction);
+}
+export function duplicateContainingWaveSection(editor:Editor):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const pos=containingWaveSectionPos(editor);
+ if(pos===undefined)return false;
+ const {doc}=editor.state,$pos=doc.resolve(pos);
+ const index=$pos.index(),parent=$pos.parent;
+ if(index>=parent.childCount||waveChildOffset(parent,index)!==$pos.parentOffset)return false;
+ const node=parent.child(index);
+ if(node.type.name!=="waveFold"||!parent.canReplace(index+1,index+1,Fragment.from(node)))return false;
+ editor.view.dispatch(editor.state.tr.insert(pos+node.nodeSize,node).scrollIntoView());
+ return true;
+}
