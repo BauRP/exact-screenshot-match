@@ -5,6 +5,7 @@ import { Check, FileText, FileType2, Star } from "lucide-react";
 import { formatBytes } from "@/lib/pdf-files";
 import {reminderLabel} from "@/lib/note-reminders";
 import {checklistSummary} from "@/lib/note-checklist-summary";
+import {noteSearchSnippet} from "@/lib/note-search";
 
 function stripHtml(html: string) {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
@@ -38,6 +39,7 @@ export function NoteCard({
   onToggle,
   onOpen,
   onMove,
+  searchQuery,
 }: {
   note: Note;
   view: ViewMode;
@@ -46,6 +48,7 @@ export function NoteCard({
   onToggle: () => void;
   onOpen: () => void;
   onMove: (targetId:string)=>void;
+  searchQuery?:string;
 }) {
   const isPdf = note.kind === "pdf";
   const isFavorite = isPdf ? !!note.pdf?.favorite : !!note.pinned;
@@ -97,7 +100,7 @@ export function NoteCard({
   const badges=[checklist?.total?`☑ ${checklist.done}/${checklist.total}`:"",reminder].filter(Boolean);
   const preview=isPdf
     ? `PDF · ${note.pdf?.pageCount ?? 0} стр. · ${formatBytes(note.pdf?.size ?? 0)}`
-    : [...badges,stripHtml(note.body).slice(0,140)||"Пусто…"].join(" · ");
+    : [...badges,(searchQuery?noteSearchSnippet(note,searchQuery,140):stripHtml(note.body).slice(0,140))||"Пусто…"].join(" · ");
   const light = cardBg ? (parseInt(cardBg.slice(1,3),16)*.2126+parseInt(cardBg.slice(3,5),16)*.7152+parseInt(cardBg.slice(5,7),16)*.0722)>145 : false;
   const ink = cardBg?(light?"#18181B":"#FFFFFF"):undefined;
   const muted = cardBg?(light?"#3F3F46":"#E5E7EB"):undefined;
