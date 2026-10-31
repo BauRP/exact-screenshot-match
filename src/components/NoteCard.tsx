@@ -4,6 +4,7 @@ import type { Note, ViewMode } from "@/lib/notes-store";
 import { Check, FileText, FileType2, Star } from "lucide-react";
 import { formatBytes } from "@/lib/pdf-files";
 import {reminderLabel,reminderIsDue} from "@/lib/note-reminders";
+import {checklistSummary} from "@/lib/note-checklist-summary";
 
 function stripHtml(html: string) {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
@@ -94,6 +95,7 @@ export function NoteCard({
 
   const cardBg = /^#[0-9a-f]{6}$/i.test(note.cardColor??"")?note.cardColor:undefined;
   const reminder=reminderLabel(note.reminderAt);
+  const checklist=isPdf?null:checklistSummary(note.body);
   const light = cardBg ? (parseInt(cardBg.slice(1,3),16)*.2126+parseInt(cardBg.slice(3,5),16)*.7152+parseInt(cardBg.slice(5,7),16)*.0722)>145 : false;
   const ink = cardBg?(light?"#18181B":"#FFFFFF"):undefined;
   const muted = cardBg?(light?"#3F3F46":"#E5E7EB"):undefined;
@@ -135,6 +137,7 @@ export function NoteCard({
         onPointerCancel={e=>{e.stopPropagation();dragging.current=false;dropTarget.current=null;}}>
         <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>}
+      {checklist&&checklist.total>0&&<span className="absolute bottom-2 left-2 z-10 rounded-md bg-secondary/90 px-1.5 py-0.5 text-[10px] text-foreground" aria-label={`Выполнено задач: ${checklist.done} из ${checklist.total}`}>☑ {checklist.done}/{checklist.total}</span>}
       {reminder&&<span className={`absolute bottom-2 right-2 z-10 max-w-[75%] truncate rounded-md px-1.5 py-0.5 text-[10px] ${reminderIsDue(note.reminderAt)?"bg-amber-500/20 text-amber-700":"bg-secondary text-muted-foreground"}`}>{reminder}</span>}
       {selected && (
         <span className="absolute right-2 top-2 z-10 grid h-5 w-5 place-items-center rounded-full bg-primary text-primary-foreground">
