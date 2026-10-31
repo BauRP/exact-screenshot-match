@@ -74,6 +74,7 @@ function AudioNoteView({ node, deleteNode, editor }: NodeViewProps) {
   const [audioError,setAudioError]=useState("");
   const [reloadToken,setReloadToken]=useState(0);
   const [duration, setDuration] = useState(0);
+  const [speed,setSpeed]=useState(1);
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
@@ -220,6 +221,19 @@ function AudioNoteView({ node, deleteNode, editor }: NodeViewProps) {
             height={40}
             className="h-10 w-full"
           />
+          <div className="flex items-center gap-2 text-xs">
+            <label className="min-w-0 flex-1">Позиция записи
+              <input aria-label="Перемотка аудио" type="range" min={0} max={Number.isFinite(duration)&&duration>0?Math.ceil(duration):0}
+                step="1" value={Math.min(progress,Number.isFinite(duration)&&duration>0?Math.ceil(duration):0)}
+                disabled={!playbackSrc||!Number.isFinite(duration)||duration<=0}
+                onChange={event=>{const at=Number(event.target.value);const player=audioRef.current;if(player&&Number.isFinite(at)){player.currentTime=at;setProgress(at);}}}
+                className="block w-full"/>
+            </label>
+            <select aria-label="Скорость воспроизведения" className="rounded-md bg-secondary p-1"
+              value={speed} onChange={event=>{const rate=Number(event.target.value);setSpeed(rate);if(audioRef.current)audioRef.current.playbackRate=rate;}}>
+              {[0.75,1,1.25,1.5,2].map(rate=><option key={rate} value={rate}>{rate}×</option>)}
+            </select>
+          </div>
           {audioError&&<div role="alert" className="mt-1 flex items-center gap-2 text-xs text-amber-300">
             <span>{audioError}</span>
             {src.startsWith("audiodb:")&&<button type="button" onClick={()=>setReloadToken(v=>v+1)} className="underline">Повторить</button>}
@@ -248,7 +262,7 @@ function AudioNoteView({ node, deleteNode, editor }: NodeViewProps) {
           ref={audioRef}
           src={playbackSrc}
           preload="metadata"
-          onLoadedMetadata={(e) => {setDuration(e.currentTarget.duration);setAudioError("");}}
+          onLoadedMetadata={(e) => {setDuration(e.currentTarget.duration);e.currentTarget.playbackRate=speed;setAudioError("");}}
           onError={()=>setAudioError("Не удалось прочитать аудиофайл")}
           onTimeUpdate={(e) => setProgress(e.currentTarget.currentTime)}
           onPlay={() => {
