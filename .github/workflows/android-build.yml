@@ -142,6 +142,9 @@ jobs:
       - name: Verify customizable toolbar and page breaks
         run: bun scripts/test-wave-toolbar-pages.ts
 
+      - name: Test nested section outline indentation
+        run: bun scripts/test-wave-outline-depth.ts
+
       - name: Verify outline navigation and safe block movement
         run: bun scripts/test-wave-outline.ts
 
