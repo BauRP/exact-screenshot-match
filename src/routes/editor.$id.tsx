@@ -70,6 +70,7 @@ import {WaveTextDirection} from "@/lib/wave-text-direction";
 import {collectNoteOutline,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
 import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
 import {duplicateCurrentPage,moveCurrentPage} from "@/lib/wave-page-actions";
+import {revealOutlinePosition} from "@/lib/wave-outline-navigation";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
 import {safeBrowserClipboardHtml} from "@/lib/wave-smart-paste";
@@ -1034,7 +1035,7 @@ function EditorPage() {
               style={{paddingLeft:Math.min(item.depth,5)*8+8}}
               onClick={()=>{
                 if(!editor)return;
-                editor.chain().focus().setTextSelection(Math.min(editor.state.doc.content.size,item.pos+(item.type==="page"?0:1))).run();
+                revealOutlinePosition(editor,Math.min(editor.state.doc.content.size,item.pos+(item.type==="page"?0:1)));
                 const targetPos=Math.min(editor.state.doc.content.size,item.pos+(item.type==="page"?0:1));
                 try{const dom=editor.view.domAtPos(targetPos).node;const el=dom instanceof Element?dom:dom.parentElement;el?.scrollIntoView({block:"nearest",behavior:"smooth"});}catch{/* the editor still moved the selection */}
               }}>
