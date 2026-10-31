@@ -71,6 +71,7 @@ import {collectNoteOutline,notePagePositions,noteCurrentPage,renameCurrentPage} 
 import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock} from "@/lib/wave-block-motion";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
+import {safeBrowserClipboardHtml} from "@/lib/wave-smart-paste";
 import { useFolders, type Folder } from "@/lib/folders-store";
 import {
   DropdownMenu,
@@ -274,8 +275,13 @@ function EditorPage() {
       },
       handlePaste(_view,event){
         const file=clipboardImage(event);
-        if(!file)return false;
-        event.preventDefault();enqueueImageRef.current?.(()=>Promise.resolve(file));return true;
+        if(file){event.preventDefault();enqueueImageRef.current?.(()=>Promise.resolve(file));return true;}
+        const html=event.clipboardData?.getData("text/html")||"";
+        if(!html)return false;
+        event.preventDefault();
+        const cleaned=safeBrowserClipboardHtml(html);
+        if(cleaned)_view.dispatch(_view.state.tr.replaceSelectionWith(_view.state.schema.text(event.clipboardData?.getData("text/plain")||""),false));
+        return true;
       },
       handleDrop(_view,event){
         const file=droppedImage(event);
