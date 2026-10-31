@@ -83,6 +83,7 @@ import {
 import { useT } from "@/lib/i18n";
 import { APP_FONTS, fontNameFromCss } from "@/lib/app-fonts";
 import { InNoteSearch, noteSearchKey, findWords } from "@/lib/in-note-search";
+import {replaceOneInNote,replaceAllInNote} from "@/lib/wave-find-replace";
 import { readEditorPreferences,EDITOR_PREFS_CHANGED,type EditorTool } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
@@ -162,6 +163,7 @@ function EditorPage() {
   const [findOpen,setFindOpen]=useState(false);
   const [outlineOpen,setOutlineOpen]=useState(false);
   const [findQuery,setFindQuery]=useState("");
+  const [findReplacement,setFindReplacement]=useState("");
   const [findActive,setFindActive]=useState(0);
   const [checkShape,setCheckShape]=useState<CheckShape>("square");
   const [prefs,setPrefs]=useState(()=>readEditorPreferences());
@@ -995,6 +997,19 @@ function EditorPage() {
           <span aria-live="polite" className="shrink-0 text-[10px] text-muted-foreground">{findQuery?(hits.length?`${findActive+1}/${hits.length}`:"0/0"):"—"}</span>
           <button type="button" disabled={!hits.length} onClick={()=>stepFind(-1)} aria-label="Предыдущее совпадение" className="grid h-8 w-8 shrink-0 place-items-center disabled:opacity-30"><ChevronUp className="h-4 w-4"/></button>
           <button type="button" disabled={!hits.length} onClick={()=>stepFind(1)} aria-label="Следующее совпадение" className="grid h-8 w-8 shrink-0 place-items-center disabled:opacity-30"><ChevronDown className="h-4 w-4"/></button>
+          <input aria-label="Заменить на" placeholder="Заменить на…" value={findReplacement}
+            maxLength={500} onChange={e=>setFindReplacement(e.target.value)}
+            className="w-20 min-w-0 rounded-md border border-border bg-background p-1 text-xs"/>
+          <button type="button" disabled={!hits.length} onClick={()=>{
+            if(!editor)return;
+            if(replaceOneInNote(editor,findQuery,findReplacement,findActive,prefs.caseSensitive))
+              setFindActive(0);
+          }} aria-label="Заменить совпадение" className="rounded-md border border-border px-2 py-1 text-xs disabled:opacity-30">Заменить</button>
+          <button type="button" disabled={!hits.length} onClick={()=>{
+            if(!editor)return;
+            const changed=replaceAllInNote(editor,findQuery,findReplacement,prefs.caseSensitive);
+            if(changed){setFindActive(0);toast.success(`Заменено: ${changed}`);}
+          }} aria-label="Заменить все совпадения" className="rounded-md border border-border px-2 py-1 text-xs disabled:opacity-30">Все</button>
           <button type="button" onClick={dismissFind} aria-label="Закрыть поиск" className="grid h-8 w-8 shrink-0 place-items-center"><X className="h-4 w-4"/></button>
         </div>}
       </div>
