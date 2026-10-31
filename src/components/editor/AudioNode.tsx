@@ -71,6 +71,8 @@ function AudioNoteView({ node, deleteNode, editor }: NodeViewProps) {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [audioError,setAudioError]=useState("");
+  const [reloadToken,setReloadToken]=useState(0);
   const [duration, setDuration] = useState(0);
   const [progress, setProgress] = useState(0);
 
@@ -82,16 +84,18 @@ function AudioNoteView({ node, deleteNode, editor }: NodeViewProps) {
     let disposed = false;
     let objectUrl: string | null = null;
     setPlaybackSrc("");
+    setAudioError("");
     void loadAudioFile(src.slice("audiodb:".length)).then((blob) => {
-      if (disposed || !blob) return;
+      if (disposed) return;
+      if(!blob){setAudioError("Аудиофайл не найден");return;}
       objectUrl = URL.createObjectURL(blob);
       setPlaybackSrc(objectUrl);
-    }).catch((error) => console.error("Unable to load audio attachment", error));
+    }).catch((error) => {console.error("Unable to load audio attachment", error);if(!disposed)setAudioError("Не удалось загрузить аудио");});
     return () => {
       disposed = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [src]);
+  }, [src,reloadToken]);
 
   useEffect(() => {
     return () => {
@@ -178,7 +182,7 @@ function AudioNoteView({ node, deleteNode, editor }: NodeViewProps) {
       try {
         await ctxRef.current?.resume();
       } catch {}
-      await audio.play();
+      try{await audio.play();setAudioError("");}catch(error){console.error("Audio playback failed",error);setAudioError("Не удалось воспроизвести аудио");}
     }
   };
 
@@ -216,6 +220,10 @@ function AudioNoteView({ node, deleteNode, editor }: NodeViewProps) {
             height={40}
             className="h-10 w-full"
           />
+          {audioError&&<div role="alert" className="mt-1 flex items-center gap-2 text-xs text-amber-300">
+            <span>{audioError}</span>
+            {src.startsWith("audiodb:")&&<button type="button" onClick={()=>setReloadToken(v=>v+1)} className="underline">Повторить</button>}
+          </div>}
           <div className="mt-1 flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-white/60">
             <span>Аудио</span>
             <span>
@@ -240,7 +248,8 @@ function AudioNoteView({ node, deleteNode, editor }: NodeViewProps) {
           ref={audioRef}
           src={playbackSrc}
           preload="metadata"
-          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+          onLoadedMetadata={(e) => {setDuration(e.currentTarget.duration);setAudioError("");}}
+          onError={()=>setAudioError("Не удалось прочитать аудиофайл")}
           onTimeUpdate={(e) => setProgress(e.currentTarget.currentTime)}
           onPlay={() => {
             setPlaying(true);
