@@ -41,7 +41,7 @@ import {
   biometricAvailability,
 } from "@/lib/app-lock";
 import { pinIsValid } from "@/lib/pin-security";
-import { readEditorPreferences,saveEditorPreferences } from "@/lib/editor-preferences";
+import { readEditorPreferences,saveEditorPreferences,TOOLBAR_TOOLS } from "@/lib/editor-preferences";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [
@@ -420,6 +420,20 @@ function SettingsPage() {
           <Row icon={<Search className="h-4 w-4"/>} title="Учитывать регистр в поиске" hint="Поиск только внутри открытой заметки">
             <Toggle checked={editorPrefs.caseSensitive} label="Учитывать заглавные буквы" onChange={v=>changePref({caseSensitive:v})}/>
           </Row>
+          <div className="h-px bg-border"/>
+          <div className="p-3">
+            <p className="text-sm font-semibold">Кнопки панели редактора</p>
+            <p className="mt-1 text-xs text-muted-foreground">Выберите инструменты, которые хотите видеть. Сохранение и отмена остаются доступными.</p>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {TOOLBAR_TOOLS.map(tool=><div key={tool.id} className="flex items-center justify-between gap-2 rounded-xl border border-border p-2">
+                <span className="text-xs">{tool.label}</span>
+                <Toggle label={tool.label} checked={!editorPrefs.hiddenToolbar.includes(tool.id)}
+                  onChange={shown=>changePref({hiddenToolbar:shown?editorPrefs.hiddenToolbar.filter(id=>id!==tool.id):[...editorPrefs.hiddenToolbar,tool.id]})}/>
+              </div>)}
+            </div>
+            <button type="button" onClick={()=>changePref({hiddenToolbar:[]})}
+              className="mt-3 rounded-lg border border-border px-3 py-2 text-xs">Показать все кнопки</button>
+          </div>
         </Section>
         <Section title={t("security")} eyebrow="05">
           <Row
