@@ -157,6 +157,9 @@ jobs:
       - name: Execute offline Cyrillic note search unit tests
         run: bun scripts/test-wave-search-logic.ts
 
+      - name: Execute rich note filter tests
+        run: bun scripts/test-wave-rich-filters.ts
+
       - name: Verify offline note search and scoped filters
         run: bun scripts/test-wave-note-search.ts
 
