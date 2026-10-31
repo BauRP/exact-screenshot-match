@@ -88,6 +88,14 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
   if(gestureChanged.current)emit(current.current);
   gestureChanged.current=false;
  };
+ const clear=()=>{
+   if(gesture.current!==null||current.current.length===0)return;
+   past.current=[...past.current.slice(-29),current.current];
+   future.current=[];
+   replace([]);
+   setHistoryVersion(v=>v+1);
+   emit([]);
+ };
  const undo=()=>{
    if(gesture.current!==null||!past.current.length)return;
    const previous=past.current[past.current.length-1];
@@ -115,6 +123,9 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
      {(["pen","marker","eraser"] as const).map(item=><button key={item} type="button" aria-pressed={tool===item}
        className={`rounded-lg px-2 py-1 text-xs ${tool===item?"bg-primary text-primary-foreground":"bg-secondary"}`}
        onClick={()=>setTool(item)}>{item==="pen"?"Ручка":item==="marker"?"Маркер":"Ластик"}</button>)}
+     <button type="button" aria-label="Очистить рисунок" title="Очистить рисунок (можно отменить)"
+       disabled={strokes.length===0} onClick={clear}
+       className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">Очистить</button>
      <button type="button" aria-label="Отменить штрих" title="Отменить штрих" disabled={!past.current.length}
        onClick={undo} className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">↶</button>
      <button type="button" aria-label="Вернуть штрих" title="Вернуть штрих" disabled={!future.current.length}
