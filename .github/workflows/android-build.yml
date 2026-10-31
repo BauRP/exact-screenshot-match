@@ -124,6 +124,9 @@ jobs:
       - name: Verify reminder metadata, due status and offline filters
         run: bun scripts/test-wave-reminders.ts
 
+      - name: Execute page boundary and nested block movement regression
+        run: bun scripts/test-wave-section-pages-motion.ts
+
       - name: Verify nested sections, page navigation and export
         run: bun scripts/test-wave-nested-pages.ts
 
