@@ -232,6 +232,9 @@ jobs:
       - name: Test protected in-note search, marker shape and exact-time reminders
         run: bun scripts/test-wave-privacy-ui-reminders.ts
 
+      - name: Test atomic overdue reminder snoozing
+        run: bun scripts/test-wave-atomic-reminder-snooze.ts
+
       - name: Verify reminder update tracking and hidden answer safety
         run: bun scripts/test-wave-reminder-tape-safety.ts
 
