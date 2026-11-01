@@ -89,7 +89,7 @@ import {replaceOneInNote,replaceAllInNote} from "@/lib/wave-find-replace";
 import { readEditorPreferences,EDITOR_PREFS_CHANGED,type EditorTool } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
-import {setSelectedChecklistShape,continueSelectedChecklistItem} from "@/lib/wave-checklist-actions";
+import {setSelectedChecklistShape,continueSelectedChecklistItem,selectedSectionTaskCounts,setSelectedSectionTasksDone} from "@/lib/wave-checklist-actions";
 import {setAllFoldSections,setFoldSectionsToDepth,countFoldSections} from "@/lib/wave-section-batch";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
@@ -861,6 +861,15 @@ function EditorPage() {
                 <div className="flex gap-1">
                   <button type="button" onClick={()=>setAllChecklistItems(editor,true)} className="rounded-md bg-secondary px-2 py-2 text-xs">Выполнить все</button>
                   <button type="button" onClick={()=>setAllChecklistItems(editor,false)} className="rounded-md bg-secondary px-2 py-2 text-xs">Сбросить все</button>
+                </div>
+              </div>}
+              {editor&&selectedSectionTaskCounts(editor)&&<div className="mb-2 rounded-lg border border-border p-2">
+                <p className="mb-1 text-xs text-muted-foreground">Задачи текущего раздела: {selectedSectionTaskCounts(editor)?.done}/{selectedSectionTaskCounts(editor)?.total}</p>
+                <div className="flex gap-1">
+                  <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>setSelectedSectionTasksDone(editor,true)}
+                    className="rounded-md bg-secondary px-2 py-2 text-xs">Выполнить раздел</button>
+                  <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>setSelectedSectionTasksDone(editor,false)}
+                    className="rounded-md bg-secondary px-2 py-2 text-xs">Сбросить раздел</button>
                 </div>
               </div>}
               <p className="px-2 pb-1 text-xs font-semibold">Форма отметок</p>
