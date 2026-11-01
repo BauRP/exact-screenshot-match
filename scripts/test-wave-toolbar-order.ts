@@ -1,0 +1,14 @@
+import {strict as assert} from "node:assert";
+import {validToolbarOrder,moveToolbarTool,TOOLBAR_TOOLS} from "../src/lib/editor-preferences";
+import {readFileSync} from "node:fs";
+const original=TOOLBAR_TOOLS.map(x=>x.id);
+assert.deepEqual(validToolbarOrder(null),original);
+assert.deepEqual(validToolbarOrder(["gallery","audio","gallery","unknown"]),["gallery","audio",...original.filter(x=>x!=="gallery"&&x!=="audio")]);
+const moved=moveToolbarTool(original,"gallery","up");
+assert.equal(moved[2],"gallery");
+assert.equal(moved[3],"camera");
+assert.deepEqual(moveToolbarTool(original,"audio","up"),original);
+const settings=readFileSync("src/routes/settings.tsx","utf8"),editor=readFileSync("src/routes/editor.$id.tsx","utf8");
+assert.ok(settings.includes("moveToolbarTool(editorPrefs.toolbarOrder,id"));
+for(const id of original)assert.ok(editor.includes('prefs.toolbarOrder.indexOf("'+id+'")'),id);
+console.log("Toolbar ordering saved, backward-compatible and applied to editor");
