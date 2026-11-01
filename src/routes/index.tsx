@@ -64,6 +64,7 @@ import {
   moveSelectedNotesToFolder,
   setSelectedNotesCardColor,
   deleteNote,
+  deleteSelectedNotes,
   updateNote,
   setSort,
   setView,
@@ -686,7 +687,7 @@ function Index() {
               className="rounded-full"
               onClick={() => {
                 try {
-                  selected.forEach((id) => deleteNote(id));
+                  deleteSelectedNotes([...selected]);
                   setSelected(new Set());
                   setConfirmDelete(false);
                 } catch (error) {
