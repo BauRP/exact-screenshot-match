@@ -127,6 +127,9 @@ jobs:
       - name: Execute offline reminder and checklist logic unit tests
         run: bun scripts/test-wave-reminder-logic.ts
 
+      - name: Check precise checklist split at caret
+        run: bun scripts/test-wave-checklist-split.ts
+
       - name: Verify saved checklist summaries and pending filters
         run: bun scripts/test-wave-checklist-summary.ts
 
