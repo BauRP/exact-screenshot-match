@@ -3,6 +3,7 @@ import type {Node as PMNode} from "@tiptap/pm/model";
 import {TextSelection} from "@tiptap/pm/state";
 import {canSplit} from "@tiptap/pm/transform";
 import type {CheckShape} from "./wave-checklist";
+import {topLevelPageRanges} from "./wave-page-actions";
 
 export type ChecklistCounts={total:number;done:number;pending:number};
 export function countDocumentTasks(doc:PMNode):ChecklistCounts{
@@ -110,6 +111,45 @@ export function setSelectedSectionTasksDone(editor:Editor,done:boolean):number{
  });
  if(!updates.length)return 0;
  let tr=state.tr;
+ for(const item of updates)tr=tr.setNodeMarkup(item.pos,undefined,item.attrs);
+ editor.view.dispatch(tr.scrollIntoView());
+ return updates.length;
+}
+
+
+/** The active logical page is bounded by top-level page breaks only.
+ * Checklists inside a nested section belong to their containing page. */
+function selectedPageTaskRange(editor:Editor):{from:number;to:number}{
+ const pages=topLevelPageRanges(editor.state.doc);
+ const pos=editor.state.selection.from;
+ let index=0;
+ for(let i=1;i<pages.length;i++)if(pos>=pages[i].start)index=i;
+ return {from:pages[index].bodyStart,to:pages[index].end};
+}
+export function currentPageTaskCounts(editor:Editor):ChecklistCounts{
+ if(editor.isDestroyed)return {total:0,done:0,pending:0};
+ const {from,to}=selectedPageTaskRange(editor);
+ let total=0,done=0;
+ editor.state.doc.nodesBetween(from,to,node=>{
+  if(node.type.name==="waveChecklistItem"){
+   total++;
+   if(node.attrs.done===true)done++;
+  }
+ });
+ return {total,done,pending:total-done};
+}
+/** Complete or reset tasks on the active page as one undoable edit,
+ * without touching other pages or rebuilding nested sections. */
+export function setCurrentPageTasksDone(editor:Editor,done:boolean):number{
+ if(!editor.isEditable||editor.isDestroyed)return 0;
+ const {from,to}=selectedPageTaskRange(editor);
+ const updates:{pos:number;attrs:Record<string,unknown>}[]=[];
+ editor.state.doc.nodesBetween(from,to,(node,pos)=>{
+  if(node.type.name==="waveChecklistItem"&&node.attrs.done!==done)
+   updates.push({pos,attrs:{...node.attrs,done}});
+ });
+ if(!updates.length)return 0;
+ let tr=editor.state.tr;
  for(const item of updates)tr=tr.setNodeMarkup(item.pos,undefined,item.attrs);
  editor.view.dispatch(tr.scrollIntoView());
  return updates.length;
