@@ -5,6 +5,8 @@ assert.equal(structuredMarkdownClipboardHtml("# Title\n\n> Note"),"<h1>Title</h1
 assert.ok(structuredMarkdownClipboardHtml("## Heading\n- one\n- two").includes("<ul><li><p>one</p></li>"));
 assert.ok(structuredMarkdownClipboardHtml("1. Alpha\n3. Gamma").includes('start="3"'));
 assert.ok(structuredMarkdownClipboardHtml("```js\n<script>\n```\n# heading").includes("&lt;script&gt;"));
+assert.ok(structuredMarkdownClipboardHtml("# Tasks\n- [x] Ready\n- [ ] Next").includes('data-done="true"'));
+assert.ok(structuredMarkdownClipboardHtml("# Tasks\n- [x] Ready\n- [ ] Next").includes('data-done="false"'));
 assert.equal(structuredMarkdownClipboardHtml("Normal plain text"),"");
 assert.equal(structuredMarkdownClipboardHtml("# only one heading"),"");
 assert.equal(structuredMarkdownClipboardHtml("```\nunclosed"),"");
