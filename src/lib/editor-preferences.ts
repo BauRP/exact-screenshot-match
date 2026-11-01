@@ -14,23 +14,39 @@ export type EditorPreferences={
  spellcheck:boolean;
  caseSensitive:boolean;
  hiddenToolbar:EditorTool[];
+ toolbarOrder:EditorTool[];
 };
 const KEY="wave.editor.preferences.v1";
 export const EDITOR_PREFS_CHANGED="wave-editor-preferences-changed";
 const ALL=new Set<string>(TOOLBAR_TOOLS.map(tool=>tool.id));
-const DEFAULT:EditorPreferences={spellcheck:true,caseSensitive:false,hiddenToolbar:[]};
+const DEFAULT:EditorPreferences={spellcheck:true,caseSensitive:false,hiddenToolbar:[],toolbarOrder:TOOLBAR_TOOLS.map(tool=>tool.id)};
 export function validHiddenToolbar(input:unknown):EditorTool[]{
  if(!Array.isArray(input))return [];
  return [...new Set(input.filter((id):id is EditorTool=>typeof id==="string"&&ALL.has(id)))];
 }
+/** Persist a full permutation of known controls. Old settings can omit
+ * toolbarOrder: unknown IDs are discarded and new tools added at the end. */
+export function validToolbarOrder(input:unknown):EditorTool[]{
+ const supplied=Array.isArray(input)?input:[];
+ const unique=validHiddenToolbar(supplied);
+ return [...unique,...TOOLBAR_TOOLS.map(tool=>tool.id).filter(id=>!unique.includes(id))];
+}
+export function moveToolbarTool(order:readonly EditorTool[],tool:EditorTool,direction:"up"|"down"):EditorTool[]{
+ const next=validToolbarOrder(order),index=next.indexOf(tool);
+ const target=index+(direction==="up"?-1:1);
+ if(index<0||target<0||target>=next.length)return next;
+ [next[index],next[target]]=[next[target],next[index]];
+ return next;
+}
 export function readEditorPreferences():EditorPreferences{
- if(typeof window==="undefined")return {...DEFAULT,hiddenToolbar:[]};
+ if(typeof window==="undefined")return {...DEFAULT,hiddenToolbar:[],toolbarOrder:validToolbarOrder(null)};
  try{
   const raw=JSON.parse(window.localStorage.getItem(KEY)||"null");
   return {
    spellcheck:typeof raw?.spellcheck==="boolean"?raw.spellcheck:true,
    caseSensitive:typeof raw?.caseSensitive==="boolean"?raw.caseSensitive:false,
    hiddenToolbar:validHiddenToolbar(raw?.hiddenToolbar),
+   toolbarOrder:validToolbarOrder(raw?.toolbarOrder),
   };
  }catch{return {...DEFAULT,hiddenToolbar:[]};}
 }
@@ -40,6 +56,7 @@ export function saveEditorPreferences(patch:Partial<EditorPreferences>):EditorPr
   spellcheck:typeof patch.spellcheck==="boolean"?patch.spellcheck:base.spellcheck,
   caseSensitive:typeof patch.caseSensitive==="boolean"?patch.caseSensitive:base.caseSensitive,
   hiddenToolbar:patch.hiddenToolbar===undefined?base.hiddenToolbar:validHiddenToolbar(patch.hiddenToolbar),
+  toolbarOrder:patch.toolbarOrder===undefined?base.toolbarOrder:validToolbarOrder(patch.toolbarOrder),
  };
  if(typeof window!=="undefined"){
   window.localStorage.setItem(KEY,JSON.stringify(next));
