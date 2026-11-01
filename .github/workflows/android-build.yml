@@ -238,6 +238,9 @@ jobs:
       - name: Verify RTL and numbered-list Word export
         run: bun scripts/test-wave-docx-rtl-numbering.ts
 
+      - name: Check list numbering and RTL in text exports
+        run: bun scripts/test-wave-text-export-list-markers.ts
+
       - name: Verify real offline TXT HTML and DOCX document export
         run: bun scripts/test-wave-document-export.ts
 
