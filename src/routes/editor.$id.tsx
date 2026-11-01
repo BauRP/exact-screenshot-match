@@ -807,7 +807,7 @@ function EditorPage() {
           >
             <Redo2 className="h-4 w-4" />
           </button>
-                    {toolVisible("audio")&&<button
+                    {toolVisible("audio")&&<button style={{order:10+prefs.toolbarOrder.indexOf("audio")}}
             onClick={recording ? stopRecording : startRecording}
             disabled={startingAudio}
             className={`grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary ${
@@ -817,15 +817,15 @@ function EditorPage() {
           >
             {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
           </button>}
-          {toolVisible("drawing")&&<button type="button" onClick={()=>editor?.chain().focus().insertWaveDrawing().run()}
+          {toolVisible("drawing")&&<button style={{order:10+prefs.toolbarOrder.indexOf("drawing")}} type="button" onClick={()=>editor?.chain().focus().insertWaveDrawing().run()}
             aria-label="Добавить рисунок" className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
             <PenTool className="h-4 w-4"/>
           </button>}
-          {toolVisible("camera")&&<button type="button" onClick={addCameraImage} aria-label="Сфотографировать для заметки"
+          {toolVisible("camera")&&<button style={{order:10+prefs.toolbarOrder.indexOf("camera")}} type="button" onClick={addCameraImage} aria-label="Сфотографировать для заметки"
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
             <Camera className="h-4 w-4"/>
           </button>}
-          {toolVisible("gallery")&&<button type="button" onClick={addImage} aria-label="Добавить фотографию из галереи"
+          {toolVisible("gallery")&&<button style={{order:10+prefs.toolbarOrder.indexOf("gallery")}} type="button" onClick={addImage} aria-label="Добавить фотографию из галереи"
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
             <ImagePlus className="h-4 w-4"/>
           </button>}
@@ -839,19 +839,19 @@ function EditorPage() {
             <Star className="h-4 w-4" fill={pinned ? "currentColor" : "none"} />
           </button>
 
-          {toolVisible("outline")&&<button type="button" aria-label="Оглавление заметки" aria-expanded={outlineOpen}
+          {toolVisible("outline")&&<button style={{order:10+prefs.toolbarOrder.indexOf("outline")}} type="button" aria-label="Оглавление заметки" aria-expanded={outlineOpen}
             onClick={()=>setOutlineOpen(open=>!open)}
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
             <ListTree className="h-4 w-4"/>
           </button>}
-          {toolVisible("search")&&<button type="button" onClick={()=>findOpen?dismissFind():setFindOpen(true)}
+          {toolVisible("search")&&<button style={{order:10+prefs.toolbarOrder.indexOf("search")}} type="button" onClick={()=>findOpen?dismissFind():setFindOpen(true)}
             aria-label="Найти в заметке" aria-expanded={findOpen}
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
             <Search className="h-4 w-4"/>
           </button>}
           {toolVisible("checklist")&&<Popover>
             <PopoverTrigger asChild>
-              <button type="button" aria-label="Добавить список дел" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+              <button style={{order:10+prefs.toolbarOrder.indexOf("checklist")}} type="button" aria-label="Добавить список дел" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
                 <ListChecks className="h-4 w-4"/>
               </button>
             </PopoverTrigger>
@@ -932,7 +932,7 @@ function EditorPage() {
           </Popover>
           {toolVisible("insert")&&<Popover>
             <PopoverTrigger asChild>
-              <button type="button" aria-label="Вставить блок" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+              <button style={{order:10+prefs.toolbarOrder.indexOf("insert")}} type="button" aria-label="Вставить блок" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
                 <Blocks className="h-4 w-4"/>
               </button>
             </PopoverTrigger>
