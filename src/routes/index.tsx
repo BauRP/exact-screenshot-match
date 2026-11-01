@@ -142,7 +142,7 @@ function Index() {
   },[]);
   const [copyBusy,setCopyBusy]=useState(false);
   const [transferBusy,setTransferBusy]=useState(false);
-  const [incomingWave,setIncomingWave]=useState<{file:File;title:string;originId:string;kind:"note"|"pdf"}|null>(null);
+  const [incomingWave,setIncomingWave]=useState<{file:File;title:string;originId:string;kind:"note"|"pdf";preview:string;audioCount:number;imageCount:number;modifiedAt:number|null}|null>(null);
   const [folderDialog, setFolderDialog] = useState<FolderDialogState>(null);
   // The menu floats above the list without moving folders or ads.
   // Google renders native ads above WebView; temporarily hide that overlay
@@ -263,7 +263,7 @@ function Index() {
     picker.addEventListener("change",()=>{
       const file=picker.files?.[0];picker.remove();
       if(!file)return;
-      void inspectWaveFile(file).then(info=>setIncomingWave({file,title:info.title,originId:info.originId,kind:info.kind}))
+      void inspectWaveFile(file).then(info=>setIncomingWave({file,title:info.title,originId:info.originId,kind:info.kind,preview:info.preview,audioCount:info.audioCount,imageCount:info.imageCount,modifiedAt:info.modifiedAt}))
         .catch(error=>toast.error(error instanceof Error?error.message:"Файл Wave Notes повреждён"));
     });
     document.body.appendChild(picker);picker.click();
@@ -564,6 +564,14 @@ function Index() {
         <DialogContent className="max-w-sm rounded-2xl">
           <DialogHeader><DialogTitle>Получить заметку Wave Notes</DialogTitle></DialogHeader>
           <p className="text-sm">{incomingWave?.title}</p>
+          {incomingWave&&<div className="rounded-xl border border-border bg-secondary/40 p-3 text-xs">
+            <p className="font-medium">Предварительный просмотр файла</p>
+            {incomingWave.preview&&<p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{incomingWave.preview}</p>}
+            <p className="mt-1 text-muted-foreground">Вложения: фото {incomingWave.imageCount}, аудио {incomingWave.audioCount}</p>
+            {incomingWave.modifiedAt&&<p className="mt-1 text-muted-foreground">В файле изменено: {new Date(incomingWave.modifiedAt).toLocaleString()}</p>}
+            {returnedOriginal&&<p className="mt-1 text-muted-foreground">На устройстве изменено: {new Date(returnedOriginal.updatedAt).toLocaleString()}</p>}
+            <p className="mt-1 text-muted-foreground">Скрытые Tape-ответы не показываются в предварительном просмотре.</p>
+          </div>}
           <p className="text-xs text-muted-foreground">
             {returnedOriginal ? "Найдена исходная заметка. Можно сохранить копию, объединить обе версии или заменить исходную с созданием резервной копии." : "Исходная заметка не найдена. Полученный файл будет сохранён отдельно; другие заметки не изменятся."}
           </p>
