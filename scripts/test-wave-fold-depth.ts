@@ -1,0 +1,18 @@
+import {strict as assert} from "node:assert";
+import {Schema} from "@tiptap/pm/model";
+import {EditorState} from "@tiptap/pm/state";
+import {setFoldSectionsToDepth} from "../src/lib/wave-section-batch";
+const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},waveFold:{group:"block",content:"block+",attrs:{collapsed:{default:false}}},text:{group:"inline"}},marks:{}});
+const p=(v:string)=>schema.nodes.paragraph.create(null,schema.text(v));
+const fold=(content:any[])=>schema.nodes.waveFold.create({collapsed:false},content);
+let state=EditorState.create({schema,doc:schema.nodes.doc.create(null,[fold([p("one"),fold([p("two"),fold([p("three")])])])])});
+const editor={isEditable:true,isDestroyed:false,get state(){return state},view:{dispatch(tr:any){state=state.apply(tr)}}} as any;
+assert.equal(setFoldSectionsToDepth(editor,1),2);
+assert.equal(state.doc.firstChild?.attrs.collapsed,false);
+assert.equal(state.doc.firstChild?.child(1).attrs.collapsed,true);
+assert.equal(state.doc.textContent,"onetwothree");
+assert.equal(setFoldSectionsToDepth(editor,2),1);
+assert.equal(state.doc.firstChild?.child(1).attrs.collapsed,false);
+assert.equal(state.doc.firstChild?.child(1).child(1).attrs.collapsed,true);
+assert.equal(setFoldSectionsToDepth(editor,3),1);
+console.log("Fold depth controls retain all nested contents");
