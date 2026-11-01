@@ -1019,6 +1019,10 @@ function NotesGrid({
             onToggle={() => onToggle(note.id)}
             onOpen={() => onOpen(note)}
             onMove={targetId=>onMove(note.id,targetId)}
+            canMoveUp={index>0&&notes[index-1].pinned===note.pinned&&notes[index-1].folderId===note.folderId}
+            canMoveDown={index<notes.length-1&&notes[index+1].pinned===note.pinned&&notes[index+1].folderId===note.folderId}
+            onMoveUp={()=>{if(index>0)onMove(note.id,notes[index-1].id);}}
+            onMoveDown={()=>{if(index<notes.length-1)onMove(notes[index+1].id,note.id);}}
           />
           {(index + 1) % 5 === 0 && (
             <div className="col-span-full min-w-0">
