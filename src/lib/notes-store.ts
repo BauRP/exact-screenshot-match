@@ -196,13 +196,24 @@ function normalizeNote(input: unknown): Note | null {
 
 }
 
-function parseStoredNotes(raw: string | null): Note[] {
-  if (!raw) return [];
+/** Reject records whose identity or body would be fabricated by normalization.
+ * Otherwise a subsequent save could overwrite another note or silently erase
+ * an existing body. Keep the original localStorage bytes untouched on error. */
+export function parseStoredNotes(raw: string | null): Note[] {
+  if (raw === null) return [];
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) throw new Error("Unexpected notes database format");
-    if (parsed.some((item) => !isRecord(item))) throw new Error("Invalid note record");
-    return parsed.map(normalizeNote).filter((note): note is Note => note !== null);
+    const seen = new Set<string>();
+    for (const item of parsed) {
+      if (!isRecord(item) || typeof item.id !== "string" || !item.id.trim() ||
+          typeof item.body !== "string" || (item.title !== undefined && typeof item.title !== "string")) {
+        throw new Error("Invalid note identity or text body");
+      }
+      if (seen.has(item.id)) throw new Error("Duplicate note identity");
+      seen.add(item.id);
+    }
+    return parsed.map(item => normalizeNote(item)!);
   } catch {
     throw new Error("Saved notes could not be parsed. Original data is preserved.");
   }
