@@ -41,7 +41,7 @@ import {
   biometricAvailability,
 } from "@/lib/app-lock";
 import { pinIsValid } from "@/lib/pin-security";
-import { readEditorPreferences,saveEditorPreferences,TOOLBAR_TOOLS } from "@/lib/editor-preferences";
+import { readEditorPreferences,saveEditorPreferences,TOOLBAR_TOOLS,moveToolbarTool } from "@/lib/editor-preferences";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [
