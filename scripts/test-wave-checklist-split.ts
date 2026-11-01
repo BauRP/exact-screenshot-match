@@ -1,0 +1,17 @@
+import {strict as assert} from "node:assert";
+import {Schema} from "@tiptap/pm/model";
+import {EditorState,TextSelection} from "@tiptap/pm/state";
+import {continueSelectedChecklistItem} from "../src/lib/wave-checklist-actions";
+const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"inline*"},waveChecklistItem:{group:"block",content:"inline*",attrs:{shape:{default:"square"},done:{default:false}}},text:{group:"inline"}},marks:{strong:{}}});
+const item=schema.nodes.waveChecklistItem.create({shape:"circle",done:true},[schema.text("left"),schema.text("right",[schema.marks.strong.create()])]);
+let state=EditorState.create({schema,doc:schema.nodes.doc.create(null,[item])});
+const editor={isEditable:true,isDestroyed:false,get state(){return state;},view:{dispatch(tr:any){state=state.apply(tr)}}} as any;
+state=state.apply(state.tr.setSelection(TextSelection.create(state.doc,5)));
+assert.equal(continueSelectedChecklistItem(editor),true);
+assert.equal(state.doc.childCount,2);
+assert.equal(state.doc.child(0).textContent,"left");
+assert.equal(state.doc.child(1).textContent,"right");
+assert.equal(state.doc.child(1).attrs.done,false);
+assert.equal(state.doc.child(1).attrs.shape,"circle");
+assert.equal(state.doc.child(1).firstChild?.marks[0].type.name,"strong");
+console.log("Checklist caret split preserves both halves, formatting, marker and unchecked continuation");
