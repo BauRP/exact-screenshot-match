@@ -85,7 +85,7 @@ import { useT } from "@/lib/i18n";
 import { pickPdfFile, savePdfFile } from "@/lib/pdf-files";
 import { toast } from "sonner";
 import {inspectWaveFile,receiveWaveNote,shareWaveNote} from "@/lib/note-transfer";
-import {findReturnedOriginal,combineReturnedBodies,replacementBackup} from "@/lib/wave-note-conflicts";
+import {findReturnedOriginal,combineReturnedBodies,replacementBackup,returnedNoteComparison} from "@/lib/wave-note-conflicts";
 import {noteMatchesSearch,type NoteSearchFilter} from "@/lib/note-search";
 import {shareNoteExport,type NoteExportFormat} from "@/lib/note-export";
 import {reminderIsDue,snoozeReminderTime,reminderLabel,type ReminderSnooze} from "@/lib/note-reminders";
@@ -144,7 +144,7 @@ function Index() {
   },[]);
   const [copyBusy,setCopyBusy]=useState(false);
   const [transferBusy,setTransferBusy]=useState(false);
-  const [incomingWave,setIncomingWave]=useState<{file:File;title:string;originId:string;kind:"note"|"pdf";preview:string;audioCount:number;imageCount:number;modifiedAt:number|null}|null>(null);
+  const [incomingWave,setIncomingWave]=useState<{file:File;title:string;originId:string;kind:"note"|"pdf";preview:string;comparisonText:string;visibleLength:number;audioCount:number;imageCount:number;modifiedAt:number|null}|null>(null);
   const [folderDialog, setFolderDialog] = useState<FolderDialogState>(null);
   // The menu floats above the list without moving folders or ads.
   // Google renders native ads above WebView; temporarily hide that overlay
@@ -265,7 +265,7 @@ function Index() {
     picker.addEventListener("change",()=>{
       const file=picker.files?.[0];picker.remove();
       if(!file)return;
-      void inspectWaveFile(file).then(info=>setIncomingWave({file,title:info.title,originId:info.originId,kind:info.kind,preview:info.preview,audioCount:info.audioCount,imageCount:info.imageCount,modifiedAt:info.modifiedAt}))
+      void inspectWaveFile(file).then(info=>setIncomingWave({file,title:info.title,originId:info.originId,kind:info.kind,preview:info.preview,comparisonText:info.comparisonText,visibleLength:info.visibleLength,audioCount:info.audioCount,imageCount:info.imageCount,modifiedAt:info.modifiedAt}))
         .catch(error=>toast.error(error instanceof Error?error.message:"Файл Wave Notes повреждён"));
     });
     document.body.appendChild(picker);picker.click();
@@ -582,6 +582,8 @@ function Index() {
             {incomingWave.preview&&<p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{incomingWave.preview}</p>}
             <p className="mt-1 text-muted-foreground">Вложения: фото {incomingWave.imageCount}, аудио {incomingWave.audioCount}</p>
             {incomingWave.modifiedAt&&<p className="mt-1 text-muted-foreground">В файле изменено: {new Date(incomingWave.modifiedAt).toLocaleString()}</p>}
+            {returnedOriginal&&incomingWave&&incomingWave.kind==="note"&&
+              <p className="mt-1 font-medium">{returnedNoteComparison(returnedOriginal,incomingWave)}</p>}
             {returnedOriginal&&<p className="mt-1 text-muted-foreground">На устройстве изменено: {new Date(returnedOriginal.updatedAt).toLocaleString()}</p>}
             <p className="mt-1 text-muted-foreground">Скрытые Tape-ответы не показываются в предварительном просмотре.</p>
           </div>}
