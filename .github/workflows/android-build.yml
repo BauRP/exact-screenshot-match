@@ -217,6 +217,9 @@ jobs:
       - name: Test safe plain-text list clipboard import
         run: bun scripts/test-wave-plain-list-paste.ts
 
+      - name: Check private rich clipboard structure
+        run: bun scripts/test-wave-rich-structure-paste.ts
+
       - name: Verify offline formatted browser paste
         run: bun scripts/test-wave-smart-paste.ts
 
