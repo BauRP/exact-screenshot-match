@@ -1,5 +1,7 @@
 import type {Editor} from "@tiptap/react";
 import type {Node as PMNode} from "@tiptap/pm/model";
+import {TextSelection} from "@tiptap/pm/state";
+import {canSplit} from "@tiptap/pm/transform";
 import type {CheckShape} from "./wave-checklist";
 
 export type ChecklistCounts={total:number;done:number;pending:number};
@@ -45,4 +47,34 @@ export function setSelectedChecklistShape(editor:Editor,shape:CheckShape):boolea
   return true;
  }
  return false;
+}
+
+/** Split the selected task at the actual caret, preserving both halves'
+ * inline marks and text. The continuation is always unchecked. This function
+ * is also exposed as a touch-friendly action for keyboards without Enter. */
+export function continueSelectedChecklistItem(editor:Editor):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const {state}=editor;
+ const {from,to,$from,$to}=state.selection;
+ if($from.parent.type.name!=="waveChecklistItem"||
+    $to.parent.type.name!=="waveChecklistItem"||
+    $from.before()!==$to.before())return false;
+ const tr=state.tr;
+ if(from!==to)tr.delete(from,to);
+ const pos=from,$pos=tr.doc.resolve(pos);
+ const parent=$pos.parent;
+ if(parent.type.name!=="waveChecklistItem")return false;
+ if(!parent.textContent.trim()){
+  const paragraph=state.schema.nodes.paragraph;
+  if(!paragraph)return false;
+  tr.setNodeMarkup($pos.before(),paragraph);
+  editor.view.dispatch(tr.scrollIntoView());
+  return true;
+ }
+ const spec={type:parent.type,attrs:{...parent.attrs,done:false}};
+ if(!canSplit(tr.doc,pos,1,[spec]))return false;
+ tr.split(pos,1,[spec]);
+ tr.setSelection(TextSelection.near(tr.doc.resolve(pos+1)));
+ editor.view.dispatch(tr.scrollIntoView());
+ return true;
 }
