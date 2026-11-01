@@ -73,7 +73,7 @@ import {duplicateCurrentPage,moveCurrentPage,insertBlankPageAfter,removeEmptyCur
 import {revealOutlinePosition} from "@/lib/wave-outline-navigation";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
-import {safeBrowserClipboardHtml,structuredPlainClipboardHtml} from "@/lib/wave-smart-paste";
+import {safeBrowserClipboardHtml,structuredPlainClipboardHtml,structuredMarkdownClipboardHtml} from "@/lib/wave-smart-paste";
 import {DOMParser as PMDOMParser} from "@tiptap/pm/model";
 import { useFolders, type Folder } from "@/lib/folders-store";
 import {
@@ -287,7 +287,7 @@ function EditorPage() {
         const html=event.clipboardData?.getData("text/html")||"";
         if(!html){
           const plain=event.clipboardData?.getData("text/plain")||"";
-          const structured=structuredPlainClipboardHtml(plain);
+          const structured=structuredPlainClipboardHtml(plain)||structuredMarkdownClipboardHtml(plain);
           if(!structured)return false;
           try{
             const container=document.createElement("div");container.innerHTML=structured;
