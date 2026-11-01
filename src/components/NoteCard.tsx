@@ -39,6 +39,10 @@ export function NoteCard({
   onToggle,
   onOpen,
   onMove,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp = false,
+  canMoveDown = false,
   searchQuery,
 }: {
   note: Note;
@@ -48,6 +52,10 @@ export function NoteCard({
   onToggle: () => void;
   onOpen: () => void;
   onMove: (targetId:string)=>void;
+  onMoveUp?:()=>void;
+  onMoveDown?:()=>void;
+  canMoveUp?:boolean;
+  canMoveDown?:boolean;
   searchQuery?:string;
 }) {
   const isPdf = note.kind === "pdf";
@@ -142,6 +150,15 @@ export function NoteCard({
         onPointerCancel={e=>{e.stopPropagation();dragging.current=false;dropTarget.current=null;}}>
         <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       </button>}
+      {selectionMode&&selected&&<div role="group" aria-label="Изменить порядок заметки"
+        className="absolute right-1.5 top-9 z-20 flex flex-col gap-1">
+        <button type="button" aria-label={"Переместить заметку выше: "+note.title}
+          disabled={!canMoveUp} className="grid h-9 w-9 place-items-center rounded-md border border-border bg-card text-sm disabled:opacity-30"
+          onPointerDown={e=>{e.stopPropagation();clearPress();}} onClick={e=>{e.stopPropagation();onMoveUp?.();}}>↑</button>
+        <button type="button" aria-label={"Переместить заметку ниже: "+note.title}
+          disabled={!canMoveDown} className="grid h-9 w-9 place-items-center rounded-md border border-border bg-card text-sm disabled:opacity-30"
+          onPointerDown={e=>{e.stopPropagation();clearPress();}} onClick={e=>{e.stopPropagation();onMoveDown?.();}}>↓</button>
+      </div>}
       {selected && (
         <span className="absolute right-2 top-2 z-10 grid h-5 w-5 place-items-center rounded-full bg-primary text-primary-foreground">
           <Check className="h-3 w-3" strokeWidth={3} />
