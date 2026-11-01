@@ -3,14 +3,9 @@ import type {Editor} from "@tiptap/react";
 
 /** A page consists of its divider and all following top-level blocks up to
  * the next divider. Nested dividers are intentionally not rearranged:
- * moving half of a folded section would corrupt its document structure. */
+ * nested dividers remain inside their parent sections and do not split pages. */
 type PageRange={start:number;bodyStart:number;end:number};
 export function topLevelPageRanges(doc:PMNode):PageRange[]{
- let nested=false;
- doc.descendants((node,_pos,parent)=>{
-  if(node.type.name==="wavePageBreak"&&parent!==doc)nested=true;
- });
- if(nested)return [];
  const positions:number[]=[0];
  doc.forEach((node,pos)=>{
   if(node.type.name==="wavePageBreak")positions.push(pos);
