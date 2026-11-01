@@ -51,3 +51,26 @@ export function safeBrowserClipboardHtml(html:string):string{
  Array.from(source.body.childNodes).forEach(child=>root.appendChild(clean(child)));
  return root.innerHTML;
 }
+
+
+/** Convert a clearly formatted multi-line clipboard list into editable
+ * TipTap list blocks. Ordinary text (including a single dash or numbered
+ * paragraph) remains untouched. No HTML from the clipboard is interpreted. */
+export function structuredPlainClipboardHtml(input:string):string{
+ if(typeof input!=="string"||input.length>20_000)return "";
+ const lines=input.replace(/\r\n?/g,"\n").trim().split("\n");
+ if(lines.length<2||lines.length>100||lines.some(line=>!line.trim()))return "";
+ const bullet=/^\s{0,3}[-*•–]\s+(.+)$/;
+ const numbered=/^\s{0,3}(\d{1,5})[.)]\s+(.+)$/;
+ const bulletItems=lines.map(line=>bullet.exec(line));
+ const numberedItems=lines.map(line=>numbered.exec(line));
+ const isBulleted=bulletItems.every(Boolean),isNumbered=numberedItems.every(Boolean);
+ if(!isBulleted&&!isNumbered)return "";
+ const escape=(text:string)=>text.replace(/&/g,"&amp;").replace(/</g,"&lt;")
+  .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+ const values=(isBulleted?bulletItems:numberedItems).map(m=>escape((m?.[isBulleted?1:2]||"").trim()));
+ const list=values.map(v=>"<li><p>"+v+"</p></li>").join("");
+ if(isBulleted)return "<ul>"+list+"</ul>";
+ const start=Number(numberedItems[0]?.[1]||1);
+ return "<ol"+(start!==1?' start="'+start+'"':"")+">"+list+"</ol>";
+}
