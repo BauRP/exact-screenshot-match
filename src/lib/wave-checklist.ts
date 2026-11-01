@@ -1,4 +1,5 @@
 import { Node, mergeAttributes } from "@tiptap/core";
+import {continueSelectedChecklistItem} from "./wave-checklist-actions";
 export type CheckShape="square"|"circle"|"diamond"|"check";
 const valid=(shape:string):shape is CheckShape=>["square","circle","diamond","check"].includes(shape);
 /** The checkbox is real saved document data. The DOM marker is only its UI.
@@ -27,11 +28,7 @@ export const WaveChecklistItem=Node.create({
     if(!$from.parent.textContent.trim()){
       return this.editor.commands.setNode("paragraph");
     }
-    const at=$from.after();
-    return this.editor.chain().focus()
-      .insertContentAt(at,{type:"waveChecklistItem",attrs:{shape:$from.parent.attrs.shape,done:false},
-        content:[{type:"text",text:" "}]})
-      .setTextSelection(at+1).run();
+    return continueSelectedChecklistItem(this.editor);
   }};
  },
  group:"block",
