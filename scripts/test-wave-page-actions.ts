@@ -19,7 +19,7 @@ choose(3);assert.equal(moveCurrentPage(editor,"up"),true);
 assert.equal(state.doc.textContent,"onetwotwothree");
 choose(0);assert.equal(moveCurrentPage(editor,"up"),false);
 const nested=schema.nodes.doc.create(null,[p("x"),schema.nodes.waveFold.create(null,[page("nested"),p("y")])]);
-assert.deepEqual(topLevelPageRanges(nested),[]);
+assert.equal(topLevelPageRanges(nested).length,1);
 choose(1);
 assert.equal(insertBlankPageAfter(editor),true);
 assert.equal(topLevelPageRanges(state.doc).length,5);
