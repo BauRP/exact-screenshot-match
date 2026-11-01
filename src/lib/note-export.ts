@@ -113,12 +113,17 @@ function inlineWord(node:Node,style:RunStyle={}):string {
   if(tag==="STRONG"||tag==="B")next.bold=true;
   if(tag==="EM"||tag==="I")next.italic=true;
   if(tag==="U")next.underline=true;
+  // Direction is paragraph-level in Word, inherited by nested spans.
   const ink=el.style.getPropertyValue("color").trim();
   if(/^#[0-9a-fA-F]{6}$/.test(ink))next.color=ink.slice(1).toUpperCase();
   return Array.from(node.childNodes).map(child=>inlineWord(child,next)).join("");
 }
-function wordParagraph(content:string,heading=false):string{
-  return "<w:p>"+(heading?"<w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr>":"")+
+/** WordprocessingML needs explicit bidi paragraphs to preserve RTL text
+ * on devices and desktop Word, not only an HTML dir attribute. */
+export function wordParagraph(content:string,heading=false,rtl=false):string{
+  const properties=(heading?'<w:pStyle w:val="Heading1"/>':"")+
+    (rtl?'<w:bidi w:val="1"/><w:jc w:val="right"/>':"");
+  return "<w:p>"+(properties?"<w:pPr>"+properties+"</w:pPr>":"")+
     (content||docxRun(" "))+"</w:p>";
 }
 function wordBody(note:Note):string{
@@ -134,12 +139,19 @@ function wordBody(note:Note):string{
     if(el.hasAttribute("data-wave-page-break")){paragraphs.push("<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>");return;}
     if(["P","H1","H2","H3","H4","H5","H6","LI","BLOCKQUOTE","PRE"].includes(tag)||el.getAttribute("data-type")==="wave-check-item"){
       const prefix=el.getAttribute("data-type")==="wave-check-item"?(el.getAttribute("data-done")==="true"?"[x] ":"[ ] "):tag==="LI"?"• ":"";
-      paragraphs.push(wordParagraph(docxRun(prefix)+inlineWord(node),/^H[1-6]$/.test(tag)));
+      // Preserve ordered list starts and gaps in exported Word text. The
+      // native note remains the editable source for full list semantics.
+      const parent=el.parentElement;
+      const isOrdered=tag==="LI"&&parent?.tagName==="OL";
+      const ordinal=isOrdered?Number(parent.getAttribute("start")||1)+Array.from(parent.children).indexOf(el):0;
+      const listPrefix=isOrdered&&Number.isSafeInteger(ordinal)&&ordinal>0?ordinal+". ":prefix;
+      const rtl=el.closest('[dir="rtl"]')!==null;
+      paragraphs.push(wordParagraph(docxRun(listPrefix)+inlineWord(node),/^H[1-6]$/.test(tag),rtl));
       return;
     }
     const children=Array.from(node.childNodes);
     if(children.every(c=>c.nodeType===3||c.nodeType===1&&!blocks.has((c as Element).tagName))){
-      const rendered=inlineWord(node);if(rendered)paragraphs.push(wordParagraph(rendered));
+      const rendered=inlineWord(node);if(rendered)paragraphs.push(wordParagraph(rendered,false,el.closest('[dir="rtl"]')!==null));
     }else children.forEach(traverse);
   };
   Array.from(root.childNodes).forEach(traverse);
