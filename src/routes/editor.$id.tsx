@@ -67,7 +67,7 @@ import { WaveImage } from "@/components/editor/WaveImage";
 import { WaveDrawing } from "@/components/editor/WaveDrawing";
 import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection} from "@/lib/wave-text-direction";
-import {collectNoteOutline,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
+import {collectNoteOutline,filterNoteOutline,type OutlineFilter,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
 import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
 import {duplicateCurrentPage,moveCurrentPage,insertBlankPageAfter,removeEmptyCurrentPage} from "@/lib/wave-page-actions";
 import {revealOutlinePosition} from "@/lib/wave-outline-navigation";
@@ -165,6 +165,8 @@ function EditorPage() {
   const [saving,setSaving] = useState(false);
   const [findOpen,setFindOpen]=useState(false);
   const [outlineOpen,setOutlineOpen]=useState(false);
+  const [outlineQuery,setOutlineQuery]=useState("");
+  const [outlineFilter,setOutlineFilter]=useState<OutlineFilter>("all");
   const [findQuery,setFindQuery]=useState("");
   const [findReplacement,setFindReplacement]=useState("");
   const [findActive,setFindActive]=useState(0);
@@ -389,7 +391,7 @@ function EditorPage() {
 
   const handleCanvasBg = (c: string) => {setCanvasBg(c);setPaperMood("solid");};
   const hits=findOpen&&editor?findWords(editor.state.doc,findQuery,prefs.caseSensitive):[];
-  const outline=outlineOpen&&editor?collectNoteOutline(editor.state.doc):[];
+  const outline=outlineOpen&&editor?filterNoteOutline(collectNoteOutline(editor.state.doc),outlineQuery,outlineFilter):[];
   const pagePositions=editor?notePagePositions(editor.state.doc):[0];
   const currentPage=editor?noteCurrentPage(editor.state.doc,editor.state.selection.from):1;
   const setSearchDecoration=(query:string,active:number)=>{
@@ -1058,6 +1060,17 @@ function EditorPage() {
             <button type="button" onClick={()=>setAllFoldSections(editor,true)}
               className="rounded-md border px-2 py-1.5 text-xs">Свернуть все</button>
           </div>}
+          <div className="mb-2 flex gap-2 px-2">
+            <input type="search" aria-label="Поиск по оглавлению" placeholder="Найти раздел…"
+              value={outlineQuery} onChange={e=>setOutlineQuery(e.target.value)} maxLength={100}
+              className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs"/>
+            <select aria-label="Тип элемента оглавления" value={outlineFilter}
+              onChange={e=>setOutlineFilter(e.target.value as OutlineFilter)}
+              className="max-w-28 rounded-md border border-border bg-background px-1 text-xs">
+              <option value="all">Все</option><option value="heading">Заголовки</option>
+              <option value="fold">Разделы</option><option value="page">Страницы</option>
+            </select>
+          </div>
           <p className="px-2 pb-1 text-xs text-muted-foreground">Заголовки и разделы</p>
           {outline.length===0?<p className="px-2 py-3 text-xs text-muted-foreground">Добавьте заголовок или сворачиваемый раздел.</p>:
             outline.map(item=><button key={item.pos} type="button"
