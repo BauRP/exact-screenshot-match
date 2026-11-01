@@ -1,5 +1,15 @@
 import type {Node as PMNode} from "@tiptap/pm/model";
 export type OutlineItem={pos:number;depth:number;title:string;type:"heading"|"fold"|"page"};
+/** Tape answers are private. An outline heading must only expose its
+ * visible text, never the raw ProseMirror textContent of a concealed mark. */
+export function visibleHeadingText(node:PMNode):string{
+ let text="";
+ node.descendants(child=>{
+  if(child.isText&&!child.marks.some(mark=>mark.type.name==="waveTape"))
+   text+=child.text||"";
+ });
+ return text.replace(/\\s+/g," ").trim();
+}
 /** Navigation is derived from actual document content, without modifying it. */
 /** Determine structural nesting rather than giving every fold the same depth. */
 export function sectionDepth(doc:PMNode,pos:number):number{
@@ -12,11 +22,11 @@ export function collectNoteOutline(doc:PMNode):OutlineItem[]{
  const items:OutlineItem[]=[];
  let page=1;
  doc.descendants((node,pos,parent)=>{
-  if(node.type.name==="wavePageBreak"){
+  if(node.type.name==="wavePageBreak"&&parent===doc){
    page+=1;
    items.push({pos,depth:1,title:(String(node.attrs.label||"").trim()||"Страница "+page),type:"page"});
   }else if(node.type.name==="heading"){
-   const title=node.textContent.trim();
+   const title=visibleHeadingText(node);
    if(title)items.push({pos,depth:Math.max(1,Math.min(6,Number(node.attrs.level)||2)),title:title.slice(0,140),type:"heading"});
   }else if(node.type.name==="waveFold"){
    items.push({pos,depth:Math.min(6,2+sectionDepth(doc,pos)),title:String(node.attrs.title||"Раздел").slice(0,140),type:"fold"});
@@ -28,7 +38,9 @@ export function collectNoteOutline(doc:PMNode):OutlineItem[]{
 /** Explicit page boundaries are ProseMirror positions, never guessed pixels. */
 export function notePagePositions(doc:PMNode):number[]{
  const positions=[0];
- doc.descendants((node,pos)=>{if(node.type.name==="wavePageBreak")positions.push(pos+node.nodeSize);});
+ // Page actions operate on top-level pages only. Nested dividers are content
+ // of their containing section and must not create phantom navigation pages.
+ doc.forEach((node,pos)=>{if(node.type.name==="wavePageBreak")positions.push(pos+node.nodeSize);});
  return positions;
 }
 export function noteCurrentPage(doc:PMNode,selectionPos:number):number{
@@ -59,7 +71,7 @@ export function currentPageBreakPos(doc:PMNode,selectionPos:number):number|undef
 export function pageDisplayNames(doc:PMNode):string[]{
  const names=["Страница 1"];
  let page=1;
- doc.descendants(node=>{
+ doc.forEach(node=>{
   if(node.type.name!=="wavePageBreak")return;
   page++;
   names.push(String(node.attrs.label||"").trim().slice(0,80)||"Страница "+page);
