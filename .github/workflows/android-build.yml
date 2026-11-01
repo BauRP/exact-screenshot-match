@@ -301,6 +301,9 @@ jobs:
       - name: Verify OCR saved notes survive a cold restart
         run: bun scripts/test-ocr-cold-start.ts
 
+      - name: Check note identity and body integrity on startup
+        run: bun scripts/test-wave-note-identity-safety.ts
+
       - name: Verify corrupted notes cannot be overwritten at startup
         run: bun scripts/test-ocr-corrupt-start.ts
 
