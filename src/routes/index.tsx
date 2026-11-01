@@ -67,6 +67,7 @@ import {
   deleteSelectedNotes,
   updateNote,
   snoozeOverdueReminders,
+  setSelectedNotesPinned,
   setSort,
   setView,
   useHydrated,
@@ -428,6 +429,12 @@ function Index() {
                       <DropdownMenuItem disabled={transferBusy} onClick={()=>setExportDialog(true)} className="min-h-10 gap-2">
                         <Download className="h-4 w-4"/>Экспорт в файл
                       </DropdownMenuItem>}
+                      <DropdownMenuItem onClick={()=>{try{const count=setSelectedNotesPinned([...selected],true);setSelected(new Set());if(count)toast.success("Закреплено заметок: "+count);}catch(error){toast.error(error instanceof Error?error.message:"Не удалось закрепить заметки");}}} className="min-h-10 gap-2">
+                        Закрепить выбранные
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={()=>{try{const count=setSelectedNotesPinned([...selected],false);setSelected(new Set());if(count)toast.success("Откреплено заметок: "+count);}catch(error){toast.error(error instanceof Error?error.message:"Не удалось открепить заметки");}}} className="min-h-10 gap-2">
+                        Открепить выбранные
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={()=>setColorDialog(true)} className="min-h-10 gap-2">
                         <Palette className="h-4 w-4"/>Цвет карточки
                       </DropdownMenuItem>
