@@ -35,6 +35,16 @@ export function collectNoteOutline(doc:PMNode):OutlineItem[]{
  return items;
 }
 
+/** Offline outline filtering: sections, headings and explicit pages only.
+ * Uses the already Tape-concealed labels created by collectNoteOutline. */
+export type OutlineFilter="all"|OutlineItem["type"];
+export function filterNoteOutline(items:readonly OutlineItem[],query:string,filter:OutlineFilter="all"):OutlineItem[]{
+ const needle=query.trim().normalize("NFKC").toLocaleLowerCase().slice(0,100);
+ return items.filter(item=>
+  (filter==="all"||item.type===filter)&&
+  (!needle||item.title.normalize("NFKC").toLocaleLowerCase().includes(needle)));
+}
+
 /** Explicit page boundaries are ProseMirror positions, never guessed pixels. */
 export function notePagePositions(doc:PMNode):number[]{
  const positions=[0];
