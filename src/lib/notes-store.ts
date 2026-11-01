@@ -603,6 +603,26 @@ export function updateNote(id: string, patch: Partial<Note>) {
   }
 }
 
+/** Reschedule every overdue reminder in the active folder atomically.
+ * No other note content or attachment is touched. A failed localStorage write
+ * leaves the entire original group intact. */
+export function snoozeOverdueReminders(folderId:string,newTime:number,now=Date.now()):number{
+ ensureReadyForMutation();
+ const reminder=validReminderTime(newTime);
+ if(reminder===undefined||!Number.isFinite(now)||reminder<=now)return 0;
+ let changed=0;
+ const next=state.notes.map(note=>{
+  if((folderId!=="all"&&(note.folderId??"all")!==folderId)||
+     note.reminderAt===undefined||note.reminderAt>now)return note;
+  changed++;
+  return {...note,reminderAt:reminder,updatedAt:now};
+ });
+ if(!changed)return 0;
+ persistNotes(next);
+ commit({notes:next,hydrated:true,status:"ready",error:null});
+ return changed;
+}
+
 export function togglePin(id: string) {
   ensureReadyForMutation();
   let changed = false;
