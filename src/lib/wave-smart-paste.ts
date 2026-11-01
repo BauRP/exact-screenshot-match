@@ -86,3 +86,52 @@ export function structuredPlainClipboardHtml(input:string):string{
  const start=Number(numberedItems[0]?.[1]||1);
  return "<ol"+(start!==1?' start="'+start+'"':"")+">"+list+"</ol>";
 }
+
+
+/** Offline, opt-in Markdown block detection for text-only clipboard content.
+ * Recognizes document structure without evaluating markdown HTML, URLs or JS.
+ * If the clipboard has no unambiguous block syntax, native text paste wins. */
+export function structuredMarkdownClipboardHtml(input:string):string{
+ if(typeof input!=="string"||input.length>20_000)return "";
+ const lines=input.replace(/\r\n?/g,"\n").split("\n");
+ if(lines.length<2||lines.length>120)return "";
+ const safe=(s:string)=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;")
+  .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+ const heading=/^\s{0,3}(#{1,4})\s+(.+?)\s*$/;
+ const quote=/^\s{0,3}>\s+(.+)$/;
+ const unordered=/^\s{0,3}[-*•]\s+(.+)$/;
+ const ordered=/^\s{0,3}(\d{1,5})[.)]\s+(.+)$/;
+ const fence=/^\s{0,3}\x60{3}\s*[\w-]{0,20}\s*$/;
+ let meaningful=0,html="",listType:"ul"|"ol"|null=null,expected=0;
+ const close=()=>{if(listType){html+="</"+listType+">";listType=null;}};
+ for(let i=0;i<lines.length;i++){
+  const line=lines[i],trimmed=line.trim();
+  if(fence.test(line)){
+   close();const code:string[]=[];
+   let closed=false;
+   for(i++;i<lines.length;i++){if(/^\s{0,3}\x60{3}\s*$/.test(lines[i])){closed=true;break;}code.push(lines[i]);}
+   if(!closed)return "";
+   html+="<pre><code>"+safe(code.join("\n"))+"</code></pre>";meaningful++;continue;
+  }
+  if(!trimmed){close();continue;}
+  const h=heading.exec(line),q=quote.exec(line),u=unordered.exec(line),o=ordered.exec(line);
+  if(h){close();html+="<h"+h[1].length+">"+safe(h[2])+"</h"+h[1].length+">";meaningful++;continue;}
+  if(q){close();html+="<blockquote><p>"+safe(q[1])+"</p></blockquote>";meaningful++;continue;}
+  if(trimmed==="---"||trimmed==="***"){close();html+="<hr>";meaningful++;continue;}
+  if(u){
+   if(listType!=="ul"){close();html+="<ul>";listType="ul";}
+   html+="<li><p>"+safe(u[1])+"</p></li>";meaningful++;continue;
+  }
+  if(o){
+   const num=Number(o[1]);
+   if(listType!=="ol"||num!==expected){
+    close();html+='<ol'+(num!==1?' start="'+num+'"':"")+">";listType="ol";
+   }
+   expected=num+1;
+   html+="<li><p>"+safe(o[2])+"</p></li>";meaningful++;continue;
+  }
+  close();html+="<p>"+safe(line)+"</p>";
+ }
+ close();
+ return meaningful>=2?html:"";
+}
