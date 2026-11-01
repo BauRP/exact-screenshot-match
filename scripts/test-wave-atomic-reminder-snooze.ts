@@ -3,7 +3,7 @@ const saved=new Map<string,string>();
 const seed=[{id:"due-1",title:"A",body:"x",folderId:"work",reminderAt:1700000000000,updatedAt:1},{id:"due-2",title:"B",body:"y",folderId:"work",reminderAt:1700000001000,updatedAt:1},{id:"later",title:"C",body:"z",folderId:"work",reminderAt:1900000000000,updatedAt:1},{id:"other",title:"D",body:"w",folderId:"other",reminderAt:1700000000000,updatedAt:1}];
 saved.set("sn.notes.v1",JSON.stringify(seed));
 let writes=0,reject=false;
-Object.defineProperty(globalThis,"window",{configurable:true,value:{localStorage:{getItem(k:string){return saved.get(k)??null;},setItem(k:string,v:string){if(reject)throw Error("quota");writes++;saved.set(k,v);}}}});
+Object.defineProperty(globalThis,"window",{configurable:true,value:{localStorage:{getItem(k:string){return saved.get(k)??null;},setItem(k:string,v:string){if(reject&&k==="sn.notes.v1")throw Error("quota");if(k==="sn.notes.v1")writes++;saved.set(k,v);}}}});
 const db=await import("../src/lib/notes-store");
 await db.initializeNotesDatabase();
 assert.equal(db.snoozeOverdueReminders("work",1800000000000,1750000000000),2);
