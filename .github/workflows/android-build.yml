@@ -253,6 +253,9 @@ jobs:
       - name: Verify checklist markup, persistence and note editor compatibility
         run: bun scripts/test-wave-checklist.ts
 
+      - name: Test customizable toolbar ordering
+        run: bun scripts/test-wave-toolbar-order.ts
+
       - name: Verify compact menu, in-note search and editor settings
         run: bun scripts/test-wave-editor-search.ts
 
