@@ -628,6 +628,24 @@ export function snoozeOverdueReminders(folderId:string,newTime:number,now=Date.n
  return changed;
 }
 
+/** Pin or unpin the current selection in a single durable write. The
+ * note text, original timestamps and all binary attachments remain intact. */
+export function setSelectedNotesPinned(noteIds:readonly string[],pinned:boolean):number{
+ ensureReadyForMutation();
+ const ids=new Set(noteIds);
+ if(!ids.size)return 0;
+ let changed=0;
+ const next=state.notes.map(note=>{
+  if(!ids.has(note.id)||Boolean(note.pinned)===pinned)return note;
+  changed++;
+  return {...note,pinned};
+ });
+ if(!changed)return 0;
+ persistNotes(next);
+ commit({notes:next,hydrated:true,status:"ready",error:null});
+ return changed;
+}
+
 export function togglePin(id: string) {
   ensureReadyForMutation();
   let changed = false;
