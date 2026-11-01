@@ -1060,6 +1060,10 @@ function EditorPage() {
             <button type="button" onClick={()=>setAllFoldSections(editor,true)}
               className="rounded-md border px-2 py-1.5 text-xs">Свернуть все</button>
             <button type="button" onClick={()=>setFoldSectionsToDepth(editor,1)}
+              className="rounded-md border px-2 py-1.5 text-xs">1 уровень</button>
+            <button type="button" onClick={()=>setFoldSectionsToDepth(editor,2)}
+              className="rounded-md border px-2 py-1.5 text-xs">2 уровня</button>
+            <button type="button" onClick={()=>setFoldSectionsToDepth(editor,1)}
               className="rounded-md border px-2 py-1.5 text-xs">Уровень 1</button>
             <button type="button" onClick={()=>setFoldSectionsToDepth(editor,2)}
               className="rounded-md border px-2 py-1.5 text-xs">Уровень 2</button>
