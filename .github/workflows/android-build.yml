@@ -169,6 +169,9 @@ jobs:
       - name: Check Tape-private outline and nested page navigation
         run: bun scripts/test-wave-outline-privacy-pages.ts
 
+      - name: Check searchable outline and category filters
+        run: bun scripts/test-wave-outline-filter.ts
+
       - name: Verify outline navigation and safe block movement
         run: bun scripts/test-wave-outline.ts
 
