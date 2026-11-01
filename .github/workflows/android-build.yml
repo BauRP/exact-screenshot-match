@@ -247,6 +247,9 @@ jobs:
       - name: Verify offline note search and scoped filters
         run: bun scripts/test-wave-note-search.ts
 
+      - name: Verify safe returned note preview
+        run: bun scripts/test-wave-return-preview.ts
+
       - name: Verify safe return-note conflicts and audio cleanup
         run: bun scripts/test-wave-return-conflicts.ts
 
