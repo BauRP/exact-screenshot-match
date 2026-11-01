@@ -4,6 +4,8 @@ import {readFileSync} from "node:fs";
 assert.equal(structuredPlainClipboardHtml("- first\n- second"),"<ul><li><p>first</p></li><li><p>second</p></li></ul>");
 assert.equal(structuredPlainClipboardHtml("3. Alice\n4. Bob"),'<ol start="3"><li><p>Alice</p></li><li><p>Bob</p></li></ol>');
 assert.ok(structuredPlainClipboardHtml("- <script>\n- & data").includes("&lt;script&gt;"));
+assert.equal(structuredPlainClipboardHtml("- [x] Done\\n- [ ] Pending"),'<div data-type="wave-check-item" data-done="true" data-shape="square">Done</div><div data-type="wave-check-item" data-done="false" data-shape="square">Pending</div>');
+assert.equal(structuredPlainClipboardHtml("1. First\\n3. Third"),"");
 assert.equal(structuredPlainClipboardHtml("Just plain text"),"");
 assert.equal(structuredPlainClipboardHtml("- first\nnot a list"),"");
 assert.ok(readFileSync("src/routes/editor.$id.tsx","utf8").includes("structuredPlainClipboardHtml(plain)"));
