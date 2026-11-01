@@ -163,6 +163,9 @@ jobs:
       - name: Verify navigation into folded nested section
         run: bun scripts/test-wave-outline-reveal.ts
 
+      - name: Check Tape-private outline and nested page navigation
+        run: bun scripts/test-wave-outline-privacy-pages.ts
+
       - name: Verify outline navigation and safe block movement
         run: bun scripts/test-wave-outline.ts
 
