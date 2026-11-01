@@ -472,6 +472,39 @@ export function moveNoteBefore(sourceId:string,targetId:string):boolean{
  persistNotes(next);commit({notes:next,sort:"manual",status:"ready"});persistPreference(SORT_KEY,"manual");
  return true;
 }
+/** Move a multi-selection to the start or end of its OWN folder and pin
+ * group. One write, no modifications to note content or attachment references.
+ * This also works when the user was previously sorting by date or alphabet. */
+export function moveSelectedNotesToEdge(noteIds:readonly string[],edge:"top"|"bottom"):number{
+ ensureReadyForMutation();
+ if(edge!=="top"&&edge!=="bottom")return 0;
+ const ids=new Set(noteIds);
+ if(!ids.size)return 0;
+ const sorted=sortNotes(state.notes,state.sort);
+ const groups=new Map<string,Note[]>();
+ for(const note of sorted){
+  const key=JSON.stringify([note.folderId??"all",Boolean(note.pinned)]);
+  const group=groups.get(key)||[];
+  group.push(note);
+  groups.set(key,group);
+ }
+ const ranks=new Map<string,number>();
+ let changed=0,rank=0;
+ for(const group of groups.values()){
+  const selected=group.filter(note=>ids.has(note.id));
+  const rest=group.filter(note=>!ids.has(note.id));
+  const ordered=edge==="top"?[...selected,...rest]:[...rest,...selected];
+  for(let i=0;i<ordered.length;i++)if(ordered[i]!==group[i])changed++;
+  for(const note of ordered)ranks.set(note.id,rank++);
+ }
+ if(!changed)return 0;
+ const next=state.notes.map(note=>({...note,manualOrder:ranks.get(note.id)}));
+ persistNotes(next);
+ commit({notes:next,sort:"manual",hydrated:true,status:"ready",error:null});
+ persistPreference(SORT_KEY,"manual");
+ return changed;
+}
+
 export function getNote(id: string): Note | undefined {
   ensureReadyForMutation();
   return state.notes.find((note) => note.id === id);
