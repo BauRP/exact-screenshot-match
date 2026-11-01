@@ -1,0 +1,15 @@
+import {strict as assert} from "node:assert";
+const storage=new Map<string,string>();
+let writes=0;
+Object.defineProperty(globalThis,"window",{configurable:true,value:{localStorage:{getItem(k:string){return storage.get(k)??null},setItem(k:string,v:string){if(k==="sn.notes.v1")writes++;storage.set(k,v)}}}});
+const db=await import("../src/lib/notes-store");
+const note=db.createNote({title:"Stable",body:"<p>Keep me</p>"});
+assert.equal(writes,1);
+const initial=db.getNote(note.id)!;
+db.updateNote(note.id,{title:initial.title,body:initial.body});
+assert.equal(writes,1,"An unchanged Save must not rewrite notes");
+assert.equal(db.getNote(note.id)?.updatedAt,initial.updatedAt);
+db.updateNote(note.id,{body:"<p>Changed</p>"});
+assert.equal(writes,2);
+assert.equal(db.getNote(note.id)?.body,"<p>Changed</p>");
+console.log("Unchanged Save causes no note database write or backup signal");
