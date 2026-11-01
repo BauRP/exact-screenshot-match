@@ -90,7 +90,7 @@ import { readEditorPreferences,EDITOR_PREFS_CHANGED,type EditorTool } from "@/li
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
 import {setSelectedChecklistShape,continueSelectedChecklistItem} from "@/lib/wave-checklist-actions";
-import {setAllFoldSections,countFoldSections} from "@/lib/wave-section-batch";
+import {setAllFoldSections,setFoldSectionsToDepth,countFoldSections} from "@/lib/wave-section-batch";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
 import {openExternalUrl,isSafeExternalUrl} from "@/lib/external-links";
@@ -1059,6 +1059,10 @@ function EditorPage() {
               className="rounded-md border px-2 py-1.5 text-xs">Раскрыть все</button>
             <button type="button" onClick={()=>setAllFoldSections(editor,true)}
               className="rounded-md border px-2 py-1.5 text-xs">Свернуть все</button>
+            <button type="button" onClick={()=>setFoldSectionsToDepth(editor,1)}
+              className="rounded-md border px-2 py-1.5 text-xs">Уровень 1</button>
+            <button type="button" onClick={()=>setFoldSectionsToDepth(editor,2)}
+              className="rounded-md border px-2 py-1.5 text-xs">Уровень 2</button>
           </div>}
           <div className="mb-2 flex gap-2 px-2">
             <input type="search" aria-label="Поиск по оглавлению" placeholder="Найти раздел…"
