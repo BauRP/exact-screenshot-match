@@ -67,12 +67,16 @@ function parseManifest(files:Record<string,Uint8Array>):Envelope{
 }
 /** Preview only: untrusted attachments are not stored and all concealed
  * Tape text is stripped before the user chooses a conflict resolution. */
-export async function inspectWaveFile(file:File):Promise<{title:string;originId:string;kind:"note"|"pdf";containsPdf:boolean;audioCount:number;imageCount:number;preview:string;modifiedAt:number|null}>{
+export async function inspectWaveFile(file:File):Promise<{title:string;originId:string;kind:"note"|"pdf";containsPdf:boolean;audioCount:number;imageCount:number;preview:string;comparisonText:string;visibleLength:number;modifiedAt:number|null}>{
  const envelope=parseManifest(await unpack(file));
- const preview=envelope.note.kind==="pdf"?"":readableText(envelope.note.body||"").trim().slice(0,180);
+ // Only visible text may enter the import preview or comparison; the full
+ // .wnote remains unchanged and keeps its own concealed Tape data.
+ const visible=envelope.note.kind==="pdf"?"":readableText(envelope.note.body||"").trim();
+ const preview=visible.slice(0,180);
  const modifiedAt=typeof envelope.note.updatedAt==="number"&&Number.isFinite(envelope.note.updatedAt)&&envelope.note.updatedAt>0?envelope.note.updatedAt:null;
  return {title:envelope.note.title,originId:envelope.originId,kind:envelope.note.kind==="pdf"?"pdf":"note",
-  containsPdf:envelope.hasPdf,audioCount:envelope.audioIds.length,imageCount:envelope.imageIds?.length||0,preview,modifiedAt};
+  containsPdf:envelope.hasPdf,audioCount:envelope.audioIds.length,imageCount:envelope.imageIds?.length||0,
+  preview,comparisonText:visible.slice(0,12000),visibleLength:visible.length,modifiedAt};
 }
 export async function makeWaveNote(note:Note):Promise<Blob>{
  const audioIds=audioIdsInHtml(note.body);
