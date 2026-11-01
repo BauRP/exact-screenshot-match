@@ -64,3 +64,35 @@ export function moveCurrentPage(editor:Editor,direction:"up"|"down"):boolean{
  editor.view.dispatch(editor.state.tr.replaceWith(left.start,right.end,replacement).scrollIntoView());
  return true;
 }
+
+/** Insert a new, empty top-level page AFTER the active page without splitting
+ * text blocks, images, audio, or nested sections. One undoable transaction. */
+export function insertBlankPageAfter(editor:Editor):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const {doc,schema,selection}=editor.state;
+ const pages=topLevelPageRanges(doc),divider=schema.nodes.wavePageBreak,paragraph=schema.nodes.paragraph;
+ if(!pages.length||!divider||!paragraph)return false;
+ const index=currentPageIndex(pages,selection.from),at=pages[index].end;
+ const content=Fragment.fromArray([divider.create(),paragraph.create()]);
+ const resolved=doc.resolve(at);
+ if(resolved.parent!==doc||!doc.canReplace(resolved.index(),resolved.index(),content))return false;
+ editor.view.dispatch(editor.state.tr.insert(at,content).scrollIntoView());
+ return true;
+}
+
+/** Erase only a completely empty page. Never remove text, photos, drawings,
+ * audio, checklists, or a page that contains even one non-empty nested block. */
+export function removeEmptyCurrentPage(editor:Editor):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const {doc,selection}=editor.state,pages=topLevelPageRanges(doc);
+ if(pages.length<=1)return false;
+ const index=currentPageIndex(pages,selection.from);
+ if(index<=0)return false;
+ const page=pages[index];
+ if(page.end<=page.bodyStart)return false;
+ const nodes=doc.content.cut(page.bodyStart,page.end);
+ if(nodes.childCount!==1||nodes.firstChild?.type.name!=="paragraph"||
+    nodes.firstChild.content.size!==0)return false;
+ editor.view.dispatch(editor.state.tr.delete(page.start,page.end).scrollIntoView());
+ return true;
+}
