@@ -89,7 +89,7 @@ import {replaceOneInNote,replaceAllInNote} from "@/lib/wave-find-replace";
 import { readEditorPreferences,EDITOR_PREFS_CHANGED,type EditorTool } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
-import {setSelectedChecklistShape} from "@/lib/wave-checklist-actions";
+import {setSelectedChecklistShape,continueSelectedChecklistItem} from "@/lib/wave-checklist-actions";
 import {setAllFoldSections,countFoldSections} from "@/lib/wave-section-batch";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
@@ -863,6 +863,11 @@ function EditorPage() {
                   <span className="w-5 text-center text-lg">{choice.symbol}</span>{choice.label}
                 </button>
               ))}
+              <button type="button" onMouseDown={e=>e.preventDefault()}
+                aria-label="Продолжить текущий пункт списка" className="w-full rounded-md bg-secondary px-2 py-2 text-xs"
+                onClick={()=>{if(!editor||!continueSelectedChecklistItem(editor))toast("Установите курсор внутри задачи");}}>
+                Следующий пункт от курсора
+              </button>
               <div className="mt-2 border-t border-border pt-2">
                 <label htmlFor="wave-current-check-shape" className="block px-2 pb-1 text-xs font-semibold">Изменить выбранную отметку</label>
                 <select id="wave-current-check-shape" aria-label="Изменить форму выбранной отметки"
