@@ -78,3 +78,39 @@ export function continueSelectedChecklistItem(editor:Editor):boolean{
  editor.view.dispatch(tr.scrollIntoView());
  return true;
 }
+
+/** Return the innermost containing section, never a sibling section. This is
+ * pure document traversal; the selection stays exactly where the user left it. */
+export function selectedSectionTaskCounts(editor:Editor):ChecklistCounts|undefined{
+ if(editor.isDestroyed)return undefined;
+ const {$from}=editor.state.selection;
+ for(let depth=$from.depth;depth>0;depth--){
+  const node=$from.node(depth);
+  if(node.type.name==="waveFold")return countDocumentTasks(node);
+ }
+ return undefined;
+}
+
+/** Mark only tasks belonging to the innermost section containing the caret.
+ * Single transaction = single Undo; all text, media and sibling tasks survive. */
+export function setSelectedSectionTasksDone(editor:Editor,done:boolean):number{
+ if(!editor.isEditable||editor.isDestroyed)return 0;
+ const {state}=editor,{$from}=state.selection;
+ let sectionPos:number|undefined,sectionDepth=-1;
+ for(let depth=$from.depth;depth>0;depth--){
+  if($from.node(depth).type.name==="waveFold"){
+   sectionDepth=depth;sectionPos=$from.before(depth);break;
+  }
+ }
+ if(sectionPos===undefined||sectionDepth<0)return 0;
+ const section=$from.node(sectionDepth),updates:{pos:number;attrs:Record<string,unknown>}[]=[];
+ section.descendants((node,pos)=>{
+  if(node.type.name==="waveChecklistItem"&&node.attrs.done!==done)
+   updates.push({pos:sectionPos!+1+pos,attrs:{...node.attrs,done}});
+ });
+ if(!updates.length)return 0;
+ let tr=state.tr;
+ for(const item of updates)tr=tr.setNodeMarkup(item.pos,undefined,item.attrs);
+ editor.view.dispatch(tr.scrollIntoView());
+ return updates.length;
+}
