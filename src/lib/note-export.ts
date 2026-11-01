@@ -35,7 +35,16 @@ function plainNode(node:Node):string{
   if(tag==="AUDIO")return "[Аудиозапись — сохраните .wnote для передачи вложения]";
   const inner=Array.from(node.childNodes).map(plainNode).join("");
   const check=el.getAttribute("data-type")==="wave-check-item"?(el.getAttribute("data-done")==="true"?"[x] ":"[ ] "):"";
-  return blocks.has(tag)?check+inner+"\n":inner;
+  let list="";
+  if(tag==="LI"&&el.parentElement){
+    if(el.parentElement.tagName==="UL")list="• ";
+    if(el.parentElement.tagName==="OL"){
+      const start=Number(el.parentElement.getAttribute("start")||1);
+      const index=Array.from(el.parentElement.children).indexOf(el);
+      list=Number.isSafeInteger(start)&&start>=1&&index>=0?(start+index)+". ":"• ";
+    }
+  }
+  return blocks.has(tag)?check+list+inner+"\n":inner;
 }
 export function plainNoteText(note:Note):string{
   if(note.kind==="pdf")throw Error("PDF уже является отдельным документом");
@@ -55,7 +64,7 @@ function sanitizedBody(note:Note):string{
     }
     const safeTag=keep.has(tag)?tag.toLowerCase():"span";
     const out=doc.createElement(safeTag);
-    if(["P","H1","H2","H3","H4","H5","H6"].includes(tag)&&el.getAttribute("dir")==="rtl")out.setAttribute("dir","rtl");
+    if(["P","H1","H2","H3","H4","H5","H6","DIV"].includes(tag)&&el.getAttribute("dir")==="rtl")out.setAttribute("dir","rtl");
     if(tag==="A"){
       const href=el.getAttribute("href")||"";
       try{const url=new URL(href);if(["https:","http:"].includes(url.protocol)){
