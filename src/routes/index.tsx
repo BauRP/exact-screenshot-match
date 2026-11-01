@@ -77,6 +77,7 @@ import {
   useSort,
   useView,
   moveNoteBefore,
+  moveSelectedNotesToEdge,
   type Note,
   type SortMode,
   type ViewMode,
@@ -434,6 +435,12 @@ function Index() {
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={()=>{try{const count=setSelectedNotesPinned([...selected],false);setSelected(new Set());if(count)toast.success("Откреплено заметок: "+count);}catch(error){toast.error(error instanceof Error?error.message:"Не удалось открепить заметки");}}} className="min-h-10 gap-2">
                         Открепить выбранные
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={()=>{try{const count=moveSelectedNotesToEdge([...selected],"top");setSelected(new Set());if(count)toast.success("Заметки перемещены вверх");}catch(error){toast.error(error instanceof Error?error.message:"Не удалось изменить порядок");}}} className="min-h-10 gap-2">
+                        Выбранные в начало
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={()=>{try{const count=moveSelectedNotesToEdge([...selected],"bottom");setSelected(new Set());if(count)toast.success("Заметки перемещены вниз");}catch(error){toast.error(error instanceof Error?error.message:"Не удалось изменить порядок");}}} className="min-h-10 gap-2">
+                        Выбранные в конец
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={()=>setColorDialog(true)} className="min-h-10 gap-2">
                         <Palette className="h-4 w-4"/>Цвет карточки
