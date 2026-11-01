@@ -133,6 +133,9 @@ jobs:
       - name: Check precise checklist split at caret
         run: bun scripts/test-wave-checklist-split.ts
 
+      - name: Test section-only checklist completion
+        run: bun scripts/test-wave-section-checklist.ts
+
       - name: Verify saved checklist summaries and pending filters
         run: bun scripts/test-wave-checklist-summary.ts
 
