@@ -7,6 +7,7 @@ import { zip, unzip, strToU8, strFromU8 } from "fflate";
 import {audioIdsInHtml,loadAudioFile,saveNewAudioFile,deleteAudioFile} from "./audio-files";
 import {loadPdfFile,saveNewPdfFile,deletePdfFile} from "./pdf-files";
 import {createNote,type Note} from "./notes-store";
+import {readableText} from "./note-search";
 import {imageIdsInHtml,loadImageFile,saveNewImageFile,deleteImageFile,imageBlobFromBytes} from "./image-files";
 
 const LIMIT=80*1024*1024;
@@ -64,9 +65,14 @@ function parseManifest(files:Record<string,Uint8Array>):Envelope{
  if(n.kind==="pdf"&&!p.hasPdf)throw Error("Не указан PDF");
  return p as Envelope;
 }
-export async function inspectWaveFile(file:File):Promise<{title:string;originId:string;kind:"note"|"pdf";containsPdf:boolean;audioCount:number}>{
+/** Preview only: untrusted attachments are not stored and all concealed
+ * Tape text is stripped before the user chooses a conflict resolution. */
+export async function inspectWaveFile(file:File):Promise<{title:string;originId:string;kind:"note"|"pdf";containsPdf:boolean;audioCount:number;imageCount:number;preview:string;modifiedAt:number|null}>{
  const envelope=parseManifest(await unpack(file));
- return {title:envelope.note.title,originId:envelope.originId,kind:envelope.note.kind==="pdf"?"pdf":"note",containsPdf:envelope.hasPdf,audioCount:envelope.audioIds.length};
+ const preview=envelope.note.kind==="pdf"?"":readableText(envelope.note.body||"").trim().slice(0,180);
+ const modifiedAt=typeof envelope.note.updatedAt==="number"&&Number.isFinite(envelope.note.updatedAt)&&envelope.note.updatedAt>0?envelope.note.updatedAt:null;
+ return {title:envelope.note.title,originId:envelope.originId,kind:envelope.note.kind==="pdf"?"pdf":"note",
+  containsPdf:envelope.hasPdf,audioCount:envelope.audioIds.length,imageCount:envelope.imageIds?.length||0,preview,modifiedAt};
 }
 export async function makeWaveNote(note:Note):Promise<Blob>{
  const audioIds=audioIdsInHtml(note.body);
