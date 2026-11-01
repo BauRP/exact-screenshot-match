@@ -229,6 +229,9 @@ jobs:
       - name: Verify real PDF export RTL writing and task shortcuts
         run: bun scripts/test-wave-pdf-rtl.ts
 
+      - name: Verify RTL and numbered-list Word export
+        run: bun scripts/test-wave-docx-rtl-numbering.ts
+
       - name: Verify real offline TXT HTML and DOCX document export
         run: bun scripts/test-wave-document-export.ts
 
