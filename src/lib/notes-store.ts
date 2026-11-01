@@ -585,7 +585,7 @@ export function updateNote(id: string, patch: Partial<Note>) {
     changed = true;
     // The modification timestamp only moves when real content changed.
     const contentChanged = touchesContent(note, patch);
-    return {
+    const candidate:Note={
       ...note,
       ...patch,
       id: note.id,
@@ -593,9 +593,14 @@ export function updateNote(id: string, patch: Partial<Note>) {
       style: patch.style ? { ...note.style, ...patch.style } : note.style,
       updatedAt: contentChanged ? Date.now() : note.updatedAt,
     };
+    // Saving an unchanged editor draft must not rewrite storage, trigger a
+    // backup, or falsely move the note's modification timestamp.
+    if(!contentChanged && JSON.stringify(candidate)===JSON.stringify(note))return note;
+    return candidate;
   });
 
   if (!changed) return;
+  if(nextNotes.every((note,index)=>note===state.notes[index]))return;
   persistNotes(nextNotes);
   commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
   if(typeof patch.body==="string"&&oldBody!==undefined&&patch.body!==oldBody){
