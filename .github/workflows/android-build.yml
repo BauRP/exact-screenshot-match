@@ -256,6 +256,9 @@ jobs:
       - name: Verify offline note search and scoped filters
         run: bun scripts/test-wave-note-search.ts
 
+      - name: Test Tape-private returned-note comparison
+        run: bun scripts/test-wave-return-comparison.ts
+
       - name: Verify safe returned note preview
         run: bun scripts/test-wave-return-preview.ts
 
