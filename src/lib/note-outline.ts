@@ -8,7 +8,7 @@ export function visibleHeadingText(node:PMNode):string{
   if(child.isText&&!child.marks.some(mark=>mark.type.name==="waveTape"))
    text+=child.text||"";
  });
- return text.replace(/\\s+/g," ").trim();
+ return text.replace(/\s+/g," ").trim();
 }
 /** Navigation is derived from actual document content, without modifying it. */
 /** Determine structural nesting rather than giving every fold the same depth. */
