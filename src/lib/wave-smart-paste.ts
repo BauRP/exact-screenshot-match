@@ -1,7 +1,7 @@
 /** Safe offline import of formatted HTML from browsers and other apps.
  * The clipboard is untrusted; never load remote images or execute embeds.
  * Tiptap will parse the returned small allowlisted HTML into editor nodes. */
-const allowed=new Set(["P","DIV","BR","H1","H2","H3","H4","H5","H6","UL","OL","LI","TABLE","THEAD","TBODY","TFOOT","TR","TH","TD","BLOCKQUOTE","STRONG","B","EM","I","U","S","DEL","CODE","PRE","A","SPAN","HR"]);
+const allowed=new Set(["P","DIV","BR","H1","H2","H3","H4","H5","H6","UL","OL","LI","TABLE","THEAD","TBODY","TFOOT","TR","TH","TD","BLOCKQUOTE","STRONG","B","EM","I","U","S","DEL","CODE","PRE","A","SPAN","HR","SECTION","ASIDE"]);
 const forbidden=new Set(["SCRIPT","STYLE","IFRAME","OBJECT","EMBED","FORM","INPUT","META","LINK","SVG","MATH","VIDEO","AUDIO","NOSCRIPT","TEMPLATE","BUTTON","SELECT","TEXTAREA"]);
 const textBlock=new Set(["P","DIV","H1","H2","H3","H4","H5","H6","BLOCKQUOTE","PRE"]);
 export const MAX_PASTE_HTML=250_000;
@@ -24,6 +24,35 @@ export function safeBrowserClipboardHtml(html:string):string{
    return group;
   }
   const out=target.createElement(tag.toLowerCase());
+  // Preserve only the built-in Wave Notes structures. An arbitrary browser
+  // clipboard never gets to carry event handlers, URLs, styles or IDs through.
+  if(tag==="DIV"&&element.hasAttribute("data-wave-page-break")){
+   const page=target.createElement("div");
+   page.setAttribute("data-wave-page-break","true");
+   page.setAttribute("data-page-label",(element.getAttribute("data-page-label")||"").slice(0,80));
+   return page; // Page breaks are atomic: no imported children.
+  }
+  if(tag==="DIV"&&element.getAttribute("data-type")==="wave-check-item"){
+   out.setAttribute("data-type","wave-check-item");
+   out.setAttribute("data-done",element.getAttribute("data-done")==="true"?"true":"false");
+   const shape=element.getAttribute("data-shape")||"";
+   out.setAttribute("data-shape",["square","circle","diamond","check"].includes(shape)?shape:"square");
+   if(element.getAttribute("dir")==="rtl")out.setAttribute("dir","rtl");
+  }
+  if(tag==="SECTION"&&element.hasAttribute("data-wave-fold")){
+   out.setAttribute("data-wave-fold","true");
+   out.setAttribute("data-title",(element.getAttribute("data-title")||"Раздел").slice(0,100));
+   out.setAttribute("data-collapsed",element.getAttribute("data-collapsed")==="true"?"true":"false");
+  }
+  if(tag==="ASIDE"&&element.hasAttribute("data-wave-callout")){
+   out.setAttribute("data-wave-callout","true");
+   const kind=element.getAttribute("data-kind")||"";
+   out.setAttribute("data-kind",["important","tip","warning","info"].includes(kind)?kind:"important");
+  }
+  if(tag==="SPAN"&&element.hasAttribute("data-wave-tape")){
+   // Never make a concealed answer visible when copying within the app.
+   out.setAttribute("data-wave-tape","true");
+  }
   if(tag==="A"){
    const href=element.getAttribute("href")||"";
    try{
