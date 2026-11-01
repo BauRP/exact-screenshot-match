@@ -1,0 +1,10 @@
+import {strict as assert} from "node:assert";
+import {structuredPlainClipboardHtml} from "../src/lib/wave-smart-paste";
+import {readFileSync} from "node:fs";
+assert.equal(structuredPlainClipboardHtml("- first\n- second"),"<ul><li><p>first</p></li><li><p>second</p></li></ul>");
+assert.equal(structuredPlainClipboardHtml("3. Alice\n4. Bob"),'<ol start="3"><li><p>Alice</p></li><li><p>Bob</p></li></ol>');
+assert.ok(structuredPlainClipboardHtml("- <script>\n- & data").includes("&lt;script&gt;"));
+assert.equal(structuredPlainClipboardHtml("Just plain text"),"");
+assert.equal(structuredPlainClipboardHtml("- first\nnot a list"),"");
+assert.ok(readFileSync("src/routes/editor.$id.tsx","utf8").includes("structuredPlainClipboardHtml(plain)"));
+console.log("Offline formatted plaintext list import and sanitization passed");
