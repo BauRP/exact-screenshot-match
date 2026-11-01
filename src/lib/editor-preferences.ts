@@ -48,7 +48,7 @@ export function readEditorPreferences():EditorPreferences{
    hiddenToolbar:validHiddenToolbar(raw?.hiddenToolbar),
    toolbarOrder:validToolbarOrder(raw?.toolbarOrder),
   };
- }catch{return {...DEFAULT,hiddenToolbar:[]};}
+ }catch{return {...DEFAULT,hiddenToolbar:[],toolbarOrder:validToolbarOrder(null)};}
 }
 export function saveEditorPreferences(patch:Partial<EditorPreferences>):EditorPreferences{
  const base=readEditorPreferences();
