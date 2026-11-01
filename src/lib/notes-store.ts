@@ -622,6 +622,27 @@ export function deleteNote(id: string) {
 }
 
 
+/** Delete a selected group in ONE durable storage write. Binary attachments
+ * are reclaimed only after the new note list is safely persisted. */
+export function deleteSelectedNotes(noteIds:readonly string[]):number{
+ ensureReadyForMutation();
+ const ids=new Set(noteIds);
+ if(!ids.size)return 0;
+ const removed=state.notes.filter(note=>ids.has(note.id));
+ if(!removed.length)return 0;
+ const next=state.notes.filter(note=>!ids.has(note.id));
+ persistNotes(next);
+ commit({notes:next,hydrated:true,status:"ready",error:null});
+ for(const note of removed){
+  if(note.kind==="pdf"){
+   void import("./pdf-files").then(module=>module.deletePdfFile(note.id))
+    .catch(error=>console.error("Unable to remove PDF",error));
+  }
+  if(note.body)void reclaimDetachedAttachments(note.body);
+ }
+ return removed.length;
+}
+
 /** Single durable write for a multi-selection. If storage rejects the
  * change, none of the selected notes is modified in memory or on screen. */
 export function moveSelectedNotesToFolder(noteIds:readonly string[],destinationId:string):number {
