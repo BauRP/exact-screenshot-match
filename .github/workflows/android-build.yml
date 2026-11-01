@@ -211,6 +211,9 @@ jobs:
       - name: Verify editor ink and photo annotations
         run: bun scripts/test-wave-ink.ts
 
+      - name: Test offline Markdown clipboard structure
+        run: bun scripts/test-wave-markdown-clipboard.ts
+
       - name: Test safe plain-text list clipboard import
         run: bun scripts/test-wave-plain-list-paste.ts
 
