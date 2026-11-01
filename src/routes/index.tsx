@@ -66,6 +66,7 @@ import {
   deleteNote,
   deleteSelectedNotes,
   updateNote,
+  snoozeOverdueReminders,
   setSort,
   setView,
   useHydrated,
@@ -240,7 +241,7 @@ function Index() {
   const changeDueReminder=(id:string,operation:ReminderSnooze|"clear")=>{
     try{
       updateNote(id,{reminderAt:operation==="clear"?undefined:snoozeReminderTime(operation)});
-      toast.success(operation==="clear"?"Напоминание снято":"Перенесено на завтра");
+      toast.success(operation==="clear"?"Напоминание снято":"Напоминание перенесено");
     }catch(error){toast.error(error instanceof Error?error.message:"Не удалось изменить напоминание");}
   };
 
@@ -525,6 +526,11 @@ function Index() {
                     Показать все
                   </button>
                 </div>
+                <button type="button" className="mb-2 rounded-lg border border-border px-3 py-2 text-xs"
+                  onClick={()=>{try{const count=snoozeOverdueReminders(activeFolder,snoozeReminderTime("hour"));if(count)toast.success("Напоминания перенесены на 1 час: "+count);}
+                    catch(error){toast.error(error instanceof Error?error.message:"Не удалось перенести напоминания");}}}>
+                  Отложить все просроченные на 1 час
+                </button>
                 <div className="space-y-2">
                   {dueNotes.map(note=><div key={note.id} className="flex flex-wrap items-center gap-2 rounded-lg bg-background/70 p-2">
                     <button type="button" onClick={()=>openNote(note)}
