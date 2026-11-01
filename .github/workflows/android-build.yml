@@ -109,6 +109,9 @@ jobs:
       - name: Test atomic bulk pinning
         run: bun scripts/test-wave-bulk-pinning.ts
 
+      - name: Test bulk note ordering across folder groups
+        run: bun scripts/test-wave-bulk-note-order.ts
+
       - name: Verify atomic selected note actions
         run: bun scripts/test-wave-bulk-safe-mutations.ts
 
