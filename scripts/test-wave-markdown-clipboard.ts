@@ -1,0 +1,13 @@
+import {strict as assert} from "node:assert";
+import {structuredMarkdownClipboardHtml} from "../src/lib/wave-smart-paste";
+import {readFileSync} from "node:fs";
+assert.equal(structuredMarkdownClipboardHtml("# Title\n\n> Note"),"<h1>Title</h1><blockquote><p>Note</p></blockquote>");
+assert.ok(structuredMarkdownClipboardHtml("## Heading\n- one\n- two").includes("<ul><li><p>one</p></li>"));
+assert.ok(structuredMarkdownClipboardHtml("1. Alpha\n3. Gamma").includes('start="3"'));
+assert.ok(structuredMarkdownClipboardHtml("```js\n<script>\n```\n# heading").includes("&lt;script&gt;"));
+assert.equal(structuredMarkdownClipboardHtml("Normal plain text"),"");
+assert.equal(structuredMarkdownClipboardHtml("# only one heading"),"");
+assert.equal(structuredMarkdownClipboardHtml("```\nunclosed"),"");
+const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
+assert.ok(editor.includes("structuredMarkdownClipboardHtml(plain)"));
+console.log("Safe offline Markdown clipboard block parsing passed");
