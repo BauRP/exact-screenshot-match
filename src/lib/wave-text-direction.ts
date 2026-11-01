@@ -3,7 +3,7 @@ import {Extension} from "@tiptap/core";
 export const WaveTextDirection=Extension.create({
  name:"waveTextDirection",
  addGlobalAttributes(){
-  return [{types:["paragraph","heading"],attributes:{
+  return [{types:["paragraph","heading","waveChecklistItem"],attributes:{
    textDirection:{
     default:"ltr",
     parseHTML:element=>element.getAttribute("dir")==="rtl"?"rtl":"ltr",
