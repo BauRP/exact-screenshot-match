@@ -160,6 +160,9 @@ jobs:
       - name: Verify customizable toolbar and page breaks
         run: bun scripts/test-wave-toolbar-pages.ts
 
+      - name: Test folding sections by nesting depth
+        run: bun scripts/test-wave-fold-depth.ts
+
       - name: Test nested section outline indentation
         run: bun scripts/test-wave-outline-depth.ts
 
