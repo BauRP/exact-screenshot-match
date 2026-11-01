@@ -1,0 +1,18 @@
+import {strict as assert} from "node:assert";
+const data=new Map<string,string>();let writes=0,reject=false;
+Object.defineProperty(globalThis,"window",{configurable:true,value:{localStorage:{getItem(k:string){return data.get(k)??null},setItem(k:string,v:string){if(k==="sn.notes.v1"){if(reject)throw Error("quota");writes++}data.set(k,v)}}}});
+const db=await import("../src/lib/notes-store");
+const a=db.createNote({title:"A",body:"<p>A</p>"}),b=db.createNote({title:"B",body:"<p>B</p>"}),c=db.createNote({title:"C",body:"<p>C</p>"});
+const start=writes,createdAt=a.createdAt;
+assert.equal(db.setSelectedNotesPinned([a.id,b.id],true),2);
+assert.equal(writes,start+1);
+assert.equal(db.getNote(a.id)?.pinned,true);
+assert.equal(db.getNote(b.id)?.pinned,true);
+assert.equal(db.getNote(c.id)?.pinned,false);
+assert.equal(db.getNote(a.id)?.createdAt,createdAt);
+assert.equal(db.setSelectedNotesPinned([a.id,b.id],true),0);
+assert.equal(writes,start+1);
+reject=true;const before=data.get("sn.notes.v1");
+assert.throws(()=>db.setSelectedNotesPinned([a.id,b.id],false),/Unable to save notes/);
+assert.equal(data.get("sn.notes.v1"),before);
+console.log("Bulk pinning is one write, repeat-safe and rollback-safe");
