@@ -61,6 +61,8 @@ import {
 import {
   createNote,
   moveNotesToFolder,
+  moveSelectedNotesToFolder,
+  setSelectedNotesCardColor,
   deleteNote,
   updateNote,
   setSort,
@@ -596,7 +598,7 @@ function Index() {
             {["", "#FDE68A", "#DCE8E1", "#DCE6F3", "#FFE1D7", "#EDE0F7", "#303947", "#293D33", "#3A3046", "#EFE8DF"].map(color=>
               <button type="button" key={color} aria-label={color?"Выбрать цвет "+color:"Вернуть стандартный цвет"}
                 onClick={()=>{
-                  try{selectedNotes.forEach(note=>updateNote(note.id,{cardColor:color||undefined}));setSelected(new Set());setColorDialog(false);toast.success("Цвет карточки изменён");}
+                  try{setSelectedNotesCardColor(selectedNotes.map(note=>note.id),color||undefined);setSelected(new Set());setColorDialog(false);toast.success("Цвет карточки изменён");}
                   catch(error){toast.error(error instanceof Error?error.message:"Не удалось изменить цвет");}
                 }}
                 className="h-11 rounded-xl border border-border shadow-sm"
@@ -610,7 +612,7 @@ function Index() {
           <DialogHeader><DialogTitle>Переместить заметку</DialogTitle></DialogHeader>
           <div className="max-h-64 space-y-1 overflow-y-auto">
             {folders.map(folder=><button type="button" key={folder.id} onClick={()=>{
-              try{selectedNotes.forEach(note=>updateNote(note.id,{folderId:folder.id}));setSelected(new Set());setMoveDialog(false);toast.success("Заметки перемещены");}
+              try{moveSelectedNotesToFolder(selectedNotes.map(note=>note.id),folder.id);setSelected(new Set());setMoveDialog(false);toast.success("Заметки перемещены");}
               catch(error){toast.error(error instanceof Error?error.message:"Не удалось переместить");}
             }} className="flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm hover:bg-secondary">{localizedFolderName(folder)}</button>)}
           </div>
