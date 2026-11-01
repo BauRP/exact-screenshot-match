@@ -7,10 +7,11 @@ const task=(t:string)=>schema.nodes.waveChecklistItem.create({done:false},schema
 const fold=(t:string,children:any[])=>schema.nodes.waveFold.create({title:t},children);
 let state=EditorState.create({schema,doc:schema.nodes.doc.create(null,[fold("first",[task("a"),fold("inner",[task("b")])]),fold("second",[task("c")])])});
 const editor={isEditable:true,isDestroyed:false,get state(){return state;},view:{dispatch(tr:any){state=state.apply(tr)}}} as any;
-state=state.apply(state.tr.setSelection(TextSelection.create(state.doc,6)));
+const nestedPos=state.doc.firstChild!.firstChild!.nodeSize+2;
+state=state.apply(state.tr.setSelection(TextSelection.create(state.doc,nestedPos+2)));
 assert.equal(selectedSectionTaskCounts(editor)?.total,1);
 assert.equal(setSelectedSectionTasksDone(editor,true),1);
-assert.equal(state.doc.firstChild?.firstChild?.firstChild?.attrs.done,true);
-assert.equal(state.doc.firstChild?.firstChild?.attrs.done,undefined);
+assert.equal(state.doc.firstChild?.lastChild?.firstChild?.attrs.done,true);
+assert.equal(state.doc.firstChild?.firstChild?.attrs.done,false);
 assert.equal(state.doc.lastChild?.firstChild?.attrs.done,false);
 console.log("Scoped checklist changes preserve sibling section tasks");
