@@ -1,0 +1,16 @@
+import {strict as assert} from "node:assert";
+import {Schema} from "@tiptap/pm/model";
+import {EditorState,TextSelection} from "@tiptap/pm/state";
+import {selectedSectionTaskCounts,setSelectedSectionTasksDone} from "../src/lib/wave-checklist-actions";
+const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},waveFold:{group:"block",content:"block+",attrs:{title:{default:"section"}}},waveChecklistItem:{group:"block",content:"text*",attrs:{done:{default:false}}},text:{group:"inline"}},marks:{}});
+const task=(t:string)=>schema.nodes.waveChecklistItem.create({done:false},schema.text(t));
+const fold=(t:string,children:any[])=>schema.nodes.waveFold.create({title:t},children);
+let state=EditorState.create({schema,doc:schema.nodes.doc.create(null,[fold("first",[task("a"),fold("inner",[task("b")])]),fold("second",[task("c")])])});
+const editor={isEditable:true,isDestroyed:false,get state(){return state;},view:{dispatch(tr:any){state=state.apply(tr)}}} as any;
+state=state.apply(state.tr.setSelection(TextSelection.create(state.doc,6)));
+assert.equal(selectedSectionTaskCounts(editor)?.total,1);
+assert.equal(setSelectedSectionTasksDone(editor,true),1);
+assert.equal(state.doc.firstChild?.firstChild?.firstChild?.attrs.done,true);
+assert.equal(state.doc.firstChild?.firstChild?.attrs.done,undefined);
+assert.equal(state.doc.lastChild?.firstChild?.attrs.done,false);
+console.log("Scoped checklist changes preserve sibling section tasks");
