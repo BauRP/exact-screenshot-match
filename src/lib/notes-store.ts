@@ -622,6 +622,43 @@ export function deleteNote(id: string) {
 }
 
 
+/** Single durable write for a multi-selection. If storage rejects the
+ * change, none of the selected notes is modified in memory or on screen. */
+export function moveSelectedNotesToFolder(noteIds:readonly string[],destinationId:string):number {
+ ensureReadyForMutation();
+ if(!destinationId||destinationId.length>128)return 0;
+ const ids=new Set(noteIds);
+ if(!ids.size)return 0;
+ let changed=0;
+ const next=state.notes.map(note=>{
+  if(!ids.has(note.id)||note.folderId===destinationId)return note;
+  changed++;
+  return {...note,folderId:destinationId};
+ });
+ if(!changed)return 0;
+ persistNotes(next);
+ commit({notes:next,hydrated:true,status:"ready",error:null});
+ return changed;
+}
+/** Persist card colours for the entire selection atomically. The inner paper,
+ * timestamps and binary attachments are never modified. */
+export function setSelectedNotesCardColor(noteIds:readonly string[],color:string|undefined):number {
+ ensureReadyForMutation();
+ if(color!==undefined&&!/^#[0-9a-f]{6}$/i.test(color))return 0;
+ const ids=new Set(noteIds);
+ if(!ids.size)return 0;
+ let changed=0;
+ const next=state.notes.map(note=>{
+  if(!ids.has(note.id)||note.cardColor===color)return note;
+  changed++;
+  return {...note,cardColor:color};
+ });
+ if(!changed)return 0;
+ persistNotes(next);
+ commit({notes:next,hydrated:true,status:"ready",error:null});
+ return changed;
+}
+
 /** Move the notes out of a folder BEFORE its tab is removed. */
 export function moveNotesToFolder(sourceId: string, destinationId = "all") {
   ensureReadyForMutation();
