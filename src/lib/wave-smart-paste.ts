@@ -99,6 +99,7 @@ export function structuredMarkdownClipboardHtml(input:string):string{
   .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
  const heading=/^\s{0,3}(#{1,4})\s+(.+?)\s*$/;
  const quote=/^\s{0,3}>\s+(.+)$/;
+ const checkbox=/^\s{0,3}[-*•]\s+\[([ xX])\]\s+(.+)$/;
  const unordered=/^\s{0,3}[-*•]\s+(.+)$/;
  const ordered=/^\s{0,3}(\d{1,5})[.)]\s+(.+)$/;
  const fence=/^\s{0,3}\x60{3}\s*[\w-]{0,20}\s*$/;
@@ -114,7 +115,13 @@ export function structuredMarkdownClipboardHtml(input:string):string{
    html+="<pre><code>"+safe(code.join("\n"))+"</code></pre>";meaningful++;continue;
   }
   if(!trimmed){close();continue;}
-  const h=heading.exec(line),q=quote.exec(line),u=unordered.exec(line),o=ordered.exec(line);
+  const h=heading.exec(line),q=quote.exec(line),check=checkbox.exec(line),u=unordered.exec(line),o=ordered.exec(line);
+  if(check){
+   close();
+   html+='<div data-type="wave-check-item" data-done="'+(check[1].toLowerCase()==="x"?"true":"false")+
+     '" data-shape="square">'+safe(check[2])+"</div>";
+   meaningful++;continue;
+  }
   if(h){close();html+="<h"+h[1].length+">"+safe(h[2])+"</h"+h[1].length+">";meaningful++;continue;}
   if(q){close();html+="<blockquote><p>"+safe(q[1])+"</p></blockquote>";meaningful++;continue;}
   if(trimmed==="---"||trimmed==="***"){close();html+="<hr>";meaningful++;continue;}
