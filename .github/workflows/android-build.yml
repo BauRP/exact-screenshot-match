@@ -106,6 +106,9 @@ jobs:
       - name: Test atomic selected-note deletion
         run: bun scripts/test-wave-atomic-bulk-delete.ts
 
+      - name: Test atomic bulk pinning
+        run: bun scripts/test-wave-bulk-pinning.ts
+
       - name: Verify atomic selected note actions
         run: bun scripts/test-wave-bulk-safe-mutations.ts
 
