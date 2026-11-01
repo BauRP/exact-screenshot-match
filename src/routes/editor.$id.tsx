@@ -69,7 +69,7 @@ import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection} from "@/lib/wave-text-direction";
 import {collectNoteOutline,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
 import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
-import {duplicateCurrentPage,moveCurrentPage} from "@/lib/wave-page-actions";
+import {duplicateCurrentPage,moveCurrentPage,insertBlankPageAfter,removeEmptyCurrentPage} from "@/lib/wave-page-actions";
 import {revealOutlinePosition} from "@/lib/wave-outline-navigation";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
@@ -992,6 +992,11 @@ function EditorPage() {
               if(pos===undefined)return;
               editor.view.dispatch(editor.state.tr.delete(pos,pos+1).scrollIntoView());
             }}>Объединить страницы</button>}
+          <button type="button" aria-label="Добавить пустую страницу после текущей" className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!insertBlankPageAfter(editor))toast("Не удалось добавить страницу");}}>Страница +</button>
+          <button type="button" aria-label="Удалить пустую текущую страницу" disabled={currentPage<=1}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>{if(!removeEmptyCurrentPage(editor))toast("Удалить можно только пустую страницу");}}>Пустую −</button>
           <button type="button" aria-label="Дублировать текущую страницу" className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>{if(!duplicateCurrentPage(editor))toast("Не удалось дублировать страницу");}}>Копия страницы</button>
           <button type="button" aria-label="Переместить страницу выше" disabled={currentPage<=2}
