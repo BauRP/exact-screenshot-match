@@ -283,6 +283,9 @@ jobs:
       - name: Verify Google UMP and native ad error diagnostics
         run: bun scripts/test-admob-error-guide.ts
 
+      - name: Verify unchanged note saves do not rewrite storage
+        run: bun scripts/test-wave-noop-note-save.ts
+
       - name: Verify backup triggers only on committed edits
         run: bun scripts/test-backup-save-triggers.ts
 
