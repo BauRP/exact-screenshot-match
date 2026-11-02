@@ -124,6 +124,9 @@ jobs:
       - name: Verify single-file Wave Notes transfer without overwrites
         run: bun scripts/test-wave-transfer.ts
 
+      - name: Verify daily and weekly repeating reminders
+        run: bun scripts/test-wave-recurring-reminders.ts
+
       - name: Verify six offline reminder snooze choices
         run: bun scripts/test-wave-snooze-options.ts
 
