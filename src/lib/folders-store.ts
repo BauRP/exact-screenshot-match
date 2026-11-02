@@ -121,8 +121,9 @@ function snapshot(): Folder[] {
     customFolders.map((f) => f.id + f.name + (f.parentId??"")).join("|") + "#" + hiddenSystem.join(",");
   if (key !== cachedKey) {
     cachedList = [
-      ...SYSTEM_FOLDERS.filter((f) => !hiddenSystem.includes(f.id)),
-      ...orderedFolderTree(customFolders),
+      ...SYSTEM_FOLDERS.filter(f=>f.id==="all"),
+      ...orderedFolderTree([...SYSTEM_FOLDERS.filter(f=>f.id!=="all"),...customFolders])
+        .filter(f=>!hiddenSystem.includes(f.id)),
     ];
     cachedKey = key;
   }
