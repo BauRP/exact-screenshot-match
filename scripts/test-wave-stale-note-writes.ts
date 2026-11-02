@@ -19,3 +19,7 @@ assert.equal(saved.body,"User draft");
 assert.equal(db.getNote(first.id)?.body,"Changed elsewhere");
 assert.equal(db.getNote(saved.id)?.body,"User draft");
 assert.equal(JSON.parse(storage.get("sn.notes.v1")!).length,2);
+
+const editorSource=await import("node:fs").then(fs=>fs.readFileSync("src/routes/editor.$id.tsx","utf8"));
+assert.ok(editorSource.includes('aria-label="Сохранить черновик отдельной копией"'));
+assert.ok(editorSource.includes("saveDraftAfterExternalChange(id,"));
