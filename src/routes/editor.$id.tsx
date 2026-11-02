@@ -69,7 +69,7 @@ import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection} from "@/lib/wave-text-direction";
 import {collectNoteOutline,filterNoteOutline,type OutlineFilter,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
 import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
-import {duplicateCurrentPage,moveCurrentPage,insertBlankPageAfter,removeEmptyCurrentPage} from "@/lib/wave-page-actions";
+import {duplicateCurrentPage,moveCurrentPage,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeEmptyCurrentPage} from "@/lib/wave-page-actions";
 import {revealOutlinePosition} from "@/lib/wave-outline-navigation";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
@@ -1041,6 +1041,11 @@ function EditorPage() {
               if(pos===undefined)return;
               editor.view.dispatch(editor.state.tr.delete(pos,pos+1).scrollIntoView());
             }}>Объединить страницы</button>}
+          <button type="button" aria-label="Добавить пустую страницу перед текущей" className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!insertBlankPageBefore(editor))toast("Не удалось добавить страницу");}}>Страница перед +</button>
+          <button type="button" aria-label="Объединить со следующей страницей" disabled={currentPage>=pagePositions.length}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>{if(!mergeCurrentPageWithNext(editor))toast("Не удалось объединить страницы");}}>Со след. объединить</button>
           <button type="button" aria-label="Добавить пустую страницу после текущей" className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>{if(!insertBlankPageAfter(editor))toast("Не удалось добавить страницу");}}>Страница +</button>
           <button type="button" aria-label="Удалить пустую текущую страницу" disabled={currentPage<=1}
