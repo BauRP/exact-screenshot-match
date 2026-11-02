@@ -1,9 +1,10 @@
 import {strict as assert} from "node:assert";
 import {readFileSync} from "node:fs";
-import {descendantFolderIds,canNestFolder,orderedFolderTree,type Folder} from "../src/lib/folders-store";
+import {descendantFolderIds,canNestFolder,orderedFolderTree,folderAncestors,type Folder} from "../src/lib/folders-store";
 const tree:Folder[]=[{id:"all",name:"ALL",system:true},{id:"parent",name:"Parent"},{id:"child",name:"Child",parentId:"parent"},{id:"grand",name:"Grandchild",parentId:"child"},{id:"peer",name:"Peer"}];
 assert.deepEqual([...descendantFolderIds(tree,"parent")],["parent","child","grand"]);
 assert.equal(canNestFolder(tree,"parent","grand"),false);
+assert.deepEqual(folderAncestors(tree,"grand").map(x=>x.id),["parent","child","grand"]);
 assert.equal(canNestFolder(tree,"child","child"),false);
 assert.equal(canNestFolder(tree,"child","peer"),true);
 assert.deepEqual(orderedFolderTree(tree).map(x=>x.id),["all","parent","child","grand","peer"]);
@@ -23,4 +24,5 @@ assert.ok(home.includes('descendantFolderIds(folders,activeFolder).has(note.fold
 assert.ok(home.includes('aria-label="Родительская папка"'));
 assert.ok(home.includes('folderDepth(folders,folder.id)'));
 assert.ok(home.includes("treeFolders.map"));
+assert.ok(home.includes('aria-label="Путь к папке"'));
 console.log("Nested folder parent picker, subtree notes and hierarchy rendering are wired");
