@@ -3,6 +3,7 @@ import { useSyncExternalStore } from "react";
 import { markBackupDirty } from "./backup-signals";
 import { NEW_NOTE_YELLOW,NEW_NOTE_INK } from "./note-appearance";
 import { validPaperMood,validPaperRule } from "./note-paper";
+import {validReminderRepeat,nextRecurringReminder,type ReminderRepeat} from "./note-reminders";
 
 export type NoteKind = "note" | "pdf";
 
@@ -70,6 +71,7 @@ export type Note = {
   updatedAt: number;
   pinned?: boolean;
   reminderAt?: number;
+  reminderRepeat?: ReminderRepeat;
   folderId?: string;
   cardColor?: string;
   manualOrder?: number;
@@ -175,6 +177,7 @@ function normalizeNote(input: unknown): Note | null {
     updatedAt,
     pinned: input.pinned === true,
     reminderAt: validReminderTime(input.reminderAt),
+    reminderRepeat: validReminderRepeat(input.reminderRepeat),
     folderId,
     cardColor: typeof input.cardColor === "string" && /^#[0-9a-f]{6}$/i.test(input.cardColor) ? input.cardColor : undefined,
     manualOrder: typeof input.manualOrder === "number" && Number.isSafeInteger(input.manualOrder) && input.manualOrder>=0 ? input.manualOrder : undefined,
@@ -534,6 +537,7 @@ export function createNote(partial?: Partial<Note>): Note {
     updatedAt: partial?.updatedAt ?? now,
     pinned: partial?.pinned ?? false,
     reminderAt: validReminderTime(partial?.reminderAt),
+    reminderRepeat: validReminderRepeat(partial?.reminderRepeat),
     folderId: partial?.folderId ?? "all",
     cardColor: partial?.cardColor,
     manualOrder: partial?.manualOrder,
@@ -581,7 +585,7 @@ export function nextDefaultNoteTitle(base: string): string {
 }
 
 /** Fields whose change means the note content was actually modified. */
-const CONTENT_FIELDS = ["title", "body", "pdf", "style", "reminderAt"] as const;
+const CONTENT_FIELDS = ["title", "body", "pdf", "style", "reminderAt", "reminderRepeat"] as const;
 
 function touchesContent(note: Note, patch: Partial<Note>): boolean {
   return CONTENT_FIELDS.some((field) => {
@@ -660,6 +664,19 @@ export function updateNote(id: string, patch: Partial<Note>) {
 /** Reschedule every overdue reminder in the active folder atomically.
  * No other note content or attachment is touched. A failed localStorage write
  * leaves the entire original group intact. */
+/** Complete a reminder; recurring dates advance to the next future local
+ * appointment. Single reminder dates are cleared. */
+export function completeNoteReminder(id:string,now=Date.now()):boolean{
+ ensureReadyForMutation();
+ const note=state.notes.find(n=>n.id===id);
+ if(!note||note.reminderAt===undefined||note.reminderAt>now)return false;
+ const nextAt=note.reminderRepeat?nextRecurringReminder(note.reminderAt,note.reminderRepeat,now):undefined;
+ const next=state.notes.map(n=>n.id===id?{...n,reminderAt:nextAt,updatedAt:now}:n);
+ persistNotes(next);
+ commit({notes:next,hydrated:true,status:"ready",error:null});
+ return true;
+}
+
 export function snoozeOverdueReminders(folderId:string,newTime:number,now=Date.now()):number{
  ensureReadyForMutation();
  const reminder=validReminderTime(newTime);
