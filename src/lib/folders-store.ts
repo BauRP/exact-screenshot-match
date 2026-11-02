@@ -5,6 +5,7 @@ export type Folder = {
   id: string;
   name: string;
   system?: boolean;
+  parentId?: string;
 };
 
 const FOLDERS_KEY = "sn.folders.v1";
@@ -16,6 +17,42 @@ export const SYSTEM_FOLDERS: Folder[] = [
   { id: "work", name: "WORK", system: true },
   { id: "home", name: "HOME", system: true },
 ];
+
+/** Parent "all" is the root, not a real child; existing flat folders
+ * remain root folders when parentId is absent. */
+export function folderParent(folder:Folder):string{
+ return folder.parentId&&folder.parentId!==folder.id?folder.parentId:"all";
+}
+export function descendantFolderIds(folders:readonly Folder[],parentId:string):Set<string>{
+ const found=new Set<string>([parentId]);
+ let changed=true;
+ while(changed){
+  changed=false;
+  for(const folder of folders){
+   if(found.has(folder.id))continue;
+   if(found.has(folderParent(folder))){found.add(folder.id);changed=true;}
+  }
+ }
+ return found;
+}
+export function canNestFolder(folders:readonly Folder[],id:string,parentId:string):boolean{
+ return id!==parentId&&(parentId==="all"||folders.some(folder=>folder.id===parentId))&&
+   !descendantFolderIds(folders,id).has(parentId);
+}
+/** Flatten the hierarchy in display order, protecting imported data from
+ * accidentally creating infinitely nested or invisible folders. */
+export function orderedFolderTree(folders:readonly Folder[]):Folder[]{
+ const result:Folder[]=[],visited=new Set<string>();
+ const visit=(parentId:string)=>{
+  for(const folder of folders){
+   if(visited.has(folder.id)||folderParent(folder)!==parentId)continue;
+   visited.add(folder.id);result.push(folder);visit(folder.id);
+  }
+ };
+ visit("all");
+ for(const folder of folders)if(!visited.has(folder.id)){visited.add(folder.id);result.push(folder);}
+ return result;
+}
 
 const listeners = new Set<() => void>();
 let customFolders: Folder[] = [];
@@ -81,11 +118,11 @@ let cachedList: Folder[] = SYSTEM_FOLDERS;
 let cachedKey = "";
 function snapshot(): Folder[] {
   const key =
-    customFolders.map((f) => f.id + f.name).join("|") + "#" + hiddenSystem.join(",");
+    customFolders.map((f) => f.id + f.name + (f.parentId??"")).join("|") + "#" + hiddenSystem.join(",");
   if (key !== cachedKey) {
     cachedList = [
       ...SYSTEM_FOLDERS.filter((f) => !hiddenSystem.includes(f.id)),
-      ...customFolders,
+      ...orderedFolderTree(customFolders),
     ];
     cachedKey = key;
   }
@@ -107,9 +144,11 @@ export function setActiveFolder(id: string) {
   emit();
 }
 
-export function addFolder(name: string,activate=false): Folder {
+export function addFolder(name: string,activate=false,parentId="all"): Folder {
   hydrate();
-  const f: Folder = { id: crypto.randomUUID(), name: name.trim() || "Folder" };
+  const available=snapshot();
+  if(parentId!=="all"&&!available.some(folder=>folder.id===parentId))throw Error("Неизвестная родительская папка");
+  const f: Folder = { id: crypto.randomUUID(), name: name.trim() || "Folder",parentId:parentId==="all"?undefined:parentId };
   const next=[...customFolders, f];
   // Creating and selecting a new folder is one UI operation; persist both.
   persist(next,hiddenSystem,activate?f.id:undefined);
@@ -119,11 +158,16 @@ export function addFolder(name: string,activate=false): Folder {
   return f;
 }
 
-export function renameFolder(id: string, name: string) {
+export function renameFolder(id: string, name: string,parentId?:string) {
   hydrate();
-  const next=customFolders.map((f) => f.id === id ? { ...f, name: name.trim() || f.name } : f);
+  const current=customFolders.find(f=>f.id===id);
+  if(!current)throw Error("Папка не найдена");
+  const parent=parentId??folderParent(current);
+  if(!canNestFolder(snapshot(),id,parent))throw Error("Нельзя переместить папку внутрь себя или своей подпапки");
+  const next=customFolders.map(f=>f.id===id?
+    {...f,name:name.trim()||f.name,parentId:parent==="all"?undefined:parent}:f);
   persist(next,hiddenSystem);
-  customFolders=next; emit();
+  customFolders=next;emit();
 }
 
 export function deleteFolder(id: string) {
@@ -131,7 +175,11 @@ export function deleteFolder(id: string) {
   // The "ALL" tab is permanent and can never be removed.
   if (id === "all") return;
   const nextHidden=isSystemFolder(id) && !hiddenSystem.includes(id) ? [...hiddenSystem,id] : hiddenSystem;
-  const nextFolders=customFolders.filter((f) => f.id !== id);
+  const deleted=customFolders.find(f=>f.id===id);
+  const newParent=deleted?folderParent(deleted):"all";
+  // Children stay accessible: reparent them to their grandparent.
+  const nextFolders=customFolders.filter(f=>f.id!==id).map(f=>folderParent(f)===id?
+    {...f,parentId:newParent==="all"?undefined:newParent}:f);
   const changeSelection=activeId===id;
   persist(nextFolders,nextHidden,changeSelection?"all":undefined);
   if(changeSelection) activeId="all";
@@ -180,11 +228,18 @@ export function restoreFolderBackup(folders: Folder[], restoredHidden: string[])
       throw new Error("Invalid folder record in backup");
     }
     if (!known.has(folder.id)) {
-      pending.push({ id: folder.id, name: folder.name.trim() || "Folder" });
+      pending.push({ id: folder.id, name: folder.name.trim() || "Folder",
+        parentId:typeof folder.parentId==="string"?folder.parentId:undefined });
       known.add(folder.id);
     }
   }
   const next = [...customFolders, ...pending];
+  // Validate the whole imported tree including out-of-order folder records.
+  for(const folder of next){
+    const parent=folderParent(folder);
+    if(!canNestFolder([...SYSTEM_FOLDERS,...next],folder.id,parent))
+      throw Error("Резервная копия содержит неверную структуру папок");
+  }
   // Restoring a ZIP never unhides a tab the current user deliberately hid.
   const nextHidden = [...new Set([...hiddenSystem, ...restoredHidden])];
   if (!pending.length && nextHidden.length === hiddenSystem.length) return;
