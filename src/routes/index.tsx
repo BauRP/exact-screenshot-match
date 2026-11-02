@@ -559,11 +559,11 @@ function Index() {
                   </button>
                 </div>
                 <button type="button" className="mb-2 mr-2 rounded-lg border border-border px-3 py-2 text-xs"
-                  onClick={()=>{try{const count=completeOverdueReminders(activeFolder);if(count)toast.success("Завершено напоминаний: "+count);}catch(error){toast.error(error instanceof Error?error.message:"Не удалось завершить напоминания");}}}>
+                  onClick={()=>{try{const count=completeOverdueReminders(activeFolder==="all"?"all":[...scopedFolderIds]);if(count)toast.success("Завершено напоминаний: "+count);}catch(error){toast.error(error instanceof Error?error.message:"Не удалось завершить напоминания");}}}>
                   Выполнить все просроченные
                 </button>
                 <button type="button" className="mb-2 rounded-lg border border-border px-3 py-2 text-xs"
-                  onClick={()=>{try{const count=snoozeOverdueReminders(activeFolder,snoozeReminderTime("hour"));if(count)toast.success("Напоминания перенесены на 1 час: "+count);}
+                  onClick={()=>{try{const count=snoozeOverdueReminders(activeFolder==="all"?"all":[...scopedFolderIds],snoozeReminderTime("hour"));if(count)toast.success("Напоминания перенесены на 1 час: "+count);}
                     catch(error){toast.error(error instanceof Error?error.message:"Не удалось перенести напоминания");}}}>
                   Отложить все просроченные на 1 час
                 </button>
