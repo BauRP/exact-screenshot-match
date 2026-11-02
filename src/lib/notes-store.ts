@@ -393,21 +393,19 @@ function useDatabaseSnapshot() {
   return useSyncExternalStore(subscribe, getClientSnapshot, getServerSnapshot);
 }
 
-function sortNotes(list: Note[], mode: SortMode): Note[] {
-  const pinned = list
-    .filter((note) => note.pinned)
-    .slice()
-    .sort((a, b) => mode==="manual" ? (a.manualOrder??Number.MAX_SAFE_INTEGER)-(b.manualOrder??Number.MAX_SAFE_INTEGER) || b.updatedAt-a.updatedAt : a.title.localeCompare(b.title, "ru", { sensitivity: "base" }));
-
-  const rest = list.filter((note) => !note.pinned).slice();
-  rest.sort((a, b) => {
-    if (mode === "manual") return (a.manualOrder??Number.MAX_SAFE_INTEGER)-(b.manualOrder??Number.MAX_SAFE_INTEGER) || b.updatedAt-a.updatedAt;
-    if (mode === "alpha") return a.title.localeCompare(b.title, "ru", { sensitivity: "base" });
-    if (mode === "created") return b.createdAt - a.createdAt;
-    return b.updatedAt - a.updatedAt;
-  });
-
-  return [...pinned, ...rest];
+/** Pinned notes stay first, while the selected sort mode applies equally
+ * inside pinned and unpinned groups. Manual order never crosses pin groups. */
+export function sortNotes(list: Note[], mode: SortMode): Note[] {
+ const compare=(a:Note,b:Note):number=>{
+  if(mode==="manual")return (a.manualOrder??Number.MAX_SAFE_INTEGER)-(b.manualOrder??Number.MAX_SAFE_INTEGER)||b.updatedAt-a.updatedAt;
+  if(mode==="alpha")return a.title.localeCompare(b.title,"ru",{sensitivity:"base"});
+  if(mode==="created")return b.createdAt-a.createdAt;
+  return b.updatedAt-a.updatedAt;
+ };
+ return [
+  ...list.filter(note=>note.pinned).sort(compare),
+  ...list.filter(note=>!note.pinned).sort(compare),
+ ];
 }
 
 function getSortedSnapshot(): Note[] {
