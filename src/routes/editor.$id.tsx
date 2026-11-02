@@ -524,6 +524,7 @@ function EditorPage() {
         folderId,
         pinned,
         reminderAt:reminderValue,
+        reminderRepeat:reminderRepeat==="none"?undefined:reminderRepeat,
         style: { background: canvasBg, paperMood, paperRule },
       });
     }
