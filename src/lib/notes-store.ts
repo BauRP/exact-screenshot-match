@@ -519,6 +519,40 @@ export function moveSelectedNotesToEdge(noteIds:readonly string[],edge:"top"|"bo
  return changed;
 }
 
+/**
+ * Explicit conflict recovery when another tab or restore changed the database.
+ * Keep the external version unchanged and save the current unsaved editor draft
+ * under a new identity. Never silently replace/merge a remote note.
+ *
+ * Called only on the user's "Save separate copy" action, not on a failed Save.
+ * The fresh read is validated before a single durable write is attempted.
+ */
+export function saveDraftAfterExternalChange(originalId:string,draft:Partial<Note>):Note{
+ if(!isBrowserStorageAvailable())throw Error("Local notes storage is unavailable");
+ if(!originalId||typeof draft.body!=="string"||draft.kind==="pdf")
+  throw Error("Невозможно восстановить черновик");
+ const fresh=readDatabaseFromStorage();
+ const original=fresh.notes.find(n=>n.id===originalId);
+ const now=Date.now();
+ const saved:Note={
+  id:createId(),
+  title:(draft.title||original?.title||"Заметка")+" — отдельная копия",
+  body:draft.body,
+  createdAt:now,updatedAt:now,
+  kind:"note",
+  folderId:draft.folderId??original?.folderId??"all",
+  pinned:false,
+  reminderAt:validReminderTime(draft.reminderAt),
+  reminderRepeat:validReminderRepeat(draft.reminderRepeat),
+  style:draft.style??original?.style,
+ };
+ while(fresh.notes.some(n=>n.id===saved.id))saved.id=createId();
+ const next=[saved,...fresh.notes];
+ persistNotes(next);
+ commit({...fresh,notes:next,hydrated:true,status:"ready",error:null});
+ return saved;
+}
+
 export function getNote(id: string): Note | undefined {
   ensureReadyForMutation();
   return state.notes.find((note) => note.id === id);
