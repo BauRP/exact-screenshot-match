@@ -59,6 +59,7 @@ import {
   type Folder,
   descendantFolderIds,
   folderParent,
+  folderAncestors,
 } from "@/lib/folders-store";
 import {
   createNote,
@@ -496,6 +497,15 @@ function Index() {
             }
           }}
         />
+        {activeFolder!=="all"&&folderAncestors(folders,activeFolder).length>1&&
+          <nav aria-label="Путь к папке" className="mx-3 mt-2 flex gap-1 overflow-x-auto text-xs">
+            <button type="button" className="shrink-0 rounded border border-border px-2 py-1"
+              onClick={()=>setActiveFolder("all")}>Все</button>
+            {folderAncestors(folders,activeFolder).map((folder,index,array)=>
+              <button key={folder.id} type="button" aria-current={index===array.length-1?"page":undefined}
+                className="shrink-0 rounded border border-border px-2 py-1"
+                onClick={()=>setActiveFolder(folder.id)}>{localizedFolderName(folder)}</button>)}
+          </nav>}
         {searchOpen && <div className="mx-3 mt-2 rounded-xl border border-border bg-secondary/40 p-2" role="search">
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 shrink-0 text-muted-foreground"/>
