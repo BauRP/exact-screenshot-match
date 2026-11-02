@@ -12,3 +12,13 @@ export const WaveTextDirection=Extension.create({
   }}];
  },
 });
+
+// Browser-independent first-strong-character heuristic for mixed-language notes.
+// Hebrew/Arabic scripts need RTL; Latin/Cyrillic and Kazakh remain LTR.
+export function directionForText(text:string):"ltr"|"rtl"{
+ for(const letter of text){
+  if(/[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/u.test(letter))return "rtl";
+  if(/[A-Za-z\u00C0-\u04FF\u1E00-\u1EFF]/u.test(letter))return "ltr";
+ }
+ return "ltr";
+}
