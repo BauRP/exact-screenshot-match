@@ -1,4 +1,5 @@
 import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
 import {nextRecurringReminder} from "../src/lib/note-reminders";
 const now=new Date(2026,10,2,14,0).getTime();
 const due=new Date(2026,10,1,9,30).getTime();
@@ -21,3 +22,7 @@ const single=db.createNote({title:"Once",body:"body",reminderAt:due});
 assert.equal(db.completeNoteReminder(single.id,now),true);
 assert.equal(db.getNote(single.id)?.reminderAt,undefined);
 console.log("Offline recurring reminder completion and persisted state passed");
+
+const editorSource=readFileSync("src/routes/editor.$id.tsx","utf8");
+assert.ok((editorSource.match(/reminderRepeat:reminderRepeat==="none"\?undefined:reminderRepeat/g)||[]).length>=2,
+ "Both new and existing notes must save the selected recurrence");
