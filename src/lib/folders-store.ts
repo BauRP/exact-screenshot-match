@@ -178,8 +178,11 @@ export function renameFolder(id: string, name: string,parentId?:string) {
   if(!current)throw Error("Папка не найдена");
   const parent=parentId??folderParent(current);
   if(!canNestFolder(snapshot(),id,parent))throw Error("Нельзя переместить папку внутрь себя или своей подпапки");
-  const next=customFolders.map(f=>f.id===id?
-    {...f,name:name.trim()||f.name,...(parent==="all"?{parentId:undefined}:{parentId:parent})}:f);
+  const next=customFolders.map(f=>{
+    if(f.id!==id)return f;
+    const {parentId:oldParent,...base}=f;
+    return {...base,name:name.trim()||f.name,...(parent==="all"?{}:{parentId:parent})};
+  });
   persist(next,hiddenSystem);
   customFolders=next;emit();
 }
@@ -192,8 +195,11 @@ export function deleteFolder(id: string) {
   const deleted=customFolders.find(f=>f.id===id);
   const newParent=deleted?folderParent(deleted):"all";
   // Children stay accessible: reparent them to their grandparent.
-  const nextFolders=customFolders.filter(f=>f.id!==id).map(f=>folderParent(f)===id?
-    {...f,parentId:newParent==="all"?undefined:newParent}:f);
+  const nextFolders=customFolders.filter(f=>f.id!==id).map(f=>{
+    if(folderParent(f)!==id)return f;
+    const {parentId:oldParent,...base}=f;
+    return {...base,...(newParent==="all"?{}:{parentId:newParent})};
+  });
   const changeSelection=activeId===id;
   persist(nextFolders,nextHidden,changeSelection?"all":undefined);
   if(changeSelection) activeId="all";
