@@ -1,4 +1,5 @@
 import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
 import {descendantFolderIds,canNestFolder,orderedFolderTree,type Folder} from "../src/lib/folders-store";
 const tree:Folder[]=[{id:"all",name:"ALL",system:true},{id:"parent",name:"Parent"},{id:"child",name:"Child",parentId:"parent"},{id:"grand",name:"Grandchild",parentId:"child"},{id:"peer",name:"Peer"}];
 assert.deepEqual([...descendantFolderIds(tree,"parent")],["parent","child","grand"]);
@@ -16,3 +17,10 @@ assert.throws(()=>store.renameFolder(parent.id,"Projects",child.id),/Нельз�
 store.deleteFolder(parent.id);
 assert.equal(store.exportFolderBackup().folders.find(x=>x.id===child.id)?.parentId,undefined);
 console.log("Nested folders, cycle rejection and safe reparenting verified");
+
+const home=readFileSync("src/routes/index.tsx","utf8");
+assert.ok(home.includes('descendantFolderIds(folders,activeFolder).has(note.folderId??"all")'));
+assert.ok(home.includes('aria-label="Родительская папка"'));
+assert.ok(home.includes('folderDepth(folders,folder.id)'));
+assert.ok(home.includes("treeFolders.map"));
+console.log("Nested folder parent picker, subtree notes and hierarchy rendering are wired");
