@@ -1,0 +1,13 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+import {directionForText} from "../src/lib/wave-text-direction";
+assert.equal(directionForText("  مرحبا بالعالم"),"rtl");
+assert.equal(directionForText("שלום עולם"),"rtl");
+assert.equal(directionForText("Қазақ тілі"),"ltr");
+assert.equal(directionForText("English ثم العربية"),"ltr");
+assert.equal(directionForText("123 שלום hello"),"rtl");
+assert.equal(directionForText("123"),"ltr");
+const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
+assert.ok(editor.includes('textDirection:directionForText(node.textContent)'));
+assert.ok(editor.includes('aria-label="Автоматическое направление текста"'));
+console.log("Offline first-strong multilingual text direction and editor command passed");
