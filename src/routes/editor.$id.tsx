@@ -494,7 +494,7 @@ function EditorPage() {
       });
       committedNoteRef.current=true;
       toast.success("Черновик сохранён отдельной заметкой");
-      navigate({to:"/editor/$id",params:{id:copy.id},search:{folder:undefined}});
+      navigate({to:"/"});
     }catch(error){toast.error(error instanceof Error?error.message:"Не удалось сохранить копию");}
     finally{savingRef.current=false;setSaving(false);}
   };
