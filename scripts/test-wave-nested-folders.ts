@@ -15,6 +15,8 @@ const parent=store.addFolder("Projects");
 const child=store.addFolder("2026",false,parent.id);
 assert.equal(child.parentId,parent.id);
 assert.throws(()=>store.renameFolder(parent.id,"Projects",child.id),/Нельзя/);
+assert.throws(()=>store.restoreFolderBackup([{id:"loop",name:"Loop",parentId:"loop"}],[]),/зацикленную/);
+assert.throws(()=>store.restoreFolderBackup([{id:"alpha",name:"A",parentId:"beta"},{id:"beta",name:"B",parentId:"alpha"}],[]),/структуру/);
 store.deleteFolder(parent.id);
 assert.equal(store.exportFolderBackup().folders.find(x=>x.id===child.id)?.parentId,undefined);
 console.log("Nested folders, cycle rejection and safe reparenting verified");
