@@ -243,8 +243,8 @@ function Index() {
   }),[activeFolder,notes,folders,searchOpen,searchAllFolders,searchTerm,searchFilter,reminderMinute]);
 
   const dueNotes=useMemo(()=>notes.filter(note=>
-    (activeFolder==="all"||(note.folderId??"all")===activeFolder)&&reminderIsDue(note.reminderAt)
-  ).sort((a,b)=>(a.reminderAt??0)-(b.reminderAt??0)).slice(0,3),[notes,activeFolder,reminderMinute]);
+    (activeFolder==="all"||descendantFolderIds(folders,activeFolder).has(note.folderId??"all"))&&reminderIsDue(note.reminderAt)
+  ).sort((a,b)=>(a.reminderAt??0)-(b.reminderAt??0)).slice(0,3),[notes,folders,activeFolder,reminderMinute]);
   const changeDueReminder=(id:string,operation:ReminderSnooze|"clear")=>{
     try{
       updateNote(id,{reminderAt:operation==="clear"?undefined:snoozeReminderTime(operation)});
@@ -872,8 +872,7 @@ function TopFolderTabs({
   onDelete: (folder: Folder) => void;
 }) {
   const allFolder = folders.find((folder) => folder.id === "all");
-  const primaryFolders = folders.filter((folder) => folder.id === "work" || folder.id === "home");
-  const customFolders = folders.filter((folder) => folder.id !== "all" && folder.id !== "work" && folder.id !== "home");
+  const treeFolders = folders.filter(folder=>folder.id!=="all");
 
   return (
     <div className="mt-3 mb-1 flex items-center gap-2 pl-3 pr-0">
@@ -895,18 +894,7 @@ function TopFolderTabs({
         role="tablist"
         aria-label="Notes folders"
       >
-        {primaryFolders.map((folder) => (
-          <FolderTab
-            key={folder.id}
-            folder={folder}
-            label={getLabel(folder)}
-            active={activeFolder === folder.id}
-            onSelect={() => onSelect(folder.id)}
-            onRename={() => onRename(folder)}
-            onDelete={() => onDelete(folder)}
-          />
-        ))}
-        {customFolders.map((folder) => (
+        {treeFolders.map((folder) => (
           <FolderTab
             key={folder.id}
             folder={folder}
