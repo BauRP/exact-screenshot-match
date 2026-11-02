@@ -52,6 +52,7 @@ import {
   getNote,
   nextDefaultNoteTitle,
   updateNote,
+  saveDraftAfterExternalChange,
   useHydrated,
   useNotes,
 } from "@/lib/notes-store";
@@ -478,6 +479,24 @@ function EditorPage() {
   };
 
   /** Save icon commits the draft to local storage; back still discards. */
+  const saveSeparateCopy=async()=>{
+    if(isNew||!editor||savingRef.current)return;
+    savingRef.current=true;setSaving(true);
+    try{
+      const body=editor.getHTML();
+      await Promise.allSettled([...pendingImagesRef.current]);
+      const copy=saveDraftAfterExternalChange(id,{
+        title:title.trim()||note?.title||"Заметка",body,
+        folderId,pinned:false,style:{background:canvasBg,paperMood,paperRule},
+        reminderAt:reminderAt?parseReminderInput(reminderAt):undefined,
+        reminderRepeat:reminderRepeat==="none"?undefined:reminderRepeat,
+      });
+      committedNoteRef.current=true;
+      toast.success("Черновик сохранён отдельной заметкой");
+      navigate({to:"/editor/$id",params:{id:copy.id},search:{folder:undefined}});
+    }catch(error){toast.error(error instanceof Error?error.message:"Не удалось сохранить копию");}
+    finally{savingRef.current=false;setSaving(false);}
+  };
   const handleSave = async () => {
     if (savingRef.current) return;
     savingRef.current = true;
