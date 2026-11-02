@@ -1,0 +1,18 @@
+import {strict as assert} from "node:assert";
+import {descendantFolderIds,canNestFolder,orderedFolderTree,type Folder} from "../src/lib/folders-store";
+const tree:Folder[]=[{id:"all",name:"ALL",system:true},{id:"parent",name:"Parent"},{id:"child",name:"Child",parentId:"parent"},{id:"grand",name:"Grandchild",parentId:"child"},{id:"peer",name:"Peer"}];
+assert.deepEqual([...descendantFolderIds(tree,"parent")],["parent","child","grand"]);
+assert.equal(canNestFolder(tree,"parent","grand"),false);
+assert.equal(canNestFolder(tree,"child","child"),false);
+assert.equal(canNestFolder(tree,"child","peer"),true);
+assert.deepEqual(orderedFolderTree(tree).map(x=>x.id),["all","parent","child","grand","peer"]);
+const current=new Map<string,string>();
+Object.defineProperty(globalThis,"localStorage",{configurable:true,value:{getItem:(key:string)=>current.get(key)??null,setItem:(key:string,value:string)=>current.set(key,value),removeItem:(key:string)=>current.delete(key)}});
+const store=await import("../src/lib/folders-store");
+const parent=store.addFolder("Projects");
+const child=store.addFolder("2026",false,parent.id);
+assert.equal(child.parentId,parent.id);
+assert.throws(()=>store.renameFolder(parent.id,"Projects",child.id),/Нельзя/);
+store.deleteFolder(parent.id);
+assert.equal(store.exportFolderBackup().folders.find(x=>x.id===child.id)?.parentId,undefined);
+console.log("Nested folders, cycle rejection and safe reparenting verified");
