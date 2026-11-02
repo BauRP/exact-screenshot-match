@@ -67,6 +67,7 @@ import {
   deleteSelectedNotes,
   updateNote,
   snoozeOverdueReminders,
+  completeNoteReminder,
   setSelectedNotesPinned,
   setSort,
   setView,
@@ -567,6 +568,8 @@ function Index() {
                       <option value="threeDays">Через 3 дня</option>
                       <option value="week">Через неделю</option>
                     </select>
+                    <button type="button" onClick={()=>{try{if(completeNoteReminder(note.id))toast.success(note.reminderRepeat?"Следующее напоминание запланировано":"Напоминание выполнено");}catch(error){toast.error(error instanceof Error?error.message:"Не удалось завершить напоминание");}}}
+                      className="rounded-md border border-border px-2 py-2 text-xs">Готово</button>
                     <button type="button" onClick={()=>changeDueReminder(note.id,"clear")}
                       className="rounded-md border border-border px-2 py-2 text-xs">Снять</button>
                   </div>)}
