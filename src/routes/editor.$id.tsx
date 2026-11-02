@@ -165,6 +165,7 @@ function EditorPage() {
   };
   const savingRef = useRef(false);
   const [saving,setSaving] = useState(false);
+  const [externalConflict,setExternalConflict]=useState(false);
   const [findOpen,setFindOpen]=useState(false);
   const [outlineOpen,setOutlineOpen]=useState(false);
   const [outlineQuery,setOutlineQuery]=useState("");
@@ -499,6 +500,7 @@ function EditorPage() {
   };
   const handleSave = async () => {
     if (savingRef.current) return;
+    setExternalConflict(false);
     savingRef.current = true;
     setSaving(true);
     try {
@@ -557,6 +559,7 @@ function EditorPage() {
     navigate({ to: "/" });
     } catch (error) {
       console.error("Unable to save note", error);
+      if(error instanceof Error && error.message.includes("another window or after a restore"))setExternalConflict(true);
       alert(error instanceof Error ? error.message : "Не удалось сохранить заметку. Текст остаётся в редакторе.");
     } finally {
       savingRef.current = false;
@@ -781,6 +784,11 @@ function EditorPage() {
               <p className="mt-2 text-xs text-muted-foreground">Дата сохраняется без интернета. Системные уведомления пока не включены.</p>
             </PopoverContent>
           </Popover>
+          {externalConflict&&!isNew&&<button type="button" onClick={saveSeparateCopy}
+            disabled={saving} aria-label="Сохранить черновик отдельной копией"
+            className="rounded-lg border border-amber-500 px-2 py-1 text-xs">
+            Сохранить копию
+          </button>}
           <button
             type="button"
             onClick={handleSave}
