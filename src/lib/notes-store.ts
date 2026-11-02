@@ -675,6 +675,26 @@ export function completeNoteReminder(id:string,now=Date.now()):boolean{
  return true;
 }
 
+/** Complete due reminders in the selected folder in ONE durable transaction.
+ * A recurring reminder advances to its next local calendar occurrence.
+ * No other note bodies or attachments are touched on success or failure. */
+export function completeOverdueReminders(folderId:string,now=Date.now()):number{
+ ensureReadyForMutation();
+ if(!Number.isFinite(now))return 0;
+ let changed=0;
+ const next=state.notes.map(note=>{
+  if((folderId!=="all"&&(note.folderId??"all")!==folderId)||
+    note.reminderAt===undefined||note.reminderAt>now)return note;
+  const nextAt=note.reminderRepeat?nextRecurringReminder(note.reminderAt,note.reminderRepeat,now):undefined;
+  changed++;
+  return {...note,reminderAt:nextAt,updatedAt:now};
+ });
+ if(!changed)return 0;
+ persistNotes(next);
+ commit({notes:next,hydrated:true,status:"ready",error:null});
+ return changed;
+}
+
 export function snoozeOverdueReminders(folderId:string,newTime:number,now=Date.now()):number{
  ensureReadyForMutation();
  const reminder=validReminderTime(newTime);
