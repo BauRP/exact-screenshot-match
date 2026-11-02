@@ -123,6 +123,9 @@ let state: DatabaseSnapshot = {
 };
 
 let initPromise: Promise<void> | null = null;
+/** Latest notes bytes accepted by this instance. Protect against stale writes from
+ * another browser tab or a restore performed while this editor was open. */
+let lastStoredNotesRaw: string | null = null;
 let cachedSortedNotes: Note[] = EMPTY_NOTES;
 let cachedSortedKey = "";
 
@@ -247,7 +250,14 @@ function emit() {
 function persistNotes(nextNotes: Note[]) {
   try {
     if (!isBrowserStorageAvailable()) throw new Error("Local notes storage is unavailable");
-    window.localStorage.setItem(NOTES_KEY, JSON.stringify(nextNotes));
+    // Optimistic concurrency: another tab or restore may have changed the
+    // database since this instance loaded it. Never silently overwrite it.
+    const current=window.localStorage.getItem(NOTES_KEY);
+    if(current!==lastStoredNotesRaw)throw new Error(
+      "Notes changed in another window or after a restore. Reopen the app before saving.");
+    const serialized=JSON.stringify(nextNotes);
+    window.localStorage.setItem(NOTES_KEY,serialized);
+    lastStoredNotesRaw=serialized;
     // This occurs only after a committed save, never on editor onUpdate.
     markBackupDirty();
   } catch (error) {
@@ -275,8 +285,11 @@ function readDatabaseFromStorage(): Pick<DatabaseSnapshot, "notes" | "view" | "s
   const rawView = window.localStorage.getItem(VIEW_KEY);
   const rawSort = window.localStorage.getItem(SORT_KEY);
 
+  const notes=parseStoredNotes(rawNotes);
+  // Only a fully validated database becomes our write baseline.
+  lastStoredNotesRaw=rawNotes;
   return {
-    notes: parseStoredNotes(rawNotes),
+    notes,
     view: parseStoredView(rawView),
     sort: parseStoredSort(rawSort),
   };
@@ -534,6 +547,9 @@ export function createNote(partial?: Partial<Note>): Note {
     }),
 
   };
+  if(state.notes.some(existing=>existing.id===note.id)){
+    throw new Error("Duplicate note ID: existing saved note will not be replaced.");
+  }
   const nextNotes = [note, ...state.notes];
   persistNotes(nextNotes);
   commit({ notes: nextNotes, hydrated: true, status: "ready", error: null });
