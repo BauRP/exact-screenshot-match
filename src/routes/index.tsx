@@ -57,6 +57,8 @@ import {
   useActiveFolder,
   useFolders,
   type Folder,
+  descendantFolderIds,
+  folderParent,
 } from "@/lib/folders-store";
 import {
   createNote,
@@ -111,6 +113,7 @@ type FolderDialogState = {
   mode: "add" | "rename";
   id?: string;
   value: string;
+  parentId?: string;
 } | null;
 
 function Index() {
@@ -235,9 +238,9 @@ function Index() {
 
 
   const filteredNotes = useMemo(() => notes.filter((note) => {
-    const inScope=searchOpen&&searchAllFolders||activeFolder==="all"||(note.folderId??"all")===activeFolder;
+    const inScope=searchOpen&&searchAllFolders||activeFolder==="all"||descendantFolderIds(folders,activeFolder).has(note.folderId??"all");
     return inScope && (!searchOpen || noteMatchesSearch(note,searchTerm,searchFilter));
-  }),[activeFolder,notes,searchOpen,searchAllFolders,searchTerm,searchFilter,reminderMinute]);
+  }),[activeFolder,notes,folders,searchOpen,searchAllFolders,searchTerm,searchFilter,reminderMinute]);
 
   const dueNotes=useMemo(()=>notes.filter(note=>
     (activeFolder==="all"||(note.folderId??"all")===activeFolder)&&reminderIsDue(note.reminderAt)
@@ -377,9 +380,9 @@ function Index() {
 
     try {
       if (folderDialog.mode === "add") {
-        addFolder(value,true);
+        addFolder(value,true,folderDialog.parentId??activeFolder);
       } else if (folderDialog.id) {
-        renameFolder(folderDialog.id, value);
+        renameFolder(folderDialog.id, value,folderDialog.parentId);
       }
       setFolderDialog(null);
     } catch(error) {
@@ -482,7 +485,7 @@ function Index() {
           activeFolder={activeFolder}
           getLabel={localizedFolderName}
           onSelect={setActiveFolder}
-          onRename={(folder) => setFolderDialog({ mode: "rename", id: folder.id, value: folder.name })}
+          onRename={(folder) => setFolderDialog({ mode: "rename", id: folder.id, value: folder.name, parentId:folderParent(folder) })}
           onDelete={(folder) => {
             try {
               moveNotesToFolder(folder.id);
@@ -671,6 +674,15 @@ function Index() {
               if (event.key === "Enter") saveFolderDialog();
             }}
           />
+          <label className="block text-xs">Родительская папка
+            <select aria-label="Родительская папка" value={folderDialog?.parentId??(folderDialog?.mode==="add"?activeFolder:"all")}
+              onChange={e=>setFolderDialog(current=>current?{...current,parentId:e.target.value}:current)}
+              className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm">
+              {folders.filter(folder=>folderDialog?.mode!=="rename"||
+                !descendantFolderIds(folders,folderDialog.id??"").has(folder.id)).map(folder=>
+                <option key={folder.id} value={folder.id}>{localizedFolderName(folder)}</option>)}
+            </select>
+          </label>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setFolderDialog(null)}>
               {t("cancel")}
@@ -832,6 +844,18 @@ function TopContextMenu({
   );
 }
 
+function folderDepth(folders:readonly Folder[],id:string):number{
+ let depth=0,current=id;const seen=new Set<string>();
+ while(!seen.has(current)){
+  seen.add(current);
+  const folder=folders.find(x=>x.id===current);
+  const parent=folder?.parentId;
+  if(!parent||parent==="all")break;
+  depth++;current=parent;
+ }
+ return depth;
+}
+
 function TopFolderTabs({
   folders,
   activeFolder,
@@ -886,7 +910,7 @@ function TopFolderTabs({
           <FolderTab
             key={folder.id}
             folder={folder}
-            label={getLabel(folder)}
+            label={("↳ ".repeat(Math.min(4,folderDepth(folders,folder.id)))+getLabel(folder))}
             active={activeFolder === folder.id}
             onSelect={() => onSelect(folder.id)}
             onRename={() => onRename(folder)}
