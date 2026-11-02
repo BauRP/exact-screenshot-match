@@ -78,3 +78,23 @@ export function reminderIsUpcoming(time:unknown,days=7,now=Date.now()):boolean{
  const due=validReminderTime(time);
  return due!==undefined&&due>now&&due<=now+days*86400000;
 }
+
+/** Recurrence stays inside the app until notifications are supported.
+ * Completion advances the original LOCAL wall-clock appointment, skipping
+ * missed days/weeks without delivering a flood of stale reminders. */
+export type ReminderRepeat="daily"|"weekly";
+export function validReminderRepeat(value:unknown):ReminderRepeat|undefined{
+ return value==="daily"||value==="weekly"?value:undefined;
+}
+export function nextRecurringReminder(dueValue:unknown,repeat:ReminderRepeat,now=Date.now()):number|undefined{
+ const due=validReminderTime(dueValue);
+ if(due===undefined||validReminderRepeat(repeat)===undefined||
+    !Number.isFinite(now)||due>now)return undefined;
+ const days=repeat==="daily"?1:7;
+ const approximate=Math.max(0,Math.floor((now-due)/(days*86400000))-2);
+ const next=new Date(due);
+ next.setDate(next.getDate()+approximate*days);
+ for(let i=0;i<8&&next.getTime()<=now;i++)next.setDate(next.getDate()+days);
+ const result=validReminderTime(next.getTime());
+ return result!==undefined&&result>now?result:undefined;
+}
