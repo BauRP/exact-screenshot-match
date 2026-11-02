@@ -256,6 +256,7 @@ export function restoreFolderBackup(folders: Folder[], restoredHidden: string[])
   const next = [...customFolders, ...pending];
   // Validate the whole imported tree including out-of-order folder records.
   for(const folder of next){
+    if(folder.parentId===folder.id)throw Error("Резервная копия содержит зацикленную папку");
     const parent=folderParent(folder);
     if(!canNestFolder([...SYSTEM_FOLDERS,...next],folder.id,parent))
       throw Error("Резервная копия содержит неверную структуру папок");
