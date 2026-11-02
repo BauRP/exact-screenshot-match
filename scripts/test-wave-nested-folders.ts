@@ -25,4 +25,6 @@ assert.ok(home.includes('aria-label="Родительская папка"'));
 assert.ok(home.includes('folderDepth(folders,folder.id)'));
 assert.ok(home.includes("treeFolders.map"));
 assert.ok(home.includes('aria-label="Путь к папке"'));
+assert.ok(home.includes('aria-expanded={!collapsed.has(folder.id)}'));
+assert.ok(home.includes('!folderAncestors(folders,folder.id).slice(0,-1).some'));
 console.log("Nested folder parent picker, subtree notes and hierarchy rendering are wired");
