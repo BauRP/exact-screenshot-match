@@ -26,3 +26,12 @@ console.log("Offline recurring reminder completion and persisted state passed");
 const editorSource=readFileSync("src/routes/editor.$id.tsx","utf8");
 assert.ok((editorSource.match(/reminderRepeat:reminderRepeat==="none"\?undefined:reminderRepeat/g)||[]).length>=2,
  "Both new and existing notes must save the selected recurrence");
+
+const changing=db.createNote({title:"Stop repeats",body:"unchanged",reminderAt:due,reminderRepeat:"weekly"});
+const previousModified=changing.updatedAt;
+db.updateNote(changing.id,{reminderRepeat:undefined});
+assert.equal(db.getNote(changing.id)?.reminderRepeat,undefined);
+assert.equal(db.getNote(changing.id)?.body,"unchanged");
+assert.ok((db.getNote(changing.id)?.updatedAt||0)>=previousModified);
+const trackedFields=readFileSync("src/lib/notes-store.ts","utf8");
+assert.ok(trackedFields.includes('field === "reminderAt" || field === "reminderRepeat"'));
