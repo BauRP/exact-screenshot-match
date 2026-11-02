@@ -130,6 +130,9 @@ jobs:
       - name: Verify single-file Wave Notes transfer without overwrites
         run: bun scripts/test-wave-transfer.ts
 
+      - name: Verify subtree-scope for recurring and one-time reminders
+        run: bun scripts/test-wave-nested-reminder-scope.ts
+
       - name: Verify atomic completion of overdue reminders
         run: bun scripts/test-wave-bulk-reminder-completion.ts
 
