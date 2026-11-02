@@ -20,7 +20,8 @@ assert.equal(store.exportFolderBackup().folders.find(x=>x.id===child.id)?.parent
 console.log("Nested folders, cycle rejection and safe reparenting verified");
 
 const home=readFileSync("src/routes/index.tsx","utf8");
-assert.ok(home.includes('descendantFolderIds(folders,activeFolder).has(note.folderId??"all")'));
+assert.ok(home.includes('scopedFolderIds.has(note.folderId??"all")'));
+assert.ok(home.includes('useMemo(()=>descendantFolderIds(folders,activeFolder)'));
 assert.ok(home.includes('aria-label="Родительская папка"'));
 assert.ok(home.includes('folderDepth(folders,folder.id)'));
 assert.ok(home.includes("treeFolders.map"));
