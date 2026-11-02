@@ -75,6 +75,38 @@ export function insertBlankPageAfter(editor:Editor):boolean{
  return true;
 }
 
+/** Insert an empty page immediately before the current logical page.
+ * The first page has no divider: prepend [empty paragraph, divider] instead
+ * of introducing an invalid leading marker or rewriting the first page. */
+export function insertBlankPageBefore(editor:Editor):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const {doc,schema,selection}=editor.state;
+ const pages=topLevelPageRanges(doc),divider=schema.nodes.wavePageBreak,paragraph=schema.nodes.paragraph;
+ if(!divider||!paragraph||!pages.length)return false;
+ const index=currentPageIndex(pages,selection.from),at=pages[index].start;
+ const content=Fragment.fromArray(index===0?
+   [paragraph.create(),divider.create()]:[divider.create(),paragraph.create()]);
+ const $at=doc.resolve(at);
+ if($at.parent!==doc||!doc.canReplace($at.index(),$at.index(),content))return false;
+ editor.view.dispatch(editor.state.tr.insert(at,content).scrollIntoView());
+ return true;
+}
+
+/** Merge current page with its NEXT page by removing only the top-level
+ * divider. This never removes text/media and works for the initial page. */
+export function mergeCurrentPageWithNext(editor:Editor):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const {doc,selection}=editor.state,pages=topLevelPageRanges(doc);
+ const index=currentPageIndex(pages,selection.from);
+ if(index>=pages.length-1)return false;
+ const nextDivider=pages[index+1].start,node=doc.nodeAt(nextDivider);
+ if(node?.type.name!=="wavePageBreak")return false;
+ const tr=editor.state.tr.delete(nextDivider,nextDivider+node.nodeSize);
+ if(!tr.doc.type.validContent(tr.doc.content))return false;
+ editor.view.dispatch(tr.scrollIntoView());
+ return true;
+}
+
 /** Erase only a completely empty page. Never remove text, photos, drawings,
  * audio, checklists, or a page that contains even one non-empty nested block. */
 export function removeEmptyCurrentPage(editor:Editor):boolean{
