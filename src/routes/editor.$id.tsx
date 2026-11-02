@@ -66,7 +66,7 @@ import { AudioNote } from "@/components/editor/AudioNode";
 import { WaveImage } from "@/components/editor/WaveImage";
 import { WaveDrawing } from "@/components/editor/WaveDrawing";
 import {WavePageBreak} from "@/lib/wave-page-break";
-import {WaveTextDirection} from "@/lib/wave-text-direction";
+import {WaveTextDirection,directionForText} from "@/lib/wave-text-direction";
 import {collectNoteOutline,filterNoteOutline,type OutlineFilter,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
 import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
 import {duplicateCurrentPage,moveCurrentPage,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeEmptyCurrentPage} from "@/lib/wave-page-actions";
@@ -986,6 +986,14 @@ function EditorPage() {
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
             <span aria-hidden="true" className="text-xs font-bold">RTL</span>
           </button>
+          <button type="button" title="Определить направление по тексту абзаца"
+            aria-label="Автоматическое направление текста"
+            className="grid h-8 shrink-0 place-items-center rounded-full px-2 text-xs font-semibold hover:bg-secondary"
+            onClick={()=>{if(!editor)return;const {$from}=editor.state.selection;
+              const node=$from.parent;if(!node.isTextblock)return;
+              editor.view.dispatch(editor.state.tr.setNodeMarkup($from.before(),undefined,
+                {...node.attrs,textDirection:directionForText(node.textContent)}));
+            }}>Авто RTL</button>
           <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
           {editor && (
             <>
