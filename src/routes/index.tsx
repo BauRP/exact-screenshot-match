@@ -882,7 +882,15 @@ function TopFolderTabs({
   onDelete: (folder: Folder) => void;
 }) {
   const allFolder = folders.find((folder) => folder.id === "all");
-  const treeFolders = folders.filter(folder=>folder.id!=="all");
+  const [collapsed,setCollapsed]=useState<Set<string>>(()=>new Set());
+  const treeFolders = folders.filter(folder=>folder.id!=="all"&&
+    !folderAncestors(folders,folder.id).slice(0,-1).some(parent=>collapsed.has(parent.id)));
+  const hasChildren=(id:string)=>folders.some(folder=>folderParent(folder)===id);
+  const toggleCollapsed=(id:string)=>{
+    setCollapsed(current=>{const next=new Set(current);if(next.has(id))next.delete(id);else next.add(id);return next;});
+    // Keep the currently selected folder accessible if its ancestor closes.
+    if(id!==activeFolder&&descendantFolderIds(folders,id).has(activeFolder))onSelect(id);
+  };
 
   return (
     <div className="mt-3 mb-1 flex items-center gap-2 pl-3 pr-0">
@@ -905,15 +913,22 @@ function TopFolderTabs({
         aria-label="Notes folders"
       >
         {treeFolders.map((folder) => (
-          <FolderTab
-            key={folder.id}
-            folder={folder}
-            label={("↳ ".repeat(Math.min(4,folderDepth(folders,folder.id)))+getLabel(folder))}
-            active={activeFolder === folder.id}
-            onSelect={() => onSelect(folder.id)}
-            onRename={() => onRename(folder)}
-            onDelete={() => onDelete(folder)}
-          />
+          <div key={folder.id} className="flex shrink-0 items-center gap-0.5">
+            {hasChildren(folder.id)&&
+              <button type="button" aria-label={(collapsed.has(folder.id)?"Развернуть":"Свернуть")+" подпапки: "+getLabel(folder)}
+                aria-expanded={!collapsed.has(folder.id)}
+                onClick={()=>toggleCollapsed(folder.id)} className="grid h-9 w-7 shrink-0 place-items-center rounded-md border border-border text-xs">
+                {collapsed.has(folder.id)?"▸":"▾"}
+              </button>}
+            <FolderTab
+              folder={folder}
+              label={("↳ ".repeat(Math.min(4,folderDepth(folders,folder.id)))+getLabel(folder))}
+              active={activeFolder === folder.id}
+              onSelect={() => onSelect(folder.id)}
+              onRename={() => onRename(folder)}
+              onDelete={() => onDelete(folder)}
+            />
+          </div>
         ))}
       </div>
     </div>
