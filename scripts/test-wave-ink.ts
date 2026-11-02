@@ -14,3 +14,8 @@ for(const x of ["WaveDrawing,","Добавить рисунок","insertWaveDraw
 assert.ok(mover.includes('import { Fragment, type Node as PMNode } from "@tiptap/pm/model"'));
 assert.ok(mover.includes("state.tr.replaceWith(from, to, replacement)"));
 console.log("Vector drawing, annotations and complete block moves connected");
+
+const canvasSource=readFileSync("src/components/editor/WaveInkCanvas.tsx","utf8");
+assert.ok(canvasSource.includes('tool==="line"?[point,point]:[point]'));
+assert.ok(canvasSource.includes('mode.current==="line"'));
+assert.ok(canvasSource.includes('"Прямая"'));
