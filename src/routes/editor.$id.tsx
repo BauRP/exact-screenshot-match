@@ -5,7 +5,7 @@ import { saveAudioFile, deleteAudioFile, audioIdsInHtml } from "@/lib/audio-file
 import { ColorGrid, PALETTE } from "@/components/ColorGrid";
 import {NEW_NOTE_INK,editorBackground,editorInk} from "@/lib/note-appearance";
 import { noteCaretColor } from "@/lib/note-caret-color";
-import {parseReminderInput,toReminderInput,reminderPresetTime} from "@/lib/note-reminders";
+import {parseReminderInput,toReminderInput,reminderPresetTime,type ReminderRepeat} from "@/lib/note-reminders";
 import { nativeAudioAvailable, startNativeAudio, stopNativeAudio } from "@/lib/native-audio";
 import {
   ArrowLeft,
@@ -136,6 +136,7 @@ function EditorPage() {
   const [title, setTitle] = useState(note?.title ?? "");
   const [pinned, setPinnedLocal] = useState(!!note?.pinned);
   const [reminderAt,setReminderAt]=useState<string>(()=>toReminderInput(note?.reminderAt));
+  const [reminderRepeat,setReminderRepeat]=useState<ReminderRepeat|"none">(note?.reminderRepeat??"none");
   const [folderId, setFolderId] = useState<string>(
     note?.folderId ?? folderParam ?? "all",
   );
@@ -196,6 +197,7 @@ function EditorPage() {
     setTitle(note.title);
     setPinnedLocal(!!note.pinned);
     setReminderAt(toReminderInput(note.reminderAt));
+    setReminderRepeat(note.reminderRepeat??"none");
     setFolderId(note.folderId ?? "all");
     if (note.style?.background) setCanvasBg(note.style.background);
     if (note.style?.paperMood) setPaperMood(note.style.paperMood);
@@ -511,6 +513,7 @@ function EditorPage() {
         folderId,
         pinned,
         reminderAt:reminderValue,
+        reminderRepeat:reminderRepeat==="none"?undefined:reminderRepeat,
         // Preserve dark default ink when the new yellow note is reopened.
         style: { background: canvasBg, color: NEW_NOTE_INK, paperMood, paperRule },
       });
@@ -745,6 +748,14 @@ function EditorPage() {
                   <button type="button" key={preset} onClick={()=>setReminderAt(toReminderInput(reminderPresetTime(preset)))}
                     className="min-h-9 rounded-md border border-border px-2 text-[11px]">{label}</button>)}
               </div>
+              <label className="mt-2 block text-xs">Повторять
+                <select aria-label="Повторение напоминания" value={reminderRepeat}
+                  onChange={e=>setReminderRepeat(e.target.value as ReminderRepeat|"none")}
+                  className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-xs">
+                  <option value="none">Не повторять</option><option value="daily">Каждый день</option>
+                  <option value="weekly">Каждую неделю</option>
+                </select>
+              </label>
               <button type="button" onClick={()=>setReminderAt("")}
                 className="mt-2 rounded-lg border border-border px-3 py-2 text-xs">Убрать напоминание</button>
               <p className="mt-2 text-xs text-muted-foreground">Дата сохраняется без интернета. Системные уведомления пока не включены.</p>
