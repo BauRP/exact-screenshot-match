@@ -590,7 +590,7 @@ function touchesContent(note: Note, patch: Partial<Note>): boolean {
     if (!(field in patch)) return false;
     const next = patch[field];
     // Clearing a saved reminder is a real edit, not a no-op.
-    if (field === "reminderAt") return next !== note.reminderAt;
+    if (field === "reminderAt" || field === "reminderRepeat") return next !== note[field];
     if (next === undefined) return false;
     if (field === "style" || field === "pdf") {
       return JSON.stringify({ ...(note[field] as object), ...(next as object) }) !== JSON.stringify(note[field] ?? {});
