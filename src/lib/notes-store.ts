@@ -706,7 +706,7 @@ export function snoozeOverdueReminders(folderId:string|readonly string[],newTime
  if(reminder===undefined||!Number.isFinite(now)||reminder<=now)return 0;
  let changed=0;
  const next=state.notes.map(note=>{
-  if((folderId!=="all"&&(note.folderId??"all")!==folderId)||
+  if(!reminderInFolderScope(note,folderId)||
      note.reminderAt===undefined||note.reminderAt>now)return note;
   changed++;
   return {...note,reminderAt:reminder,updatedAt:now};
