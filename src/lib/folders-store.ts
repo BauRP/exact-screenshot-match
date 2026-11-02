@@ -162,7 +162,7 @@ export function addFolder(name: string,activate=false,parentId="all"): Folder {
   hydrate();
   const available=snapshot();
   if(parentId!=="all"&&!available.some(folder=>folder.id===parentId))throw Error("Неизвестная родительская папка");
-  const f: Folder = { id: crypto.randomUUID(), name: name.trim() || "Folder",parentId:parentId==="all"?undefined:parentId };
+  const f: Folder = { id: crypto.randomUUID(), name: name.trim() || "Folder",...(parentId==="all"?{}:{parentId}) };
   const next=[...customFolders, f];
   // Creating and selecting a new folder is one UI operation; persist both.
   persist(next,hiddenSystem,activate?f.id:undefined);
@@ -179,7 +179,7 @@ export function renameFolder(id: string, name: string,parentId?:string) {
   const parent=parentId??folderParent(current);
   if(!canNestFolder(snapshot(),id,parent))throw Error("Нельзя переместить папку внутрь себя или своей подпапки");
   const next=customFolders.map(f=>f.id===id?
-    {...f,name:name.trim()||f.name,parentId:parent==="all"?undefined:parent}:f);
+    {...f,name:name.trim()||f.name,...(parent==="all"?{parentId:undefined}:{parentId:parent})}:f);
   persist(next,hiddenSystem);
   customFolders=next;emit();
 }
@@ -243,7 +243,7 @@ export function restoreFolderBackup(folders: Folder[], restoredHidden: string[])
     }
     if (!known.has(folder.id)) {
       pending.push({ id: folder.id, name: folder.name.trim() || "Folder",
-        parentId:typeof folder.parentId==="string"?folder.parentId:undefined });
+        ...(typeof folder.parentId==="string"&&folder.parentId!=="all"?{parentId:folder.parentId}:{}) });
       known.add(folder.id);
     }
   }
