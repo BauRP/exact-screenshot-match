@@ -678,12 +678,17 @@ export function completeNoteReminder(id:string,now=Date.now()):boolean{
 /** Complete due reminders in the selected folder in ONE durable transaction.
  * A recurring reminder advances to its next local calendar occurrence.
  * No other note bodies or attachments are touched on success or failure. */
-export function completeOverdueReminders(folderId:string,now=Date.now()):number{
+function reminderInFolderScope(note:Note,folderScope:string|readonly string[]):boolean{
+ if(folderScope==="all")return true;
+ const folderId=note.folderId??"all";
+ return typeof folderScope==="string"?folderId===folderScope:folderScope.includes(folderId);
+}
+export function completeOverdueReminders(folderId:string|readonly string[],now=Date.now()):number{
  ensureReadyForMutation();
  if(!Number.isFinite(now))return 0;
  let changed=0;
  const next=state.notes.map(note=>{
-  if((folderId!=="all"&&(note.folderId??"all")!==folderId)||
+  if(!reminderInFolderScope(note,folderId)||
     note.reminderAt===undefined||note.reminderAt>now)return note;
   const nextAt=note.reminderRepeat?nextRecurringReminder(note.reminderAt,note.reminderRepeat,now):undefined;
   changed++;
@@ -695,7 +700,7 @@ export function completeOverdueReminders(folderId:string,now=Date.now()):number{
  return changed;
 }
 
-export function snoozeOverdueReminders(folderId:string,newTime:number,now=Date.now()):number{
+export function snoozeOverdueReminders(folderId:string|readonly string[],newTime:number,now=Date.now()):number{
  ensureReadyForMutation();
  const reminder=validReminderTime(newTime);
  if(reminder===undefined||!Number.isFinite(now)||reminder<=now)return 0;
