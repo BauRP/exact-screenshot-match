@@ -13,3 +13,9 @@ const upper:InkStroke={...line,points:[[0,10],[1000,10]]};
 assert.deepEqual(inkStrokeIndicesAlong([line,upper],[500,-10],[500,20],3),[0,1]);
 assert.deepEqual(inkStrokeIndicesAlong([line,upper],[500,100],[500,110],3),[]);
 console.log("Ink eraser line-segment and serialization tests passed");
+
+const straight:InkStroke={tool:"line",color:"#2563eb",width:8,points:[[100,100],[900,900]]};
+assert.deepEqual(parseInk(serializeInk([straight])),[straight]);
+assert.equal(inkStrokeAt([straight],[500,500],5),0);
+assert.equal(inkStrokeAt([straight],[500,800],5),-1);
+assert.deepEqual(parseInk(JSON.stringify([{...straight,points:[[100,100]]}])),[]);
