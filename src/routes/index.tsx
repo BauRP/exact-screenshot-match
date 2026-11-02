@@ -238,14 +238,17 @@ function Index() {
   };
 
 
+  // Compute the subtree ONCE per folder switch, not once for each note.
+  // This matters for large offline notebooks and older Android phones.
+  const scopedFolderIds=useMemo(()=>descendantFolderIds(folders,activeFolder),[folders,activeFolder]);
   const filteredNotes = useMemo(() => notes.filter((note) => {
-    const inScope=searchOpen&&searchAllFolders||activeFolder==="all"||descendantFolderIds(folders,activeFolder).has(note.folderId??"all");
+    const inScope=searchOpen&&searchAllFolders||activeFolder==="all"||scopedFolderIds.has(note.folderId??"all");
     return inScope && (!searchOpen || noteMatchesSearch(note,searchTerm,searchFilter));
-  }),[activeFolder,notes,folders,searchOpen,searchAllFolders,searchTerm,searchFilter,reminderMinute]);
+  }),[activeFolder,notes,scopedFolderIds,searchOpen,searchAllFolders,searchTerm,searchFilter,reminderMinute]);
 
   const dueNotes=useMemo(()=>notes.filter(note=>
     (activeFolder==="all"||descendantFolderIds(folders,activeFolder).has(note.folderId??"all"))&&reminderIsDue(note.reminderAt)
-  ).sort((a,b)=>(a.reminderAt??0)-(b.reminderAt??0)).slice(0,3),[notes,folders,activeFolder,reminderMinute]);
+  ).sort((a,b)=>(a.reminderAt??0)-(b.reminderAt??0)).slice(0,3),[notes,scopedFolderIds,activeFolder,reminderMinute]);
   const changeDueReminder=(id:string,operation:ReminderSnooze|"clear")=>{
     try{
       updateNote(id,{reminderAt:operation==="clear"?undefined:snoozeReminderTime(operation)});
