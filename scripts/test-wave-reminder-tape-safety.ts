@@ -4,7 +4,7 @@ const store=readFileSync("src/lib/notes-store.ts","utf8");
 const search=readFileSync("src/lib/note-search.ts","utf8");
 const card=readFileSync("src/components/NoteCard.tsx","utf8");
 assert.ok(store.includes('"reminderAt", "reminderRepeat"] as const'));
-assert.ok(store.includes('if (field === "reminderAt") return next !== note.reminderAt;'));
+assert.ok(store.includes('if (field === "reminderAt" || field === "reminderRepeat") return next !== note[field];'));
 assert.ok(store.includes("reminderRepeat: validReminderRepeat("));
 assert.ok(search.includes('data-wave-tape'));
 assert.ok(card.includes('readableText(note.body).slice(0,140)'));
