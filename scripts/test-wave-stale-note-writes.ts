@@ -12,3 +12,10 @@ storage.set("sn.notes.v1",JSON.stringify([{...first,body:"Changed elsewhere"}]))
 assert.throws(()=>db.updateNote(first.id,{body:"stale editor"}),/another window or after a restore/);
 assert.equal(JSON.parse(storage.get("sn.notes.v1")!)[0].body,"Changed elsewhere");
 console.log("Stale window and duplicate note ID writes blocked safely");
+
+const saved=db.saveDraftAfterExternalChange(first.id,{title:"Unsaved edits",body:"User draft"});
+assert.notEqual(saved.id,first.id);
+assert.equal(saved.body,"User draft");
+assert.equal(db.getNote(first.id)?.body,"Changed elsewhere");
+assert.equal(db.getNote(saved.id)?.body,"User draft");
+assert.equal(JSON.parse(storage.get("sn.notes.v1")!).length,2);
