@@ -35,6 +35,19 @@ export function descendantFolderIds(folders:readonly Folder[],parentId:string):S
  }
  return found;
 }
+/** Breadcrumbs always terminate, even if old backup data was cyclic. */
+export function folderAncestors(folders:readonly Folder[],id:string):Folder[]{
+ const result:Folder[]=[],seen=new Set<string>();
+ let current=id;
+ while(current!=="all"&&!seen.has(current)){
+  seen.add(current);
+  const folder=folders.find(item=>item.id===current);
+  if(!folder)break;
+  result.unshift(folder);
+  current=folderParent(folder);
+ }
+ return result;
+}
 export function canNestFolder(folders:readonly Folder[],id:string,parentId:string):boolean{
  return id!==parentId&&(parentId==="all"||folders.some(folder=>folder.id===parentId))&&
    !descendantFolderIds(folders,id).has(parentId);
