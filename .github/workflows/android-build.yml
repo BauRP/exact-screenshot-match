@@ -121,6 +121,9 @@ jobs:
       - name: Verify accessible note reorder arrow controls
         run: bun scripts/test-wave-note-reorder-arrows.ts
 
+      - name: Verify large folder count and corrupt-cycle safety
+        run: bun scripts/test-wave-folder-counts.ts
+
       - name: Verify nested folders and safe hierarchy
         run: bun scripts/test-wave-nested-folders.ts
 
