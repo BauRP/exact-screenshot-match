@@ -1,6 +1,18 @@
 /** Offline vector ink with bounded markup, no server, base64 or binary files. */
 export type InkPoint=[number,number];
-export type InkStroke={tool:"pen"|"marker"|"line"|"rectangle";color:string;width:number;points:InkPoint[]};
+export type InkStroke={tool:"pen"|"marker"|"line"|"rectangle"|"ellipse";color:string;width:number;points:InkPoint[]};
+/** 32-segment closed vector ellipse: compatible with ink eraser, undo and export. */
+export function ellipseInkPoints(from:InkPoint,to:InkPoint):InkPoint[]{
+ const cx=(from[0]+to[0])/2,cy=(from[1]+to[1])/2;
+ const rx=Math.abs(to[0]-from[0])/2,ry=Math.abs(to[1]-from[1])/2;
+ const pts:InkPoint[]=[];
+ for(let i=0;i<=32;i++){
+  const theta=2*Math.PI*i/32;
+  pts.push([Math.round(cx+rx*Math.cos(theta)),Math.round(cy+ry*Math.sin(theta))]);
+ }
+ pts[32]=pts[0];
+ return pts;
+}
 const COLORS=new Set(["#161b22","#e11d48","#2563eb","#16a34a","#f8fafc","#f59e0b"]);
 export function parseInk(encoded:unknown):InkStroke[]{
  if(typeof encoded!=="string"||encoded.length>120000)return [];
@@ -11,12 +23,13 @@ export function parseInk(encoded:unknown):InkStroke[]{
  for(const raw of parsed){
   if(!raw||typeof raw!=="object")return [];
   const item=raw as Record<string,unknown>;
-  if(item.tool!=="pen"&&item.tool!=="marker"&&item.tool!=="line"&&item.tool!=="rectangle")return [];
+  if(item.tool!=="pen"&&item.tool!=="marker"&&item.tool!=="line"&&item.tool!=="rectangle"&&item.tool!=="ellipse")return [];
   if(typeof item.color!=="string"||!COLORS.has(item.color))return [];
   if(typeof item.width!=="number"||!Number.isFinite(item.width)||item.width<1||item.width>28)return [];
   if(!Array.isArray(item.points)||item.points.length===0||item.points.length>500||
      (item.tool==="line"&&item.points.length!==2)||
-     (item.tool==="rectangle"&&item.points.length!==5))return [];
+     (item.tool==="rectangle"&&item.points.length!==5)||
+     (item.tool==="ellipse"&&item.points.length!==33))return [];
   const points:InkPoint[]=[];
   for(const p of item.points){
    if(!Array.isArray(p)||p.length!==2||p.some(n=>typeof n!=="number"||!Number.isFinite(n)||n<0||n>1000))return [];

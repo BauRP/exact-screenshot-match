@@ -1,5 +1,5 @@
 import {strict as assert} from "node:assert";
-import {inkStrokeAt,inkStrokeAlong,inkStrokeIndicesAlong,parseInk,serializeInk,type InkStroke} from "../src/lib/wave-ink";
+import {ellipseInkPoints,inkStrokeAt,inkStrokeAlong,inkStrokeIndicesAlong,parseInk,serializeInk,type InkStroke} from "../src/lib/wave-ink";
 const line:InkStroke={tool:"pen",color:"#161b22",width:4,points:[[0,0],[1000,0]]};
 assert.equal(inkStrokeAt([line],[500,5],5),0);
 assert.equal(inkStrokeAt([line],[500,100],5),-1);
@@ -26,3 +26,11 @@ assert.deepEqual(parseInk(serializeInk([box])),[box]);
 assert.equal(inkStrokeAt([box],[250,103],4),0);
 assert.equal(inkStrokeAt([box],[250,200],4),-1);
 assert.deepEqual(parseInk(JSON.stringify([{...box,points:[[100,100],[400,300]]}])),[]);
+
+const oval:InkStroke={tool:"ellipse",color:"#e11d48",width:5,points:ellipseInkPoints([100,100],[500,300])};
+assert.equal(oval.points.length,33);
+assert.deepEqual(oval.points[0],oval.points[32]);
+assert.deepEqual(parseInk(serializeInk([oval])),[oval]);
+assert.equal(inkStrokeAt([oval],[500,200],8),0);
+assert.equal(inkStrokeAt([oval],[300,200],8),-1);
+assert.deepEqual(parseInk(JSON.stringify([{...oval,points:oval.points.slice(0,-1)}])),[]);

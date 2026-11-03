@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from "react";
 import type {PointerEvent as ReactPointerEvent} from "react";
-import {inkStrokeAt,inkStrokeIndicesAlong,parseInk,serializeInk,type InkPoint,type InkStroke} from "@/lib/wave-ink";
+import {ellipseInkPoints,inkStrokeAt,inkStrokeIndicesAlong,parseInk,serializeInk,type InkPoint,type InkStroke} from "@/lib/wave-ink";
 
 /** Per-drawing undo/redo also works for ink layered over a photograph. */
 export function WaveInkCanvas({value,onChange,editable,active=false}:{
@@ -14,9 +14,9 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
  const gesture=useRef<number|null>(null);
  const gestureChanged=useRef(false);
  const lastEraserPoint=useRef<InkPoint|null>(null);
- const mode=useRef<"pen"|"marker"|"line"|"rectangle"|"eraser">("pen");
+ const mode=useRef<"pen"|"marker"|"line"|"rectangle"|"ellipse"|"eraser">("pen");
  const lastEmitted=useRef<string|null>(null);
- const [tool,setTool]=useState<"pen"|"marker"|"line"|"rectangle"|"eraser">("pen");
+ const [tool,setTool]=useState<"pen"|"marker"|"line"|"rectangle"|"ellipse"|"eraser">("pen");
  const [color,setColor]=useState("#161b22");
  const [size,setSize]=useState(4);
  useEffect(()=>{
@@ -68,7 +68,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
   if(tool==="eraser")erase(point);
   else{
    markChanged();
-   replace([...current.current,{tool,color,width:size,points:tool==="line"?[point,point]:tool==="rectangle"?[point,point,point,point,point]:[point]}]);
+   replace([...current.current,{tool,color,width:size,points:tool==="line"?[point,point]:tool==="rectangle"?[point,point,point,point,point]:tool==="ellipse"?ellipseInkPoints(point,point):[point]}]);
   }
  };
  const move=(e:ReactPointerEvent<SVGSVGElement>)=>{
@@ -81,6 +81,11 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
    if(mode.current==="line"){
      if(last.points.length!==2)return;
      replace([...previous.slice(0,-1),{...last,points:[last.points[0],point]}]);
+     return;
+   }
+   if(mode.current==="ellipse"){
+     if(last.points.length!==33)return;
+     replace([...previous.slice(0,-1),{...last,points:ellipseInkPoints(last.points[0],point)}]);
      return;
    }
    if(mode.current==="rectangle"){
@@ -134,9 +139,9 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
          strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" opacity={stroke.tool==="marker"?.4:1}/>)}
    </svg>
    {editable&&active&&<div className="absolute bottom-2 left-2 right-2 flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card/95 p-2 shadow-lg">
-     {(["pen","marker","line","rectangle","eraser"] as const).map(item=><button key={item} type="button" aria-pressed={tool===item}
+     {(["pen","marker","line","rectangle","ellipse","eraser"] as const).map(item=><button key={item} type="button" aria-pressed={tool===item}
        className={`rounded-lg px-2 py-1 text-xs ${tool===item?"bg-primary text-primary-foreground":"bg-secondary"}`}
-       onClick={()=>setTool(item)}>{item==="pen"?"Ручка":item==="marker"?"Маркер":item==="line"?"Прямая":item==="rectangle"?"Прямоугольник":"Ластик"}</button>)}
+       onClick={()=>setTool(item)}>{item==="pen"?"Ручка":item==="marker"?"Маркер":item==="line"?"Прямая":item==="rectangle"?"Прямоугольник":item==="ellipse"?"Овал":"Ластик"}</button>)}
      <button type="button" aria-label="Очистить рисунок" title="Очистить рисунок (можно отменить)"
        disabled={strokes.length===0} onClick={clear}
        className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">Очистить</button>
