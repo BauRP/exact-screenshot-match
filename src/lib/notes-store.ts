@@ -715,7 +715,7 @@ export function acceptReturnedNote(originalId:string,receivedId:string,mode:"rep
   while(state.notes.some(note=>note.id===backupId))backupId=createId();
   const backup:Note={...original,id:backupId,title:original.title+" — до замены",
     originId:lineage,pinned:false,manualOrder:undefined,createdAt:now,updatedAt:now};
-  const changed:Note={...original,updatedAt:now,
+  const changed:Note={...original,updatedAt:Math.max(now,original.updatedAt+1),
     ...(mode==="replace"
       ? {title:received.title.replace(/ — получено$/,""),body:received.body,style:received.style}
       : {body:combineReturnedBodies(original,received)})};
