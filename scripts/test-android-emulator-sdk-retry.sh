@@ -56,7 +56,7 @@ bash scripts/prepare-android-emulator.sh
 # The API 24 installer check must not swallow cleanup and test execution
 # inside a multiline quoted grep argument.
 bash -n scripts/run-android-emulator-tests.sh
-[[ "$(grep -c '^stop_logger' scripts/run-android-emulator-tests.sh)" == "1" ]]
+[[ "$(grep -xc 'stop_logger' scripts/run-android-emulator-tests.sh)" == "1" ]]
 [[ "$(grep -c '^exit ' scripts/run-android-emulator-tests.sh)" == "1" ]]
 grep -q 'Android 7 test package was not installed' scripts/run-android-emulator-tests.sh
 echo "SDK retry, preinstalled SDK and API 24 shell regression: four scenarios passed"
