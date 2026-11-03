@@ -21,3 +21,8 @@ assert.equal(hasDifferentSavedContent(base as any,{...base,updatedAt:9999,pinned
  "Read metadata and pin changes must not create duplicate backup versions");
 assert.equal(hasDifferentSavedContent(base as any,{...base,title:"Счёт"} as any),true);
 console.log("Restored note versions preserve reminder dates and recurrence");
+
+const legacy={id:"legacy",title:"X",body:"<p>Y</p>",kind:"note" as const,createdAt:1,updatedAt:2};
+assert.equal(recoveredVersionId(legacy as any),"restored-d85c9b41-d974542d",
+ "Old backup versions without reminders must retain their original recovery IDs");
+assert.equal(hasDifferentSavedContent(legacy as any,{...legacy,reminderAt:undefined} as any),false);
