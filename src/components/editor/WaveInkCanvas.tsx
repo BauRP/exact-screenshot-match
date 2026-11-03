@@ -14,6 +14,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
  const gesture=useRef<number|null>(null);
  const gestureChanged=useRef(false);
  const lastEraserPoint=useRef<InkPoint|null>(null);
+ const shapeStart=useRef<InkPoint|null>(null);
  const mode=useRef<"pen"|"marker"|"line"|"rectangle"|"ellipse"|"eraser">("pen");
  const lastEmitted=useRef<string|null>(null);
  const [tool,setTool]=useState<"pen"|"marker"|"line"|"rectangle"|"ellipse"|"eraser">("pen");
@@ -65,6 +66,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
   e.currentTarget.setPointerCapture(e.pointerId);
   const point=position(e);
   lastEraserPoint.current=point;
+  shapeStart.current=point;
   if(tool==="eraser")erase(point);
   else{
    markChanged();
@@ -85,7 +87,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
    }
    if(mode.current==="ellipse"){
      if(last.points.length!==33)return;
-     replace([...previous.slice(0,-1),{...last,points:ellipseInkPoints(last.points[0],point)}]);
+     replace([...previous.slice(0,-1),{...last,points:ellipseInkPoints(shapeStart.current??last.points[0],point)}]);
      return;
    }
    if(mode.current==="rectangle"){
@@ -102,7 +104,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
  };
  const stop=(e:ReactPointerEvent<SVGSVGElement>)=>{
   if(gesture.current!==e.pointerId)return;
-  e.preventDefault();gesture.current=null;lastEraserPoint.current=null;
+  e.preventDefault();gesture.current=null;lastEraserPoint.current=null;shapeStart.current=null;
   if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);
   if(gestureChanged.current)emit(current.current);
   gestureChanged.current=false;
