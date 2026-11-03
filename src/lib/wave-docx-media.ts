@@ -45,7 +45,11 @@ export async function renderWordMedia(node:Element):Promise<WordMedia>{
     el.src=url!;
    });
   }
-  const width=photo?Math.min(960,Math.max(1,image!.naturalWidth)):960;
+  // Respect the width saved in the note instead of stretching every photo
+  // to a full Word page. Draw at that size so ink stays aligned with the photo.
+  const rawWidth=photo?Number(node.getAttribute("data-width")):NaN;
+  const displayWidth=Number.isFinite(rawWidth)&&rawWidth>0?rawWidth:320;
+  const width=photo?Math.min(720,Math.max(120,displayWidth)):960;
   const naturalHeight=photo?Math.max(1,image!.naturalHeight):600;
   const height=Math.max(1,Math.min(1500,Math.round(photo?width*naturalHeight/Math.max(image!.naturalWidth,1):600)));
   const factor=Math.min(1,Math.sqrt(1600000/(width*height)));
