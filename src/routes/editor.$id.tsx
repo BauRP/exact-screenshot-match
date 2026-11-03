@@ -7,6 +7,7 @@ import {NEW_NOTE_INK,editorBackground,editorInk} from "@/lib/note-appearance";
 import { noteCaretColor } from "@/lib/note-caret-color";
 import {parseReminderInput,toReminderInput,reminderPresetTime,type ReminderRepeat} from "@/lib/note-reminders";
 import { nativeAudioAvailable, startNativeAudio, stopNativeAudio } from "@/lib/native-audio";
+import {requestNativeReminderPermission} from "@/lib/native-reminders";
 import {
   ArrowLeft,
   LoaderCircle,
@@ -518,6 +519,10 @@ function EditorPage() {
     const typedTitle = title.trim();
     const reminderValue=reminderAt?parseReminderInput(reminderAt):undefined;
     if(reminderAt&&reminderValue===undefined)throw new Error("Укажите правильную дату и время напоминания");
+    if(reminderValue!==undefined){
+      const granted=await requestNativeReminderPermission();
+      if(!granted)toast.warning("Уведомления Android отключены. Напоминание сохранится внутри приложения.");
+    }
 
     if (isNew) {
       // A note that was opened and left blank is cancelled entirely.
@@ -781,7 +786,7 @@ function EditorPage() {
               </label>
               <button type="button" onClick={()=>setReminderAt("")}
                 className="mt-2 rounded-lg border border-border px-3 py-2 text-xs">Убрать напоминание</button>
-              <p className="mt-2 text-xs text-muted-foreground">Дата сохраняется без интернета. Системные уведомления пока не включены.</p>
+              <p className="mt-2 text-xs text-muted-foreground">После сохранения Android сможет показывать уведомления, если разрешить их в системе. Время может немного сдвигаться из-за энергосбережения.</p>
             </PopoverContent>
           </Popover>
           {externalConflict&&!isNew&&<button type="button" onClick={saveSeparateCopy}
