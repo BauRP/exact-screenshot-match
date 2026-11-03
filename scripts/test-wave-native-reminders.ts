@@ -11,6 +11,9 @@ const manifest=readFileSync("android-overlay/app/src/main/AndroidManifest.xml","
 const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
 const store=readFileSync("src/lib/notes-store.ts","utf8");
 assert.ok(native.includes("setAndAllowWhileIdle("));
+assert.ok(native.includes("HashSet<String> seenIds"),"Native bridge must deduplicate alarm entries");
+assert.ok(native.includes("seenIds.contains(id)"),"Reject duplicate reminder identifiers");
+assert.ok(native.includes("seenIds.add(id)"),"Remember accepted reminder identifiers");
 assert.ok(native.includes("POST_NOTIFICATIONS"));
 assert.ok(native.includes("ACTION_BOOT_COMPLETED"));
 assert.ok(manifest.includes("RECEIVE_BOOT_COMPLETED"));
