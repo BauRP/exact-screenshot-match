@@ -10,3 +10,7 @@ assert.equal(structuredPlainClipboardHtml("Just plain text"),"");
 assert.equal(structuredPlainClipboardHtml("- first\nnot a list"),"");
 assert.ok(readFileSync("src/routes/editor.$id.tsx","utf8").includes("structuredPlainClipboardHtml(plain)"));
 console.log("Offline formatted plaintext list import and sanitization passed");
+
+assert.ok(structuredPlainClipboardHtml("- שלום\n- עולם").includes('dir="rtl"'));
+assert.ok(structuredPlainClipboardHtml("- [x] مرحبا\n- [ ] العالم").includes('dir="rtl"'));
+assert.ok(!structuredPlainClipboardHtml("- Қазақ\n- Қазақша").includes('dir="rtl"'));

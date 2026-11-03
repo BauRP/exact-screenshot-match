@@ -1,5 +1,5 @@
 import {strict as assert} from "node:assert";
-import {safeMarkdownInline,structuredMarkdownClipboardHtml} from "../src/lib/wave-smart-paste";
+import {clipboardRtlAttribute,safeMarkdownInline,structuredMarkdownClipboardHtml} from "../src/lib/wave-smart-paste";
 import {readFileSync} from "node:fs";
 assert.equal(structuredMarkdownClipboardHtml("# Title\n\n> Note"),"<h1>Title</h1><blockquote><p>Note</p></blockquote>");
 assert.ok(structuredMarkdownClipboardHtml("## Heading\n- one\n- two").includes("<ul><li><p>one</p></li>"));
@@ -30,3 +30,11 @@ assert.ok(structuredMarkdownClipboardHtml("## Code\n- `x < y`").includes("<code>
 assert.equal(safeMarkdownInline("[invalid](https://%)"),"[invalid](https://%)");
 assert.equal(safeMarkdownInline("**good** [invalid](https://%)"),
  "<strong>good</strong> [invalid](https://%)");
+
+assert.equal(clipboardRtlAttribute("123 مرحبا بالعالم"),' dir="rtl"');
+assert.equal(clipboardRtlAttribute("Қазақ және English"),"");
+const rtl=structuredMarkdownClipboardHtml("# שלום עולם\n- مرحبا\n- [x] مهمة");
+assert.ok(rtl.includes('<h1 dir="rtl">'));
+assert.ok(rtl.includes('<li><p dir="rtl">'));
+assert.ok(rtl.includes('data-shape="square" dir="rtl"'));
+assert.ok(structuredMarkdownClipboardHtml("> مرحبا\n## عنوان").includes('<blockquote><p dir="rtl">'));

@@ -1,6 +1,12 @@
 /** Safe offline import of formatted HTML from browsers and other apps.
  * The clipboard is untrusted; never load remote images or execute embeds.
  * Tiptap will parse the returned small allowlisted HTML into editor nodes. */
+import {directionForText} from "./wave-text-direction";
+/** Only explicit RTL text needs a direction attribute. The editor retains
+ * its existing defaults for Latin, Cyrillic, Kazakh, Japanese and Chinese. */
+export function clipboardRtlAttribute(value:string):string{
+ return directionForText(value)==="rtl"?' dir="rtl"':"";
+}
 const allowed=new Set(["P","DIV","BR","H1","H2","H3","H4","H5","H6","UL","OL","LI","TABLE","THEAD","TBODY","TFOOT","TR","TH","TD","BLOCKQUOTE","STRONG","B","EM","I","U","S","DEL","CODE","PRE","A","SPAN","HR","SECTION","ASIDE"]);
 const forbidden=new Set(["SCRIPT","STYLE","IFRAME","OBJECT","EMBED","FORM","INPUT","META","LINK","SVG","MATH","VIDEO","AUDIO","NOSCRIPT","TEMPLATE","BUTTON","SELECT","TEXTAREA"]);
 const textBlock=new Set(["P","DIV","H1","H2","H3","H4","H5","H6","BLOCKQUOTE","PRE"]);
@@ -114,14 +120,17 @@ export function structuredPlainClipboardHtml(input:string):string{
   .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
  if(isCheckbox)return checkboxItems.map(m=>
   '<div data-type="wave-check-item" data-done="'+(m![1].toLowerCase()==="x"?"true":"false")+
-  '" data-shape="square">'+escape(m![2].trim())+'</div>').join("");
+  '" data-shape="square"'+clipboardRtlAttribute(m![2])+'>'+escape(m![2].trim())+'</div>').join("");
  if(isNumbered){
   const sequence=numberedItems.map(m=>Number(m![1]));
   // Never silently replace intentional numbering (e.g. 1, 3, 8).
   if(sequence.some((number,i)=>i>0&&number!==sequence[i-1]+1))return "";
  }
  const values=(isBulleted?bulletItems:numberedItems).map(m=>escape((m?.[isBulleted?1:2]||"").trim()));
- const list=values.map(v=>"<li><p>"+v+"</p></li>").join("");
+ const list=values.map((v,i)=>{
+  const match=(isBulleted?bulletItems:numberedItems)[i];
+  return "<li><p"+clipboardRtlAttribute(match?.[isBulleted?1:2]||"")+">"+v+"</p></li>";
+ }).join("");
  if(isBulleted)return "<ul>"+list+"</ul>";
  const start=Number(numberedItems[0]?.[1]||1);
  return "<ol"+(start!==1?' start="'+start+'"':"")+">"+list+"</ol>";
@@ -188,15 +197,15 @@ export function structuredMarkdownClipboardHtml(input:string):string{
   if(check){
    close();
    html+='<div data-type="wave-check-item" data-done="'+(check[1].toLowerCase()==="x"?"true":"false")+
-     '" data-shape="square">'+safeMarkdownInline(check[2])+"</div>";
+     '" data-shape="square"'+clipboardRtlAttribute(check[2])+'>'+safeMarkdownInline(check[2])+"</div>";
    meaningful++;continue;
   }
-  if(h){close();html+="<h"+h[1].length+">"+safeMarkdownInline(h[2])+"</h"+h[1].length+">";meaningful++;continue;}
-  if(q){close();html+="<blockquote><p>"+safeMarkdownInline(q[1])+"</p></blockquote>";meaningful++;continue;}
+  if(h){close();html+="<h"+h[1].length+clipboardRtlAttribute(h[2])+">"+safeMarkdownInline(h[2])+"</h"+h[1].length+">";meaningful++;continue;}
+  if(q){close();html+="<blockquote><p"+clipboardRtlAttribute(q[1])+">"+safeMarkdownInline(q[1])+"</p></blockquote>";meaningful++;continue;}
   if(trimmed==="---"||trimmed==="***"){close();html+="<hr>";meaningful++;continue;}
   if(u){
    if(listType!=="ul"){close();html+="<ul>";listType="ul";}
-   html+="<li><p>"+safeMarkdownInline(u[1])+"</p></li>";meaningful++;continue;
+   html+="<li><p"+clipboardRtlAttribute(u[1])+">"+safeMarkdownInline(u[1])+"</p></li>";meaningful++;continue;
   }
   if(o){
    const num=Number(o[1]);
@@ -204,9 +213,9 @@ export function structuredMarkdownClipboardHtml(input:string):string{
     close();html+='<ol'+(num!==1?' start="'+num+'"':"")+">";listType="ol";
    }
    expected=num+1;
-   html+="<li><p>"+safeMarkdownInline(o[2])+"</p></li>";meaningful++;continue;
+   html+="<li><p"+clipboardRtlAttribute(o[2])+">"+safeMarkdownInline(o[2])+"</p></li>";meaningful++;continue;
   }
-  close();html+="<p>"+safeMarkdownInline(line)+"</p>";
+  close();html+="<p"+clipboardRtlAttribute(line)+">"+safeMarkdownInline(line)+"</p>";
  }
  close();
  return meaningful>=2?html:"";
