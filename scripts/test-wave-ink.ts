@@ -19,3 +19,7 @@ const canvasSource=readFileSync("src/components/editor/WaveInkCanvas.tsx","utf8"
 assert.ok(canvasSource.includes('tool==="line"?[point,point]:[point]'));
 assert.ok(canvasSource.includes('mode.current==="line"'));
 assert.ok(canvasSource.includes('"Прямая"'));
+
+assert.ok(canvasSource.includes('tool==="rectangle"?[point,point,point,point,point]'));
+assert.ok(canvasSource.includes('mode.current==="rectangle"'));
+assert.ok(canvasSource.includes('"Прямоугольник"'));
