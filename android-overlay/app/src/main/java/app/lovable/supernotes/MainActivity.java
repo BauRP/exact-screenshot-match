@@ -27,6 +27,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(FeedbackEmailPlugin.class);
         registerPlugin(OfflineCyrillicOcrPlugin.class);
         registerPlugin(NativeAudioRecorderPlugin.class);
+        registerPlugin(NativeReminderPlugin.class);
         super.onCreate(savedInstanceState);
 
         WindowCompat.setDecorFitsSystemWindows(getWindow(),false);
