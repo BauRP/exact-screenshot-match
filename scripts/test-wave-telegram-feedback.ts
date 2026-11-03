@@ -36,6 +36,11 @@ for(const marker of ["HttpsURLConnection","setRequestMethod(\"POST\")","getOutpu
 }
 assert.ok(main.includes("registerPlugin(TelegramFeedbackPlugin.class)"));
 assert.ok(gradle.includes('System.getenv("WAVE_FEEDBACK_BOT_TOKEN")'));
+assert.ok(gradle.includes('System.getenv("WAVE_FEEDBACK_RELAY_URL")'));
+assert.ok(java.includes("deliverViaRelay("));
+assert.ok(java.includes('BuildConfig.WAVE_FEEDBACK_RELAY_URL'));
+assert.ok(java.includes('"/feedback".equals(uri.getPath())'));
+assert.ok(workflow.includes("vars.WAVE_FEEDBACK_RELAY_URL"));
 assert.ok(workflow.includes("retention-days: 1"));
 assert.ok(workflow.includes("github.event_name == 'workflow_dispatch' && inputs.feedback_telegram_test"));
 assert.ok(workflow.includes("!(github.event_name == 'workflow_dispatch' && inputs.feedback_telegram_test)"));
