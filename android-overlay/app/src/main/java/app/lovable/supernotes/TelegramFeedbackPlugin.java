@@ -14,6 +14,7 @@ import java.io.OutputStream;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.net.URL;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -92,6 +93,68 @@ public final class TelegramFeedbackPlugin extends Plugin {
         }
     }
 
+    /**
+     * Production sends to an independently deployed HTTPS relay. The bot token
+     * stays in the relay environment and must never be shipped in a public APK.
+     */
+    private JSObject deliverViaRelay(String relayUrl, String topic, String text) {
+        HttpsURLConnection connection = null;
+        try {
+            URI uri = new URI(relayUrl);
+            if (!"https".equalsIgnoreCase(uri.getScheme()) ||
+                uri.getUserInfo() != null || uri.getHost() == null ||
+                uri.getFragment() != null || uri.getQuery() != null ||
+                !"/feedback".equals(uri.getPath())) {
+                return failure("setup", 0, 0, false);
+            }
+            URL url = uri.toURL();
+            connection = (HttpsURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            connection.setReadTimeout(READ_TIMEOUT_MS);
+            connection.setDoOutput(true);
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            JSONObject payload = new JSONObject();
+            payload.put("topic", topic);
+            payload.put("text", text);
+            byte[] body = payload.toString().getBytes(StandardCharsets.UTF_8);
+            connection.setFixedLengthStreamingMode(body.length);
+            try (OutputStream output = connection.getOutputStream()) { output.write(body); }
+            int status = connection.getResponseCode();
+            if (status >= 300 && status < 400) return failure("rejected", status, 0, false);
+            String response = readLimited(status >= 200 && status < 300
+                ? connection.getInputStream() : connection.getErrorStream());
+            JSONObject confirmation = new JSONObject(response);
+            if (status == 200 && confirmation.optBoolean("ok", false)) {
+                JSONObject result = confirmation.optJSONObject("result");
+                JSONObject chat = result == null ? null : result.optJSONObject("chat");
+                int messageId = result == null ? 0 : result.optInt("message_id", 0);
+                if (chat != null && chat.optLong("id", 0) == GROUP_ID && messageId > 0)
+                    return success(messageId);
+                return failure("unconfirmed", status, 0, true);
+            }
+            int retry = Math.min(3600, Math.max(0, confirmation.optInt("retryAfter", 0)));
+            String kind = confirmation.optString("kind", "");
+            boolean uncertain = confirmation.optBoolean("uncertain", status >= 500);
+            if ("rate_limit".equals(kind)) return failure("rate_limit", status, retry, false);
+            if ("invalid".equals(kind)) return failure("invalid", status, 0, false);
+            if ("unauthorized".equals(kind) || "forbidden".equals(kind) ||
+                "request".equals(kind) || "server".equals(kind) ||
+                "setup".equals(kind) || "unconfirmed".equals(kind) ||
+                "timeout".equals(kind)) return failure(kind, status, 0, uncertain);
+            return failure("rejected", status, 0, uncertain);
+        } catch (UnknownHostException error) {
+            return failure("offline", 0, 0, false);
+        } catch (SocketTimeoutException error) {
+            return failure("timeout", 0, 0, true);
+        } catch (Exception error) {
+            return failure("network", 0, 0, true);
+        } finally { if (connection != null) connection.disconnect(); }
+    }
+
+    // Legacy direct Telegram transport is allowed only for a strictly private
+    // temporary developer test. Never bundle its key in a public release.
     private JSObject deliver(String token, String topic, String text) {
         HttpsURLConnection connection = null;
         try {
@@ -158,13 +221,16 @@ public final class TelegramFeedbackPlugin extends Plugin {
             call.resolve(failure("invalid", 0, 0, false));
             return;
         }
+        String relayUrl = BuildConfig.WAVE_FEEDBACK_RELAY_URL;
         String token = BuildConfig.WAVE_FEEDBACK_BOT_TOKEN;
-        if (token == null || token.isEmpty()) {
+        if ((relayUrl == null || relayUrl.isEmpty()) && (token == null || token.isEmpty())) {
             call.resolve(failure("setup", 0, 0, false));
             return;
         }
         // Network I/O must never block the Android main thread.
-        new Thread(() -> call.resolve(deliver(token, topic.trim(), text.trim())),
+        new Thread(() -> call.resolve(relayUrl != null && !relayUrl.isEmpty()
+            ? deliverViaRelay(relayUrl, topic.trim(), text.trim())
+            : deliver(token, topic.trim(), text.trim())),
             "wave-feedback-http").start();
     }
 }
