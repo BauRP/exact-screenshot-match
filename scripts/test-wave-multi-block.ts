@@ -32,20 +32,26 @@ pick(at[0]+1,at[2]+1);
 assert.equal(duplicateSelectedWaveBlock(editor),true);
 assert.equal(state.doc.childCount,10);
 assert.equal(state.doc.child(4).attrs.imageId,"photo-123");
-assert.equal(state.doc.child(6).type.name,"wavePageBreak");
+assert.equal(state.doc.child(7).type.name,"wavePageBreak");
 // A text block may never cross page boundaries with the generic action.
-at=positions();pick(at[5]+1,at[5]+2);
+at=positions();pick(at[6]+1,at[6]+2);
 assert.equal(moveSelectedWaveBlock(editor,"down"),false);
-assert.equal(state.doc.child(6).type.name,"wavePageBreak");
+assert.equal(state.doc.child(7).type.name,"wavePageBreak");
 // Group operations may not include a page marker.
-at=positions();pick(at[5]+1,at[7]+1);
+at=positions();pick(at[6]+1,at[8]+2);
 assert.equal(duplicateSelectedWaveBlock(editor),false);
 assert.equal(moveSelectedWaveBlock(editor,"up"),false);
 // Deep selections inside a section move only its direct children.
-let nestedAt=0;state.doc.descendants((node,pos)=>{if(node.isText&&node.text==="fold one")nestedAt=pos;});
-pick(nestedAt,nestedAt+("fold one".length+("fold two".length)+4));
+const nestedPositions:number[]=[];
+state.doc.descendants((node,pos)=>{
+ if(node.type.name==="paragraph"&&node.textContent.startsWith("fold "))nestedPositions.push(pos+1);
+});
+assert.equal(nestedPositions.length,3);
+pick(nestedPositions[0],nestedPositions[1]+2);
 assert.equal(selectedWaveSiblingRange(editor)?.depth,1);
 assert.equal(moveSelectedWaveBlock(editor,"down"),true);
 assert.equal(state.doc.lastChild?.type.name,"waveFold");
+assert.deepEqual(state.doc.lastChild!.content.content.map((n:any)=>n.textContent),
+ ["fold three","fold one","fold two"]);
 assert.equal(state.doc.check(),undefined);
 console.log("Real multi-block move/duplicate preserve image references, section boundaries, page markers and document validity");
