@@ -30,20 +30,22 @@ const main=readFileSync("android-overlay/app/src/main/java/app/lovable/supernote
 const workflow=readFileSync(".github/workflows/android-build.yml","utf8");
 for(const marker of ["HttpsURLConnection","setRequestMethod(\"POST\")","getOutputStream()",
  "getResponseCode()","optBoolean(\"ok\", false)","optLong(\"id\", 0) == GROUP_ID",
- "messageId > 0","READ_TIMEOUT_MS","CONNECT_TIMEOUT_MS","retry_after","UnknownHostException",
- "SocketTimeoutException","new Thread(","BuildConfig.WAVE_FEEDBACK_BOT_TOKEN"]){
+ "messageId > 0","READ_TIMEOUT_MS","CONNECT_TIMEOUT_MS","UnknownHostException",
+ "SocketTimeoutException","new Thread(","BuildConfig.WAVE_FEEDBACK_RELAY_URL"]){
  assert.ok(java.includes(marker),marker);
 }
 assert.ok(main.includes("registerPlugin(TelegramFeedbackPlugin.class)"));
-assert.ok(gradle.includes('System.getenv("WAVE_FEEDBACK_BOT_TOKEN")'));
+assert.ok(!gradle.includes('WAVE_FEEDBACK_BOT_TOKEN'));
 assert.ok(gradle.includes('System.getenv("WAVE_FEEDBACK_RELAY_URL")'));
 assert.ok(java.includes("deliverViaRelay("));
 assert.ok(java.includes('BuildConfig.WAVE_FEEDBACK_RELAY_URL'));
 assert.ok(java.includes('"/feedback".equals(uri.getPath())'));
 assert.ok(workflow.includes("vars.WAVE_FEEDBACK_RELAY_URL"));
 assert.ok(workflow.includes("retention-days: 1"));
-assert.ok(workflow.includes("github.event_name == 'workflow_dispatch' && inputs.feedback_telegram_test"));
-assert.ok(workflow.includes("!(github.event_name == 'workflow_dispatch' && inputs.feedback_telegram_test)"));
+assert.ok(!workflow.includes("WAVE_FEEDBACK_BOT_TOKEN"));
+assert.ok(!java.includes("api.telegram.org/bot"));
+assert.ok(workflow.includes("Wave-Notes-APK-no-Telegram-credentials"));
+assert.ok(!workflow.includes("feedback_telegram_test"));
 assert.ok(settings.includes("saveFeedbackDraft(fbTopic,fbText)"));
 assert.ok(settings.includes("clearFeedbackDraft()"));
 assert.ok(settings.includes("Ваше сообщение будет отправлено разработчику"));
