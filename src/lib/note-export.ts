@@ -111,13 +111,20 @@ export function noteHtmlDocument(note:Note):string{
     "@media(max-width:650px){body{margin:0;padding:16px}}</style></head><body><h1>"+
     escapeHtml(note.title)+"</h1>"+sanitizedBody(note)+"</body></html>";
 }
-type RunStyle={bold?:boolean;italic?:boolean;underline?:boolean;color?:string};
-function docxRun(s:string,style:RunStyle={}):string{
+export type RunStyle={bold?:boolean;italic?:boolean;underline?:boolean;strike?:boolean;color?:string;fontSize?:number;highlight?:string};
+export function docxRun(s:string,style:RunStyle={}):string{
   if(!s)return "";
-  const pr=(style.bold?"<w:b/>":"")+(style.italic?"<w:i/>":"")+(style.underline?"<w:u w:val=\"single\"/>":"")+
-    (style.color?"<w:color w:val=\""+style.color+"\"/>":"");
+  const color=style.color&&/^[0-9a-f]{6}$/i.test(style.color)?style.color.toUpperCase():"";
+  const background=style.highlight&&/^[0-9a-f]{6}$/i.test(style.highlight)?style.highlight.toUpperCase():"";
+  const size=typeof style.fontSize==="number"&&Number.isFinite(style.fontSize)&&style.fontSize>=8&&style.fontSize<=72?
+    Math.round(style.fontSize*1.5):undefined;
+  const pr=(style.bold?"<w:b/>":"")+(style.italic?"<w:i/>":"")+
+    (style.underline?'<w:u w:val="single"/>':"")+(style.strike?"<w:strike/>":"")+
+    (color?'<w:color w:val="'+color+'"/>':"")+
+    (background?'<w:shd w:fill="'+background+'"/>':"")+
+    (size?'<w:sz w:val="'+size+'"/>':"");
   return "<w:r>"+(pr?"<w:rPr>"+pr+"</w:rPr>":"")+
-    "<w:t xml:space=\"preserve\">"+escapeXml(s)+"</w:t></w:r>";
+    '<w:t xml:space="preserve">'+escapeXml(s)+"</w:t></w:r>";
 }
 function inlineWord(node:Node,style:RunStyle={}):string {
   if(node.nodeType===3)return docxRun(node.textContent||"",style);
@@ -129,9 +136,16 @@ function inlineWord(node:Node,style:RunStyle={}):string {
   if(tag==="STRONG"||tag==="B")next.bold=true;
   if(tag==="EM"||tag==="I")next.italic=true;
   if(tag==="U")next.underline=true;
+  if(["S","DEL","STRIKE"].includes(tag))next.strike=true;
+  const decoration=el.style.getPropertyValue("text-decoration-line");
+  if(decoration.includes("line-through"))next.strike=true;
   // Direction is paragraph-level in Word, inherited by nested spans.
   const ink=el.style.getPropertyValue("color").trim();
   if(/^#[0-9a-fA-F]{6}$/.test(ink))next.color=ink.slice(1).toUpperCase();
+  const paper=el.style.getPropertyValue("background-color").trim();
+  if(/^#[0-9a-fA-F]{6}$/.test(paper))next.highlight=paper.slice(1).toUpperCase();
+  const size=el.style.getPropertyValue("font-size").trim();
+  if(/^(?:[8-9]|[1-6][0-9]|7[0-2])px$/.test(size))next.fontSize=Number.parseInt(size,10);
   return Array.from(node.childNodes).map(child=>inlineWord(child,next)).join("");
 }
 /** WordprocessingML needs explicit bidi paragraphs to preserve RTL text
