@@ -9,6 +9,13 @@ fi
 command -v sdkmanager >/dev/null 2>&1 || {
   echo "::error::sdkmanager not found"; exit 1
 }
+# GitHub runners often already have the emulator binary. Reinstalling it
+# can fail on a transient Google SDK ZIP download and destroy a usable SDK.
+# The real emulator runner will validate boot, so only check executable here.
+if [[ -x "$sdk_root/emulator/emulator" ]]; then
+  echo "Existing Android Emulator SDK executable found; skipping unsafe redownload"
+  exit 0
+fi
 max_attempts=4
 retry_delay="${WAVE_EMULATOR_SDK_RETRY_DELAY:-7}"
 for ((attempt=1; attempt<=max_attempts; attempt++)); do

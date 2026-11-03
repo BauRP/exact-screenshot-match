@@ -42,4 +42,23 @@ if bash scripts/prepare-android-emulator.sh; then
   exit 1
 fi
 [[ "$(cat "$WAVE_MOCK_COUNTER")" == "4" ]]
-echo "SDK retry regression: three scenarios passed"
+# A preinstalled SDK should win over a flaky remote ZIP: no sdkmanager call.
+mkdir -p "$work/sdk/emulator"
+cat > "$work/sdk/emulator/emulator" <<'EMULATOR'
+#!/usr/bin/env bash
+exit 0
+EMULATOR
+chmod +x "$work/sdk/emulator/emulator"
+rm -f "$WAVE_MOCK_COUNTER"
+bash scripts/prepare-android-emulator.sh
+[[ ! -e "$WAVE_MOCK_COUNTER" ]]
+
+# The API 24 installer check must not swallow cleanup and test execution
+# inside a multiline quoted grep argument.
+bash -n scripts/run-android-emulator-tests.sh
+[[ "$(grep -c '^stop_logger
+ scripts/run-android-emulator-tests.sh)" == "1" ]]
+[[ "$(grep -c '^exit "\$result"
+ scripts/run-android-emulator-tests.sh)" == "1" ]]
+grep -q 'Android 7 test package was not installed' scripts/run-android-emulator-tests.sh
+echo "SDK retry, preinstalled SDK and API 24 shell regression: four scenarios passed"
