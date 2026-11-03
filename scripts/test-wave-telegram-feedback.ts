@@ -43,5 +43,5 @@ assert.ok(settings.includes("saveFeedbackDraft(fbTopic,fbText)"));
 assert.ok(settings.includes("clearFeedbackDraft()"));
 assert.ok(settings.includes("Ваше сообщение будет отправлено разработчику"));
 assert.ok(!settings.includes("FeedbackEmail\""),"Feedback must not fall back to email in Android");
-assert.ok(!java.includes("9182440482:"),"No Telegram credentials may be checked in");
+assert.ok(!/\b\d{8,11}:[A-Za-z0-9_-]{25,}/.test(java),"No Telegram credentials may be checked in");
 console.log("Telegram feedback controls, drafts, network error handling and secret isolation checked");
