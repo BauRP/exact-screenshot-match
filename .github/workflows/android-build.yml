@@ -226,6 +226,9 @@ jobs:
       - name: Verify named pages and audio playback controls
         run: bun scripts/test-wave-page-audio-controls.ts
 
+      - name: Verify Android microphone discard, late permission and save sequencing
+        run: bun scripts/test-wave-audio-session-safety.ts
+
       - name: Verify audio error messages and retry action
         run: bun scripts/test-wave-audio-retry.ts
 

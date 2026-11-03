@@ -1,7 +1,8 @@
 import {Capacitor,registerPlugin} from "@capacitor/core";
-const plugin=registerPlugin<{start():Promise<void>;stop():Promise<{data:string;mimeType:string}>}>("NativeAudioRecorder");
+const plugin=registerPlugin<{start():Promise<void>;cancel():Promise<void>;stop():Promise<{data:string;mimeType:string}>}>("NativeAudioRecorder");
 export const nativeAudioAvailable=()=>Capacitor.isNativePlatform()&&Capacitor.getPlatform()==="android";
 export const startNativeAudio=()=>plugin.start();
+export const cancelNativeAudio=()=>plugin.cancel();
 export async function stopNativeAudio():Promise<Blob>{
  const r=await plugin.stop();
  if(!r||r.mimeType!=="audio/mp4"||!/^[A-Za-z0-9+/]*={0,2}$/.test(r.data))throw new Error("Некорректное аудио");

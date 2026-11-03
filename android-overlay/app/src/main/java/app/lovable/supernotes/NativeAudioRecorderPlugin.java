@@ -42,6 +42,10 @@ public class NativeAudioRecorderPlugin extends Plugin{
    active=true;started=System.currentTimeMillis();call.resolve();
   }catch(Exception ex){clean();call.reject("Не удалось включить микрофон",ex);}
  }
+ /** Abandon audio without serializing private microphone data. */
+ @PluginMethod public synchronized void cancel(PluginCall call){
+  clean();call.resolve();
+ }
  @PluginMethod public synchronized void stop(PluginCall call){
   if(!active||rec==null){call.reject("Запись не запущена");return;}
   if(System.currentTimeMillis()-started<300){clean();call.reject("Запись слишком короткая. Начните новую запись и говорите не менее секунды.");return;}

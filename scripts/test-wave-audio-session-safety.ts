@@ -1,0 +1,13 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+const native=readFileSync("android-overlay/app/src/main/java/app/lovable/supernotes/NativeAudioRecorderPlugin.java","utf8");
+const bridge=readFileSync("src/lib/native-audio.ts","utf8");
+const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
+for(const str of ["public synchronized void cancel(PluginCall call)","clean();call.resolve();"])assert.ok(native.includes(str));
+assert.ok(bridge.includes("cancelNativeAudio=()=>plugin.cancel()"));
+assert.ok(editor.includes("if(!imageSessionRef.current){await cancelNativeAudio();return;}"));
+assert.ok(editor.includes("if(!imageSessionRef.current){stream.getTracks().forEach(track=>track.stop());return;}"));
+assert.ok(editor.includes("if(nativeRecordingRef.current){"));
+assert.ok(editor.includes('toast.error("Не удалось выключить микрофон")'));
+assert.ok(editor.includes("if(recordingWriteRef.current)await recordingWriteRef.current;"));
+console.log("Native audio discard, permission-race cleanup and save sequencing verified");

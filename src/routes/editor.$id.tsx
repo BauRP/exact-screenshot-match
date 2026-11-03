@@ -6,7 +6,7 @@ import { ColorGrid, PALETTE } from "@/components/ColorGrid";
 import {NEW_NOTE_INK,editorBackground,editorInk} from "@/lib/note-appearance";
 import { noteCaretColor } from "@/lib/note-caret-color";
 import {parseReminderInput,toReminderInput,reminderPresetTime,type ReminderRepeat} from "@/lib/note-reminders";
-import { nativeAudioAvailable, startNativeAudio, stopNativeAudio } from "@/lib/native-audio";
+import { nativeAudioAvailable, startNativeAudio, stopNativeAudio, cancelNativeAudio } from "@/lib/native-audio";
 import {requestNativeReminderPermission} from "@/lib/native-reminders";
 import {
   ArrowLeft,
@@ -368,6 +368,19 @@ function EditorPage() {
     }
   }, [editor, note]);
 
+  // Update DOM spellchecking without recreating the rich text editor.
+  useEffect(()=>{
+    if(!editor||editor.isDestroyed)return;
+    const update=()=>{
+      editor.view.dom.setAttribute("spellcheck",prefs.spellcheck?"true":"false");
+      editor.view.dom.setAttribute("lang",document.documentElement.lang||"ru");
+    };
+    update();
+    const observer=new MutationObserver(update);
+    observer.observe(document.documentElement,{attributes:true,attributeFilter:["lang"]});
+    return ()=>observer.disconnect();
+  },[editor,prefs.spellcheck]);
+
   // Title, folder, star and background live in draft state only (see handleSave).
 
 
@@ -379,6 +392,10 @@ function EditorPage() {
         streamRef.current?.getTracks().forEach((t) => t.stop());
       } catch {}
       imageSessionRef.current=false;
+      if(nativeRecordingRef.current){
+        nativeRecordingRef.current=false;
+        void cancelNativeAudio().catch(error=>console.error("Microphone discard failed",error));
+      }
       if (!committedNoteRef.current) {
         void Promise.allSettled([...pendingImagesRef.current]).then(()=>
           Promise.allSettled([...createdImageIdsRef.current].map(id=>deleteImageFile(id))));
@@ -471,7 +488,13 @@ function EditorPage() {
   const handleDiscard = async () => {
     if(savingRef.current)return;
     imageSessionRef.current=false;
-    if (recorderRef.current?.state === "recording" || nativeRecordingRef.current) stopRecording();
+    if(nativeRecordingRef.current){
+      nativeRecordingRef.current=false;setRecording(false);
+      try{await cancelNativeAudio();}
+      catch(error){console.error("Unable to discard native audio",error);toast.error("Не удалось выключить микрофон");return;}
+      settleRecordingRef.current?.resolve();
+      settleRecordingRef.current=null;recordingWriteRef.current=null;
+    }else if(recorderRef.current?.state==="recording")stopRecording();
     await recordingWriteRef.current?.catch(()=>undefined);
     await Promise.allSettled([...pendingImagesRef.current]);
     await cleanupNewAudio();
@@ -485,6 +508,9 @@ function EditorPage() {
     if(isNew||!editor||savingRef.current)return;
     savingRef.current=true;setSaving(true);
     try{
+      if(startingAudioRef.current)throw Error("Подождите, пока микрофон включится");
+      if(recorderRef.current?.state==="recording"||nativeRecordingRef.current)stopRecording();
+      if(recordingWriteRef.current)await recordingWriteRef.current;
       await Promise.allSettled([...pendingImagesRef.current]);
       const body=editor.getHTML();
       const copy=saveDraftAfterExternalChange(id,{
@@ -655,6 +681,7 @@ function EditorPage() {
       startingAudioRef.current=true;setStartingAudio(true);
       try {
         await startNativeAudio();
+        if(!imageSessionRef.current){await cancelNativeAudio();return;}
         recordingWriteRef.current=new Promise<void>((resolve,reject)=>{settleRecordingRef.current={resolve,reject};});
         void recordingWriteRef.current.catch(()=>undefined);
         nativeRecordingRef.current=true;setRecording(true);
@@ -667,6 +694,7 @@ function EditorPage() {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder==="undefined") {alert("Микрофон недоступен");return;}
     try {
       const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      if(!imageSessionRef.current){stream.getTracks().forEach(track=>track.stop());return;}
       streamRef.current=stream;
       const rec=new MediaRecorder(stream);
       recordingWriteRef.current=new Promise<void>((resolve,reject)=>{settleRecordingRef.current={resolve,reject};});

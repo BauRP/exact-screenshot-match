@@ -8,3 +8,7 @@ for(const m of ["window.addEventListener(EDITOR_PREFS_CHANGED,refresh)","window.
 assert.ok(settings.includes("saveEditorPreferences(patch)"));
 assert.ok(!editor.includes("editor.view.domAtPos(item.pos+1)"));
 console.log("Live editor preferences, search highlight and page navigation wiring passed");
+
+const liveSpellcheck=readFileSync("src/routes/editor.$id.tsx","utf8");
+assert.ok(liveSpellcheck.includes('editor.view.dom.setAttribute("spellcheck",prefs.spellcheck?"true":"false")'));
+assert.ok(liveSpellcheck.includes("observer.observe(document.documentElement"));

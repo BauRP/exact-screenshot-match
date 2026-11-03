@@ -108,6 +108,19 @@ export function mergeCurrentPageWithNext(editor:Editor):boolean{
 }
 
 
+/** Only paragraph-only whitespace pages are safe to discard; never erase
+ * photos, audio, drawings, checklists, section nodes or nonblank text. */
+export function isEmptyPageBody(body:Fragment):boolean{
+ for(let i=0;i<body.childCount;i++){
+  const node=body.child(i);
+  if(node.type.name!=="paragraph")return false;
+  let blank=true;
+  node.forEach(child=>{if(!child.isText||Boolean(child.text?.trim()))blank=false;});
+  if(!blank)return false;
+ }
+ return true;
+}
+
 /** Remove all truly empty pages in ONE undoable document transaction.
  * Page 1 is never removed. Work backwards so positions don't shift;
  * keep every non-empty page, binary reference, style and nested block. */
@@ -116,8 +129,7 @@ export function removeAllEmptyPages(editor:Editor):number{
  const {doc}=editor.state,pages=topLevelPageRanges(doc),removed:number[]=[];
  for(let i=1;i<pages.length;i++){
   const p=pages[i],body=doc.content.cut(p.bodyStart,p.end);
-  if(body.childCount===1&&body.firstChild?.type.name==="paragraph"&&
-    body.firstChild.content.size===0)removed.push(i);
+  if(isEmptyPageBody(body))removed.push(i);
  }
  if(!removed.length)return 0;
  let tr=editor.state.tr;
@@ -141,8 +153,7 @@ export function removeEmptyCurrentPage(editor:Editor):boolean{
  const page=pages[index];
  if(page.end<=page.bodyStart)return false;
  const nodes=doc.content.cut(page.bodyStart,page.end);
- if(nodes.childCount!==1||nodes.firstChild?.type.name!=="paragraph"||
-    nodes.firstChild.content.size!==0)return false;
+ if(!isEmptyPageBody(nodes))return false;
  editor.view.dispatch(editor.state.tr.delete(page.start,page.end).scrollIntoView());
  return true;
 }

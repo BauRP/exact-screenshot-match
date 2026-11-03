@@ -1,7 +1,7 @@
 import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection} from "@tiptap/pm/state";
-import {duplicateCurrentPage,moveCurrentPage,topLevelPageRanges,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage} from "../src/lib/wave-page-actions";
+import {duplicateCurrentPage,moveCurrentPage,topLevelPageRanges,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,isEmptyPageBody} from "../src/lib/wave-page-actions";
 const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},wavePageBreak:{group:"block",atom:true,attrs:{label:{default:""}}},waveFold:{group:"block",content:"block+"},text:{group:"inline"}},marks:{}});
 const p=(s:string)=>schema.nodes.paragraph.create(null,schema.text(s));
 const page=(s:string)=>schema.nodes.wavePageBreak.create({label:s});
@@ -53,3 +53,27 @@ assert.equal(removeAllEmptyPages(editor),2);
 assert.equal(topLevelPageRanges(state.doc).length,4);
 assert.equal(state.doc.textContent,beforeText);
 assert.equal(removeAllEmptyPages(editor),0);
+
+const blankPara=schema.nodes.paragraph.create();
+const white=(value:string)=>schema.nodes.paragraph.create(null,schema.text(value));
+const nestedProtected=schema.nodes.waveFold.create(null,[white("   ")]);
+const docBlank=schema.nodes.doc.create(null,[p("live"),page("blank"),white("   "),white("\t"),blankPara,
+ page("protected"),nestedProtected,page("filled"),white("  important ")]);
+let st=EditorState.create({schema,doc:docBlank});
+const control={isEditable:true,isDestroyed:false,get state(){return st;},view:{dispatch(tr:any){st=st.apply(tr);}}} as any;
+const candidate=topLevelPageRanges(st.doc)[1];
+assert.equal(isEmptyPageBody(st.doc.content.cut(candidate.bodyStart,candidate.end)),true);
+assert.equal(removeAllEmptyPages(control),1);
+assert.equal(topLevelPageRanges(st.doc).length,3);
+assert.equal(st.doc.textContent,"live     important ");
+assert.equal(st.doc.content.child(2).type.name,"waveFold");
+let pageLast=topLevelPageRanges(st.doc)[2];
+st=st.apply(st.tr.setSelection(TextSelection.create(st.doc,pageLast.bodyStart+1)));
+assert.equal(removeEmptyCurrentPage(control),false,"Text pages are protected");
+const docSingle=schema.nodes.doc.create(null,[p("keep"),page("erase"),white(" "),blankPara]);
+let single=EditorState.create({schema,doc:docSingle});
+const controlSingle={isEditable:true,isDestroyed:false,get state(){return single;},view:{dispatch(tr:any){single=single.apply(tr);}}} as any;
+const emptyPage=topLevelPageRanges(single.doc)[1];
+single=single.apply(single.tr.setSelection(TextSelection.create(single.doc,emptyPage.bodyStart+1)));
+assert.equal(removeEmptyCurrentPage(controlSingle),true);
+assert.equal(single.doc.textContent,"keep");
