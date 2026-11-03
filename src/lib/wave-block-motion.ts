@@ -41,6 +41,9 @@ export function moveWaveBlock(
 
   const current = parent.child(index);
   const neighbor = parent.child(nextIndex);
+  // Explicit page dividers own their page: never drag a single block past
+  // a divider with a generic block action. Use page movement instead.
+  if(current.type.name==="wavePageBreak"||neighbor.type.name==="wavePageBreak")return false;
   const from = direction === "up" ? position - neighbor.nodeSize : position;
   const to = direction === "up" ? position + current.nodeSize : position + current.nodeSize + neighbor.nodeSize;
   const firstIndex = Math.min(index, nextIndex);
@@ -68,7 +71,59 @@ export function selectedWaveBlockPos(editor:Editor):number|undefined {
  }
  return undefined;
 }
+/** Determine whole direct siblings covered by the visible selection.
+ * Whitespace edges count only for a block whose actual content is selected.
+ * The deepest common doc/WaveFold ancestor keeps nested content together. */
+export function selectedWaveSiblingRange(editor:Editor):{from:number;to:number;start:number;end:number;depth:number}|undefined{
+ const {selection}=editor.state;
+ if(selection.empty)return undefined;
+ const {$from,$to}=selection;
+ for(let depth=Math.min($from.depth,$to.depth);depth>=0;depth--){
+  if($from.node(depth)!==$to.node(depth))continue;
+  const parent=$from.node(depth);
+  if(parent.type.name!=="doc"&&parent.type.name!=="waveFold")continue;
+  const base=$from.start(depth);
+  let offset=0,start=-1,end=-1,from=0,to=0;
+  for(let index=0;index<parent.childCount;index++){
+   const node=parent.child(index),begin=base+offset,finish=begin+node.nodeSize;
+   if(selection.from<finish&&selection.to>begin){
+    if(start<0){start=index;from=begin;}
+    end=index+1;to=finish;
+   }
+   offset+=node.nodeSize;
+  }
+  if(start>=0)return {from,to,start,end,depth};
+ }
+ return undefined;
+}
+
+/** Move a contiguous multi-block selection without splitting rich nodes,
+ * changing attachment IDs or rearranging top-level page boundaries. */
 export function moveSelectedWaveBlock(editor:Editor,direction:"up"|"down"):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const range=selectedWaveSiblingRange(editor);
+ if(range&&range.end-range.start>1){
+  const {state,view}=editor,{doc}=state;
+  const parent=state.selection.$from.node(range.depth);
+  const neighborIndex=direction==="up"?range.start-1:range.end;
+  if(neighborIndex<0||neighborIndex>=parent.childCount)return false;
+  const selected=parent.content.cut(
+   waveChildOffset(parent,range.start),waveChildOffset(parent,range.end));
+  if(selected.content.some(node=>node.type.name==="wavePageBreak"))return false;
+  const neighbor=parent.child(neighborIndex);
+  if(neighbor.type.name==="wavePageBreak")return false;
+  const swapped=direction==="up"
+   ?Fragment.from(neighbor).append(selected)
+   :selected.append(Fragment.from(neighbor));
+  const first=direction==="up"?neighborIndex:range.start;
+  const last=direction==="up"?range.end:neighborIndex+1;
+  if(!parent.canReplace(first,last,swapped))return false;
+  const from=direction==="up"?range.from-neighbor.nodeSize:range.from;
+  const to=direction==="up"?range.to:range.to+neighbor.nodeSize;
+  if(from<0||to>doc.content.size)return false;
+  view.dispatch(state.tr.replaceWith(from,to,swapped).scrollIntoView());
+  return true;
+ }
  const pos=selectedWaveBlockPos(editor);
  return typeof pos==="number"&&moveWaveBlock(editor,()=>pos,direction);
 }
@@ -132,6 +187,16 @@ export function nestSelectedWaveBlock(editor:Editor):boolean{
 /** Duplicate selected block in place. This is a document edit, not a note copy. */
 export function duplicateSelectedWaveBlock(editor:Editor):boolean{
  if(!editor.isEditable||editor.isDestroyed)return false;
+ const range=selectedWaveSiblingRange(editor);
+ if(range&&range.end-range.start>1){
+  const {state,view}=editor;
+  const parent=state.selection.$from.node(range.depth);
+  const nodes=parent.content.cut(waveChildOffset(parent,range.start),waveChildOffset(parent,range.end));
+  if(nodes.content.some(node=>node.type.name==="wavePageBreak"))return false;
+  if(!parent.canReplace(range.end,range.end,nodes))return false;
+  view.dispatch(state.tr.insert(range.to,nodes).scrollIntoView());
+  return true;
+ }
  const pos=selectedWaveBlockPos(editor);
  if(pos===undefined||pos<0)return false;
  const {doc}=editor.state,$pos=doc.resolve(pos),parent=$pos.parent,index=$pos.index();

@@ -1140,13 +1140,13 @@ function EditorPage() {
             onClick={()=>moveCurrentPage(editor,"down")}>Стр. ↓</button>
           <span className="mx-1 h-4 w-px bg-border"/>
           <button type="button" aria-label="Поднять блок" title="Поднять выбранный блок" className="rounded-md border px-2 py-1 text-xs"
-            onClick={()=>moveSelectedWaveBlock(editor,"up")}>↑</button>
+            title="Переместить блок или выделенную группу вверх" onClick={()=>moveSelectedWaveBlock(editor,"up")}>↑</button>
           <button type="button" aria-label="Опустить блок" title="Опустить выбранный блок" className="rounded-md border px-2 py-1 text-xs"
-            onClick={()=>moveSelectedWaveBlock(editor,"down")}>↓</button>
+            title="Переместить блок или выделенную группу вниз" onClick={()=>moveSelectedWaveBlock(editor,"down")}>↓</button>
           <button type="button" aria-label="Вложить блок в раздел" title="Переместить блок в предыдущий раздел"
             className="rounded-md border px-2 py-1 text-xs" onClick={()=>nestSelectedWaveBlock(editor)}>↘</button>
           <button type="button" aria-label="Дублировать блок" title="Дублировать выбранный блок"
-            className="rounded-md border px-2 py-1 text-xs" onClick={()=>duplicateSelectedWaveBlock(editor)}>⧉</button>
+            className="rounded-md border px-2 py-1 text-xs" title="Дублировать блок или выделенную группу" onClick={()=>duplicateSelectedWaveBlock(editor)}>⧉</button>
           <select aria-label="Изменить тип информационного блока" defaultValue=""
             className="max-w-32 rounded-md border border-border bg-background px-1 py-1 text-xs"
             onChange={event=>{

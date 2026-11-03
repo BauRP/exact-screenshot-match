@@ -175,6 +175,9 @@ jobs:
       - name: Test real ProseMirror child offsets
         run: bun scripts/test-wave-child-offset.ts
 
+      - name: Test multi-block selection moves, duplicates and page protection
+        run: bun scripts/test-wave-multi-block.ts
+
       - name: Execute actual block move, nesting and outdent transactions
         run: bun scripts/test-wave-block-actual-transactions.ts
 
