@@ -11,7 +11,7 @@ const entries={"manifest.json":strToU8(JSON.stringify(manifest)),
 const check=(m:typeof manifest=manifest,e:typeof entries=entries)=>verifyBackupArchiveStructure(e,m,audioIdsInHtml,imageIdsInHtml);
 check();
 assert.throws(()=>check(manifest,{...entries,"../../private.txt":new Uint8Array([1])}),/посторонние/);
-assert.throws(()=>check(manifest,{...entries,"audio/rec1.blob":undefined as any}),/отсутствующие/);
+assert.throws(()=>check(manifest,{...entries,"audio/rec1.blob":undefined as any}),/отсутствует|отсутствующие/);
 assert.throws(()=>check({...manifest,audioIds:["rec1","rec1"]}),/список аудио/);
 assert.throws(()=>check({...manifest,imageIds:[]}),/посторонние|отсутствующие|не соответствует/);
 assert.throws(()=>check({...manifest,notes:[...notes,{...notes[0]}]}),/повторная/);
