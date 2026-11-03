@@ -7,6 +7,13 @@ assert.equal(directionForText("Қазақ тілі"),"ltr");
 assert.equal(directionForText("English ثم العربية"),"ltr");
 assert.equal(directionForText("123 שלום hello"),"rtl");
 assert.equal(directionForText("123"),"ltr");
+assert.equal(directionForText("١٢٣ English مرحبا"),"ltr","Arabic-Indic numerals are neutral");
+assert.equal(directionForText("۱۲۳ Қазақша سلام"),"ltr","Persian numerals are neutral");
+assert.equal(directionForText("١٢٣ مرحبا Hello"),"rtl");
+assert.equal(directionForText("🇰🇿 123 שלום"),"rtl","Emoji and digits are neutral");
+assert.equal(directionForText("    日本語 ثم العربية"),"ltr","First CJK letter is LTR");
+assert.equal(directionForText("... ٩٨٧ سلام"),"rtl");
+
 const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
 assert.ok(editor.includes('textDirection:directionForText(node.textContent)'));
 assert.ok(editor.includes('aria-label="Автоматическое направление текста"'));
