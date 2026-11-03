@@ -18,6 +18,7 @@ import {
   Search,
  } from "lucide-react";
 import { sendFeedback } from "@/lib/feedback.functions";
+import {validateFeedback,sendNativeFeedback,feedbackFailureMessage,loadFeedbackDraft,saveFeedbackDraft,clearFeedbackDraft} from "@/lib/feedback-client";
 import { AdMobDiagnosticsPanel } from "@/components/AdMobDiagnosticsPanel";
 import { isAutomaticBackupEnabled, setAutomaticBackupEnabled, restoreLocalBackup } from "@/lib/local-backup";
 import { invalidateConsentForSession, requestConsentForSession } from "@/lib/admob-session";
@@ -178,6 +179,10 @@ function SettingsPage() {
   const [fbTopic, setFbTopic] = useState("");
   const [fbText, setFbText] = useState("");
   const [fbSending, setFbSending] = useState(false);
+  const fbSendingRef=useRef(false);
+  const [fbError,setFbError]=useState("");
+  const [fbUncertain,setFbUncertain]=useState(false);
+  useEffect(()=>{const draft=loadFeedbackDraft();setFbTopic(draft.topic);setFbText(draft.text);},[]);
   const [backupBusy, setBackupBusy] = useState(false);
   const [automaticBackup, setAutomaticBackup] = useState(false);
   const [editorPrefs,setEditorPrefs]=useState(()=>readEditorPreferences());
@@ -294,33 +299,30 @@ function SettingsPage() {
     action?.();
   };
 
-  const submitFeedback = async () => {
-    const topic = fbTopic.trim();
-    const text = fbText.trim();
-    if (!topic || !text || fbSending) return;
-    setFbSending(true);
-    try {
-      const { Capacitor, registerPlugin } = await import("@capacitor/core");
-      if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android") {
-        // The offline APK does not include a TanStack feedback server.
-        // Android's email composer sends only after the user confirms.
-        const email = registerPlugin<{ compose(options: { subject: string; message: string }): Promise<void> }>("FeedbackEmail");
-        await email.compose({ subject: topic, message: text });
-        toast.info("Открыта почта. Для доставки предложения нажмите «Отправить».");
-        setFeedbackOpen(false);
-      } else {
-        const res = await sendFeedback({ data: { topic, text } });
-        if (!res?.ok) throw new Error("Feedback service unavailable");
-        toast.success(t("fb_sent"));
-        setFbTopic("");
-        setFbText("");
-        setFeedbackOpen(false);
+  const submitFeedback=async()=>{
+    if(fbSendingRef.current)return;
+    const topic=fbTopic.trim(),text=fbText.trim();
+    const invalid=validateFeedback(topic,text);
+    if(invalid){setFbError(invalid);return;}
+    fbSendingRef.current=true;
+    setFbSending(true);setFbError("");
+    saveFeedbackDraft(fbTopic,fbText);
+    try{
+      const {Capacitor}=await import("@capacitor/core");
+      if(Capacitor.isNativePlatform()&&Capacitor.getPlatform()==="android"){
+        const result=await sendNativeFeedback(topic,text);
+        if(!result.ok){setFbUncertain(Boolean(result.uncertain));setFbError(feedbackFailureMessage(result));return;}
+      }else{
+        const result=await sendFeedback({data:{topic,text}});
+        if(!result?.ok)throw Error("Не удалось подтвердить отправку");
       }
-    } catch {
-      toast.error(t("fb_failed"));
-    } finally {
-      setFbSending(false);
-    }
+      clearFeedbackDraft();setFbTopic("");setFbText("");setFbUncertain(false);
+      toast.success("Спасибо! Ваше сообщение отправлено");
+      setFeedbackOpen(false);
+    }catch{
+      setFbUncertain(true);
+      setFbError("Не удалось подтвердить доставку. Сообщение могло прийти. Проверьте перед повтором.");
+    }finally{fbSendingRef.current=false;setFbSending(false);}
   };
 
   const enableBiometrics = async () => {
@@ -539,8 +541,8 @@ function SettingsPage() {
             </>
           ) : null}
           <div className="h-px bg-border" />
-          <Row icon={<MessageSquarePlus className="h-4 w-4" />} title={t("ideas_wishes")}>
-            <Btn onClick={() => setFeedbackOpen(true)}>{t("fb_send")}</Btn>
+          <Row icon={<MessageSquarePlus className="h-4 w-4" />} title={t("ideas_wishes")} hint="Расскажите, что добавить или улучшить в приложении">
+            <Btn onClick={() => {setFbError("");setFeedbackOpen(true);}}>{t("fb_send")}</Btn>
           </Row>
         </Section>
 
@@ -655,7 +657,7 @@ function SettingsPage() {
             <Btn
               variant="primary"
               onClick={submitFeedback}
-              disabled={fbSending || !fbTopic.trim() || !fbText.trim()}
+              disabled={fbSending || !fbTopic.trim() || !fbText.trim() || fbText.length>3000}
             >
               <Send className="mr-1.5 h-3.5 w-3.5" />
               {t("fb_send")}
@@ -664,21 +666,26 @@ function SettingsPage() {
         }
       >
         <div className="grid gap-2">
+          <p className="text-xs text-muted-foreground">Ваше сообщение будет отправлено разработчику приложения через Telegram для рассмотрения предложения.</p>
+          {fbError&&<p role="alert" className="text-xs text-destructive">{fbError}</p>}
+          {fbUncertain&&<p className="text-xs text-muted-foreground">Автоматических повторов нет. Перед повтором проверьте, не было ли доставки.</p>}
           <input
             autoFocus
             value={fbTopic}
-            onChange={(e) => setFbTopic(e.target.value.slice(0, 200))}
+            onChange={(e) => {const value=e.target.value.slice(0,200);setFbTopic(value);saveFeedbackDraft(value,fbText);setFbError("");setFbUncertain(false);}}
             placeholder={t("fb_topic")}
             className="h-9 w-full rounded-xl border border-border bg-secondary/40 px-3 text-sm outline-none focus:border-primary"
           />
           <textarea
             rows={5}
             value={fbText}
-            onChange={(e) => setFbText(e.target.value.slice(0, 4000))}
-            placeholder={t("fb_text")}
+            onChange={(e) => {const value=e.target.value.slice(0,3000);setFbText(value);saveFeedbackDraft(fbTopic,value);setFbError("");setFbUncertain(false);}}
+            placeholder="Напишите ваше пожелание или сообщите о проблеме"
+            maxLength={3000}
             className="w-full resize-none rounded-xl border border-border bg-secondary/40 px-3 py-2 text-sm outline-none focus:border-primary"
           />
-        </div>
+ 
+          <div className="text-right text-xs text-muted-foreground">{fbText.length} / 3000</div>       </div>
       </Modal>
 
       <BottomNav />
