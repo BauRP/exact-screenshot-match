@@ -184,6 +184,9 @@ jobs:
       - name: Verify live editor settings and page navigation
         run: bun scripts/test-wave-live-editor-preferences.ts
 
+      - name: Verify writing and media toolbar presets
+        run: bun scripts/test-wave-toolbar-presets.ts
+
       - name: Verify customizable toolbar and page breaks
         run: bun scripts/test-wave-toolbar-pages.ts
 
