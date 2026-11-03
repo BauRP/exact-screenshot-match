@@ -31,3 +31,9 @@ assert.ok(home.includes('aria-label="Путь к папке"'));
 assert.ok(home.includes('aria-expanded={!collapsed.has(folder.id)}'));
 assert.ok(home.includes('!folderAncestors(folders,folder.id).slice(0,-1).some'));
 console.log("Nested folder parent picker, subtree notes and hierarchy rendering are wired");
+
+assert.ok(home.includes('aria-label="Открыть папки"'));
+assert.ok(home.includes('aria-label="Дерево папок"'));
+assert.ok(home.includes('className="flex max-w-[min(22rem,90vw)]'));
+assert.ok(home.includes('setDrawerOpen(false)'));
+assert.ok(home.includes("setNativeAdDialogBlocked(drawerOpen ||"));
