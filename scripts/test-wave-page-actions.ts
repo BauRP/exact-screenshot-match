@@ -1,7 +1,7 @@
 import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection} from "@tiptap/pm/state";
-import {duplicateCurrentPage,moveCurrentPage,topLevelPageRanges,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeEmptyCurrentPage} from "../src/lib/wave-page-actions";
+import {duplicateCurrentPage,moveCurrentPage,topLevelPageRanges,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage} from "../src/lib/wave-page-actions";
 const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},wavePageBreak:{group:"block",atom:true,attrs:{label:{default:""}}},waveFold:{group:"block",content:"block+"},text:{group:"inline"}},marks:{}});
 const p=(s:string)=>schema.nodes.paragraph.create(null,schema.text(s));
 const page=(s:string)=>schema.nodes.wavePageBreak.create({label:s});
@@ -44,3 +44,12 @@ choose(1);
 assert.equal(removeEmptyCurrentPage(editor),true);
 assert.equal(topLevelPageRanges(state.doc).length,4);
 console.log("Safe page duplication, merge and before/after insertion passed");
+
+const beforeText=state.doc.textContent;
+choose(0);assert.equal(insertBlankPageAfter(editor),true);
+choose(1);assert.equal(insertBlankPageAfter(editor),true);
+assert.equal(topLevelPageRanges(state.doc).length,6);
+assert.equal(removeAllEmptyPages(editor),2);
+assert.equal(topLevelPageRanges(state.doc).length,4);
+assert.equal(state.doc.textContent,beforeText);
+assert.equal(removeAllEmptyPages(editor),0);
