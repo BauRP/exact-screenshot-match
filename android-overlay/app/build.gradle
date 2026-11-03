@@ -9,13 +9,11 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
-        def feedbackToken = System.getenv("WAVE_FEEDBACK_BOT_TOKEN") ?: ""
         def relayUrl = System.getenv("WAVE_FEEDBACK_RELAY_URL") ?: ""
         if (relayUrl && !(relayUrl ==~ /^https:\/\/[A-Za-z0-9.-]+(:443)?\/feedback$/)) {
             throw new GradleException("WAVE_FEEDBACK_RELAY_URL must be HTTPS and end with /feedback")
         }
         buildConfigField "String", "WAVE_FEEDBACK_RELAY_URL", '"' + relayUrl.replace('\\', '\\\\').replace('"', '\\"') + '"'
-        buildConfigField "String", "WAVE_FEEDBACK_BOT_TOKEN", '"' + feedbackToken.replace('\\', '\\\\').replace('"', '\\"') + '"'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         multiDexEnabled true
         aaptOptions {
