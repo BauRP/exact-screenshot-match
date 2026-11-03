@@ -1,6 +1,5 @@
 package app.lovable.supernotes;
 
-import android.content.pm.PackageInfo;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
@@ -16,19 +15,12 @@ import java.net.UnknownHostException;
 import java.net.URL;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
-import java.util.TimeZone;
 import javax.net.ssl.HttpsURLConnection;
 
 /**
- * One-way Telegram feedback from the offline Android APK. The token is passed
- * only at compile time through a private Gradle environment variable.
- *
- * IMPORTANT: A public APK cannot securely conceal this token. A token-bearing
- * test build must only be made available through an unpublished draft release.
- * Never print the connection URL, token, user text, or HTTP response body.
+ * One-way HTTPS feedback for the Android APK. The Telegram bot credential
+ * exists only on the private relay, not in Android BuildConfig or the APK.
+ * Never log the user's message or the HTTP response payload.
  */
 @CapacitorPlugin(name = "TelegramFeedback")
 public final class TelegramFeedbackPlugin extends Plugin {
@@ -53,31 +45,6 @@ public final class TelegramFeedbackPlugin extends Plugin {
         out.put("ok", true);
         out.put("messageId", messageId);
         return out;
-    }
-
-    private static String appLabel(android.content.Context context) {
-        return context.getApplicationInfo().loadLabel(context.getPackageManager()).toString();
-    }
-
-    private String realVersion() {
-        try {
-            PackageInfo info = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(), 0);
-            return info.versionName == null ? "неизвестна" : info.versionName;
-        } catch (Exception ignored) {
-            return "неизвестна";
-        }
-    }
-
-    /** Plain text only; never use Telegram HTML/Markdown parse_mode. */
-    private String message(String topic, String text) {
-        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z", Locale.ROOT);
-        format.setTimeZone(TimeZone.getDefault());
-        return "💡 Новое пожелание — " + appLabel(getContext()) + "\n\n" +
-            "Тип: Пожелание\n" +
-            "Тема: " + topic + "\n" +
-            "Версия приложения: " + realVersion() + "\n" +
-            "Дата: " + format.format(new Date()) + "\n\n" +
-            "Сообщение пользователя:\n" + text;
     }
 
     private static String readLimited(InputStream input) throws Exception {
@@ -153,64 +120,6 @@ public final class TelegramFeedbackPlugin extends Plugin {
         } finally { if (connection != null) connection.disconnect(); }
     }
 
-    // Legacy direct Telegram transport is allowed only for a strictly private
-    // temporary developer test. Never bundle its key in a public release.
-    private JSObject deliver(String token, String topic, String text) {
-        HttpsURLConnection connection = null;
-        try {
-            URL url = new URL("https://api.telegram.org/bot" + token + "/sendMessage");
-            connection = (HttpsURLConnection) url.openConnection();
-            connection.setRequestMethod("POST");
-            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
-            connection.setReadTimeout(READ_TIMEOUT_MS);
-            connection.setDoOutput(true);
-            connection.setInstanceFollowRedirects(false);
-            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-
-            JSONObject payload = new JSONObject();
-            payload.put("chat_id", GROUP_ID);
-            payload.put("text", message(topic, text));
-            payload.put("disable_web_page_preview", true);
-            byte[] body = payload.toString().getBytes(StandardCharsets.UTF_8);
-            connection.setFixedLengthStreamingMode(body.length);
-            try (OutputStream output = connection.getOutputStream()) {
-                output.write(body);
-            }
-            int status = connection.getResponseCode();
-            String response = readLimited(status >= 200 && status < 300
-                ? connection.getInputStream() : connection.getErrorStream());
-            JSONObject telegram = new JSONObject(response);
-            if (status == 200 && telegram.optBoolean("ok", false)) {
-                JSONObject sent = telegram.optJSONObject("result");
-                JSONObject chat = sent == null ? null : sent.optJSONObject("chat");
-                int messageId = sent == null ? 0 : sent.optInt("message_id", 0);
-                if (chat != null && chat.optLong("id", 0) == GROUP_ID && messageId > 0) {
-                    return success(messageId);
-                }
-                return failure("unconfirmed", status, 0, true);
-            }
-            JSONObject parameters = telegram.optJSONObject("parameters");
-            int retryAfter = parameters == null ? 0
-                : Math.min(3600, Math.max(0, parameters.optInt("retry_after", 0)));
-            if (status == 429) return failure("rate_limit", status, retryAfter, false);
-            if (status == 400) return failure("request", status, 0, false);
-            if (status == 401) return failure("unauthorized", status, 0, false);
-            if (status == 403) return failure("forbidden", status, 0, false);
-            if (status >= 500) return failure("server", status, 0, true);
-            return failure("rejected", status, 0, false);
-        } catch (UnknownHostException error) {
-            return failure("offline", 0, 0, false);
-        } catch (SocketTimeoutException error) {
-            // Telegram may have delivered the message even if the response timed out.
-            // Never retry automatically because Bot API sendMessage has no dedupe key.
-            return failure("timeout", 0, 0, true);
-        } catch (Exception error) {
-            return failure("network", 0, 0, true);
-        } finally {
-            if (connection != null) connection.disconnect();
-        }
-    }
-
     @PluginMethod
     public void send(PluginCall call) {
         String topic = call.getString("topic", "");
@@ -222,15 +131,12 @@ public final class TelegramFeedbackPlugin extends Plugin {
             return;
         }
         String relayUrl = BuildConfig.WAVE_FEEDBACK_RELAY_URL;
-        String token = BuildConfig.WAVE_FEEDBACK_BOT_TOKEN;
-        if ((relayUrl == null || relayUrl.isEmpty()) && (token == null || token.isEmpty())) {
+        if (relayUrl == null || relayUrl.isEmpty()) {
             call.resolve(failure("setup", 0, 0, false));
             return;
         }
         // Network I/O must never block the Android main thread.
-        new Thread(() -> call.resolve(relayUrl != null && !relayUrl.isEmpty()
-            ? deliverViaRelay(relayUrl, topic.trim(), text.trim())
-            : deliver(token, topic.trim(), text.trim())),
+        new Thread(() -> call.resolve(deliverViaRelay(relayUrl, topic.trim(), text.trim())),
             "wave-feedback-http").start();
     }
 }
