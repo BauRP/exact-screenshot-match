@@ -88,6 +88,9 @@ jobs:
       - name: Verify Telegram feedback draft, request safety and build mode
         run: bun scripts/test-wave-telegram-feedback.ts
 
+      - name: Verify credential-free Telegram relay contract
+        run: node scripts/test-wave-feedback-relay.mjs
+
       - name: Verify yellow new-note defaults and Save button
         run: bun scripts/test-note-default-save.ts
 
@@ -469,6 +472,8 @@ jobs:
       - name: Compile APK
         working-directory: android
         env:
+          # Public URL only. Secret bot credentials live on the HTTPS relay.
+          WAVE_FEEDBACK_RELAY_URL: ${{ vars.WAVE_FEEDBACK_RELAY_URL }}
           WAVE_FEEDBACK_BOT_TOKEN: ${{ github.event_name == 'workflow_dispatch' && inputs.feedback_telegram_test && secrets.WAVE_FEEDBACK_BOT_TOKEN || '' }}
         run: |
           set -euo pipefail
