@@ -39,5 +39,5 @@ assert.deepEqual(valid.map(e=>e.id),["same","other"],"Deduplicate IDs and exclud
 assert.equal(valid[0].at,now+5*60_000,"Prefer nearest due time for the same note");
 assert.deepEqual(reminderSchedule([dupe("one",1)],Number.NaN),[]);
 assert.deepEqual(reminderSchedule([dupe("one",1)],Number.POSITIVE_INFINITY),[]);
-assert.deepEqual(reminderSchedule([dupe("one",1.5)],now),[],"Noninteger due timestamps are rejected");
+assert.deepEqual(reminderSchedule([{...dupe("one",1),reminderAt:now+60_000.5}],now),[],"Noninteger due timestamps are rejected");
 
