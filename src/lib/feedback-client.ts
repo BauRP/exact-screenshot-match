@@ -21,7 +21,7 @@ export function feedbackFailureMessage(result: FeedbackResult): string {
     return "Не удалось подтвердить доставку. Сообщение могло прийти. Перед повтором проверьте Telegram, чтобы не отправить дубликат.";
   }
   switch (result.kind) {
-    case "setup": return "Разработчик ещё не подключил Telegram к этой сборке приложения.";
+    case "setup": return "В этой версии приложения отправка в Telegram не настроена.";
     case "offline": return "Нет интернета. Сообщение сохранено как черновик.";
     case "rate_limit": return result.retryAfter
       ? `Telegram временно ограничил отправку. Попробуйте через ${result.retryAfter} секунд.`
