@@ -274,6 +274,9 @@ jobs:
       - name: Verify cross-format attachment markers and list pagination
         run: bun scripts/test-wave-export-attachment-markers.ts
 
+      - name: Verify Word formatting and safe XML attributes
+        run: bun scripts/test-wave-docx-rich-styles.ts
+
       - name: Verify embedded Word pictures and annotations
         run: bun scripts/test-wave-docx-media.ts
 
