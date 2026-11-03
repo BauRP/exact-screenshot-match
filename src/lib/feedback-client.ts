@@ -24,7 +24,7 @@ export function feedbackFailureMessage(result: FeedbackResult): string {
     case "setup": return "Разработчик ещё не подключил Telegram к этой сборке приложения.";
     case "offline": return "Нет интернета. Сообщение сохранено как черновик.";
     case "rate_limit": return result.retryAfter
-      ? \`Telegram временно ограничил отправку. Попробуйте через \${result.retryAfter} секунд.\`
+      ? `Telegram временно ограничил отправку. Попробуйте через ${result.retryAfter} секунд.`
       : "Telegram временно ограничил отправку. Попробуйте позже.";
     case "unauthorized": return "Telegram отклонил ключ бота. Сообщите разработчику.";
     case "forbidden": return "У бота нет права отправлять сообщения в группу.";
