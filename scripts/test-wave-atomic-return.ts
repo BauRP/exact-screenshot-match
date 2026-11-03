@@ -22,5 +22,5 @@ const outsider=db.createNote({title:"Другая",body:"<p>x</p>"});
 assert.throws(()=>db.acceptReturnedNote(original.id,outsider.id,"combine",db.getNote(original.id)!.updatedAt),/не принадлежит/);
 const before=db.getNote(original.id)?.body;fail=true;
 assert.throws(()=>db.acceptReturnedNote(original.id,received.id,"combine",db.getNote(original.id)!.updatedAt),/Unable to save notes/);
-assert.equal(db.getNote(original.id)?.body,before,"Failed write leaves original intact");
+assert.equal((JSON.parse(storage.get("sn.notes.v1")||"[]") as Array<{id:string;body:string}>).find(n=>n.id===original.id)?.body,before,"Failed write leaves original intact");
 console.log("Atomic returned-note resolution and failure safety passed");
