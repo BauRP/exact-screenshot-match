@@ -130,6 +130,9 @@ jobs:
       - name: Verify compact selected actions and mobile list continuation
         run: bun scripts/test-wave-editor-menu.ts
 
+      - name: Reject malformed or ambiguous Wave Notes archives
+        run: bun scripts/test-wave-transfer-archive.ts
+
       - name: Verify single-file Wave Notes transfer without overwrites
         run: bun scripts/test-wave-transfer.ts
 

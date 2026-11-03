@@ -47,14 +47,29 @@ function parseManifest(files:Record<string,Uint8Array>):Envelope{
     !Array.isArray(p.audioIds)||p.audioIds.length>50||typeof p.hasPdf!=="boolean"||
     p.audioIds.some(id=>!ID.test(id))||
     (p.imageIds!==undefined&&(!Array.isArray(p.imageIds)||p.imageIds.length>50||p.imageIds.some(id=>typeof id!=="string"||!ID.test(id)))))throw Error("Недопустимые данные заметки");
+ // Refuse ambiguous, duplicated and unexpected archive members before writing
+ // any binary attachment to IndexedDB. A .wnote is not a general ZIP importer.
+ const imageIds=p.imageIds||[];
+ const declared=[...p.audioIds,...imageIds];
+ if(new Set(p.audioIds).size!==p.audioIds.length||
+    new Set(imageIds).size!==imageIds.length)throw Error("В архиве повторяются идентификаторы вложений");
+ const expected=new Set(["manifest.json",...p.audioIds.map(id=>"audio/"+id+".blob"),
+    ...imageIds.map(id=>"images/"+id+".blob"),...(p.hasPdf?["document.pdf"]:[])]);
+ if(Object.keys(files).some(name=>!expected.has(name))||Object.keys(files).length!==expected.size)
+   throw Error("Неожиданное или отсутствующее содержимое архива");
+ const audioRefs=audioIdsInHtml(n.body);
+ const imageRefs=imageIdsInHtml(n.body);
+ if(audioRefs.some(id=>!p.audioIds!.includes(id))||
+    p.audioIds.some(id=>!audioRefs.includes(id))||
+    imageRefs.some(id=>!imageIds.includes(id))||
+    imageIds.some(id=>!imageRefs.includes(id)))
+   throw Error("Вложения архива не совпадают с содержимым заметки");
  const refs=audioIdsInHtml(n.body);
  if(refs.some(id=>!p.audioIds!.includes(id)))throw Error("Вложение заметки отсутствует в описании");
  for(const id of p.audioIds){
   if(!files["audio/"+id+".blob"]?.byteLength)throw Error("Отсутствует аудиозапись");
  }
- const imageIds=p.imageIds||[];
- const imageRefs=imageIdsInHtml(n.body);
- if(imageRefs.some(id=>!imageIds.includes(id)))throw Error("Вложение фотографии отсутствует в описании");
+
  for(const id of imageIds){
   if(!files["images/"+id+".blob"]?.byteLength)throw Error("Отсутствует фотография");
   imageBlobFromBytes(files["images/"+id+".blob"]);
