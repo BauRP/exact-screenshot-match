@@ -70,7 +70,7 @@ import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection,directionForText} from "@/lib/wave-text-direction";
 import {collectNoteOutline,filterNoteOutline,type OutlineFilter,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
 import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
-import {duplicateCurrentPage,moveCurrentPage,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeEmptyCurrentPage} from "@/lib/wave-page-actions";
+import {duplicateCurrentPage,moveCurrentPage,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage} from "@/lib/wave-page-actions";
 import {revealOutlinePosition} from "@/lib/wave-outline-navigation";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
@@ -1086,6 +1086,11 @@ function EditorPage() {
           <button type="button" aria-label="Удалить пустую текущую страницу" disabled={currentPage<=1}
             className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
             onClick={()=>{if(!removeEmptyCurrentPage(editor))toast("Удалить можно только пустую страницу");}}>Пустую −</button>
+          <button type="button" aria-label="Удалить все пустые страницы"
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{const count=removeAllEmptyPages(editor);if(count)toast.success("Удалено пустых страниц: "+count);else toast("Пустых страниц нет");}}>
+            Убрать пустые
+          </button>
           <button type="button" aria-label="Дублировать текущую страницу" className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>{if(!duplicateCurrentPage(editor))toast("Не удалось дублировать страницу");}}>Копия страницы</button>
           <button type="button" aria-label="Переместить страницу выше" disabled={currentPage<=2}
