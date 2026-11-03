@@ -10,6 +10,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import java.util.Calendar;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import androidx.core.content.ContextCompat;
@@ -53,7 +54,10 @@ public class NativeReminderPlugin extends Plugin {
     String id=e.optString("id","");
     long at=e.optLong("at",0);
     if(!id.matches("[a-zA-Z0-9_-]{1,128}")||at<=System.currentTimeMillis()||at>=4102444800000L)continue;
-    JSONObject item=new JSONObject();item.put("id",id);item.put("at",at);next.put(item);
+    JSONObject item=new JSONObject();item.put("id",id);item.put("at",at);
+    String repeat=e.optString("repeat","");
+    if("daily".equals(repeat)||"weekly".equals(repeat))item.put("repeat",repeat);
+    next.put(item);
    }
    SharedPreferences prefs=getContext().getSharedPreferences(PREF,Context.MODE_PRIVATE);
    JSONArray old=new JSONArray(prefs.getString(KEY,"[]"));
@@ -63,6 +67,39 @@ public class NativeReminderPlugin extends Plugin {
    JSObject result=new JSObject();result.put("count",next.length());
    result.put("granted",allowed(getContext()));call.resolve(result);
   }catch(Exception e){call.reject("Ошибка расписания",e);}
+ }
+ /** Advance by CALENDAR days in local time so a 9:00 reminder stays at
+  * 9:00 across daylight-saving changes, including when the phone was off. */
+ static long futureOccurrence(long previous,String repeat,long now){
+  int step="daily".equals(repeat)?1:"weekly".equals(repeat)?7:0;
+  if(step==0||previous<=0||previous>=4102444800000L)return -1L;
+  if(previous>now)return previous;
+  Calendar cal=Calendar.getInstance();
+  cal.setTimeInMillis(previous);
+  long passed=Math.max(0,(now-previous)/(86400000L*step)-2L);
+  int advance=(int)Math.min(passed,30000L);
+  if(advance>0)cal.add(Calendar.DAY_OF_YEAR,advance*step);
+  for(int i=0;i<8&&cal.getTimeInMillis()<=now;i++)cal.add(Calendar.DAY_OF_YEAR,step);
+  long result=cal.getTimeInMillis();
+  return result>now&&result<4102444800000L?result:-1L;
+ }
+ static void restore(Context c){
+  try{
+   SharedPreferences prefs=c.getSharedPreferences(PREF,Context.MODE_PRIVATE);
+   JSONArray items=new JSONArray(prefs.getString(KEY,"[]"));
+   long now=System.currentTimeMillis();
+   boolean changed=false;
+   for(int i=0;i<items.length();i++){
+    JSONObject item=items.optJSONObject(i);
+    if(item==null)continue;
+    long at=item.optLong("at",0);
+    if(at>now)continue;
+    long next=futureOccurrence(at,item.optString("repeat",""),now);
+    if(next>now){item.put("at",next);changed=true;}
+   }
+   if(changed&&!prefs.edit().putString(KEY,items.toString()).commit())return;
+   schedule(c,items);
+  }catch(Exception ignored){}
  }
  static PendingIntent alarm(Context c,int id){
   Intent intent=new Intent(c,AlarmReceiver.class);intent.putExtra("id",id);
@@ -90,8 +127,7 @@ public class NativeReminderPlugin extends Plugin {
    if(!Intent.ACTION_BOOT_COMPLETED.equals(action)&&!Intent.ACTION_TIME_CHANGED.equals(action)&&
       !Intent.ACTION_TIMEZONE_CHANGED.equals(action))return;
    try{
-    String raw=c.getSharedPreferences(PREF,Context.MODE_PRIVATE).getString(KEY,"[]");
-    schedule(c,new JSONArray(raw));
+    restore(c);
    }catch(Exception ignored){}
   }
  }
@@ -111,7 +147,22 @@ public class NativeReminderPlugin extends Plugin {
    builder.setSmallIcon(R.drawable.ic_notification).setContentTitle("Напоминание Wave Notes")
     .setContentText("Откройте приложение, чтобы посмотреть напоминания")
     .setContentIntent(click).setAutoCancel(true);
-   manager.notify(intent==null?0:intent.getIntExtra("id",0),builder.build());
+   int slot=intent==null?-1:intent.getIntExtra("id",-1)-BASE;
+   if(slot<0||slot>=MAX)return;
+   manager.notify(BASE+slot,builder.build());
+   // Repeating reminders must also fire after the app is closed. Persist
+   // only ID, recurrence and timestamp; never copy note text into alarms.
+   try{
+    SharedPreferences prefs=c.getSharedPreferences(PREF,Context.MODE_PRIVATE);
+    JSONArray list=new JSONArray(prefs.getString(KEY,"[]"));
+    JSONObject item=list.optJSONObject(slot);
+    if(item==null)return;
+    long next=futureOccurrence(item.optLong("at",0),item.optString("repeat",""),System.currentTimeMillis());
+    if(next>System.currentTimeMillis()){
+     item.put("at",next);
+     if(prefs.edit().putString(KEY,list.toString()).commit())schedule(c,list);
+    }
+   }catch(Exception e){android.util.Log.w("WaveNotes","Unable to advance reminder",e);}
   }
  }
 }

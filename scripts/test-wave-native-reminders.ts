@@ -17,3 +17,18 @@ assert.ok(manifest.includes("RECEIVE_BOOT_COMPLETED"));
 assert.ok(editor.includes("requestNativeReminderPermission()"));
 assert.ok(store.includes("queueNativeReminderSync(state.notes)"));
 console.log("Android reminder alarm schedule, user consent and reboot wiring verified");
+
+const pastDaily={id:"daily",title:"private",body:"private",createdAt:now,updatedAt:now,
+ reminderAt:now-86400000*5,reminderRepeat:"daily" as const};
+const pastWeekly={...pastDaily,id:"weekly",reminderRepeat:"weekly" as const};
+const staleSingle={...pastDaily,id:"once",reminderRepeat:undefined};
+const recurrent=reminderSchedule([pastDaily,pastWeekly,staleSingle],now);
+assert.equal(recurrent.length,2);
+assert.ok(recurrent.every(e=>e.at>now&&e.at<now+8*86400000));
+assert.ok(recurrent.some(e=>e.id==="daily"&&e.repeat==="daily"));
+assert.ok(recurrent.some(e=>e.id==="weekly"&&e.repeat==="weekly"));
+assert.ok(native.includes("futureOccurrence("));
+assert.ok(native.includes("Calendar.DAY_OF_YEAR"));
+assert.ok(native.includes('item.put("repeat",repeat)'));
+assert.ok(native.includes("manager.notify(BASE+slot"));
+assert.ok(native.includes('prefs.edit().putString(KEY,list.toString()).commit()'));
