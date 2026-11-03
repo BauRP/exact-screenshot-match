@@ -113,8 +113,8 @@ export function moveSelectedWaveBlock(editor:Editor,direction:"up"|"down"):boole
   const neighbor=parent.child(neighborIndex);
   if(neighbor.type.name==="wavePageBreak")return false;
   const swapped=direction==="up"
-   ?Fragment.from(neighbor).append(selected)
-   :selected.append(Fragment.from(neighbor));
+   ?selected.append(Fragment.from(neighbor))
+   :Fragment.from(neighbor).append(selected);
   const first=direction==="up"?neighborIndex:range.start;
   const last=direction==="up"?range.end:neighborIndex+1;
   if(!parent.canReplace(first,last,swapped))return false;
