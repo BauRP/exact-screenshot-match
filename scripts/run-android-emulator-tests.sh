@@ -48,49 +48,10 @@ if [[ "$api" == "24" ]]; then
   # --no-streaming uses the older push+PackageManager installation path.
   adb install --no-streaming -r -t android/app/build/outputs/apk/debug/app-debug.apk
   adb install --no-streaming -r -t android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-  test "$(adb shell pm list packages app.lovable.supernotes.test | tr -d '\r' | grep -c '^package:app.lovable.supernotes.test
-stop_logger
-trap - EXIT
-
-if (( result != 0 )); then
-  echo "WAVE_ANDROID_FAILURE_DIAGNOSTICS status=${result} api=${api}"
-  echo "--- Emulator connectivity at failure ---"
-  adb devices -l || true
-  ps -ef | grep -E '[e]mulator|[q]emu-system' | tail -n 16 || true
-  echo "--- Final logcat messages (even if emulator died before shutdown) ---"
-  tail -n 125 "$logfile" || true
-  echo "--- Android crash and WebView evidence (captured before emulator shutdown) ---"
-  grep -aE -A 16 -B 4 \
-    'FATAL EXCEPTION|AndroidRuntime|Process: app.lovable.supernotes|AssertionError|Unable to start activity|Caused by: java|WAVE_LAYOUT|WebView|INSTRUMENTATION_STATUS|am_crash' \
-    "$logfile" | tail -n 260 || true
-  echo "--- Android instrumentation JUnit failure details ---"
-  python3 - <<'PY'
-from pathlib import Path
-from xml.etree import ElementTree
-
-root = Path("android/app/build/outputs/androidTest-results")
-files = sorted(root.rglob("*.xml")) if root.exists() else []
-print(f"instrumentation_xml_count={len(files)}")
-for file in files:
-    try:
-        tree = ElementTree.parse(file)
-    except (OSError, ElementTree.ParseError) as exc:
-        print(f"unreadable_xml={file}: {exc}")
-        continue
-    for case in tree.iter("testcase"):
-        for tag in ("failure", "error"):
-            for item in case.findall(tag):
-                print(f"FAILED_TEST {case.get('classname')}#{case.get('name')}: {item.get('message')}")
-                print((item.text or "")[:9000])
-if not files:
-    print("No XML results: inspect captured Android logcat for device disconnection.")
-PY
-fi
-
-# Never turn real test errors into success. In particular, API 36 failed its
-# first UI test in the previous run and must remain red until diagnosed.
-exit "$result"
-)" -eq 1
+  if ! adb shell pm list packages app.lovable.supernotes.test | tr -d '\r' | grep -q '^package:app.lovable.supernotes.test$'; then
+    echo "::error::Android 7 test package was not installed"
+    exit 1
+  fi
   echo WAVE_API24_REAL_INSTRUMENTATION_BEGIN
   legacy_output="android-test-diagnostics/instrumentation-api24.txt"
   set +e
