@@ -240,6 +240,9 @@ function commit(patch: Partial<DatabaseSnapshot>) {
     ...patch,
     revision: state.revision + 1,
   };
+  if(patch.notes && patch.status!=="error"){
+    void import("./native-reminders").then(mod=>mod.queueNativeReminderSync(state.notes)).catch(console.error);
+  }
   emit();
 }
 
@@ -966,3 +969,6 @@ export function importBackupNotes(imported: Note[]): number {
   commit({ notes: next, hydrated: true, status: "ready", error: null });
   return additions.length;
 }
+
+/** Read-only snapshot for Android alarm reconstruction after launch. */
+export function getAllSavedNotes():readonly Note[]{return state.hydrated&&state.status==="ready"?state.notes:[];}
