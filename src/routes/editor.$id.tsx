@@ -1094,6 +1094,9 @@ function EditorPage() {
           <button type="button" aria-label="Следующая страница" disabled={currentPage>=pagePositions.length}
             className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
             onClick={()=>editor.chain().focus().setTextSelection(pagePositions[currentPage]).run()}>›</button>
+          <details className="w-full sm:w-auto">
+            <summary className="cursor-pointer select-none rounded-md border px-3 py-1 text-xs font-medium">Страницы · управление</summary>
+            <div className="mt-2 flex flex-wrap items-center gap-1">
           {currentPage>1&&<button type="button" aria-label="Переименовать текущую страницу"
             className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>{
@@ -1143,7 +1146,11 @@ function EditorPage() {
           <button type="button" aria-label="Переместить страницу ниже" disabled={currentPage<=1||currentPage>=pagePositions.length}
             className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
             onClick={()=>moveCurrentPage(editor,"down")}>Стр. ↓</button>
-          <span className="mx-1 h-4 w-px bg-border"/>
+            </div>
+          </details>
+          <details className="w-full sm:w-auto">
+            <summary className="cursor-pointer select-none rounded-md border px-3 py-1 text-xs font-medium">Блоки · управление</summary>
+            <div className="mt-2 flex flex-wrap items-center gap-1">
           <button type="button" aria-label="Поднять блок или группу" className="rounded-md border px-2 py-1 text-xs"
             title="Переместить блок или выделенную группу вверх" onClick={()=>moveSelectedWaveBlock(editor,"up")}>↑</button>
           <button type="button" aria-label="Опустить блок или группу" className="rounded-md border px-2 py-1 text-xs"
@@ -1170,6 +1177,8 @@ function EditorPage() {
           <button type="button" aria-label="Дублировать раздел" title="Дублировать раздел со всеми блоками" className="rounded-md border px-2 py-1 text-xs" onClick={()=>duplicateContainingWaveSection(editor)}>Раздел ⧉</button>
           <button type="button" aria-label="Вынести блок из раздела" title="Вынести блок из вложенного раздела" className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>liftWaveBlock(editor,()=>selectedWaveBlockPos(editor))}>↗</button>
+            </div>
+          </details>
         </div>}
         {outlineOpen&&<div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-border bg-card p-2"
           role="navigation" aria-label="Оглавление заметки">
@@ -1178,10 +1187,6 @@ function EditorPage() {
               className="rounded-md border px-2 py-1.5 text-xs">Раскрыть все</button>
             <button type="button" onClick={()=>setAllFoldSections(editor,true)}
               className="rounded-md border px-2 py-1.5 text-xs">Свернуть все</button>
-            <button type="button" onClick={()=>setFoldSectionsToDepth(editor,1)}
-              className="rounded-md border px-2 py-1.5 text-xs">1 уровень</button>
-            <button type="button" onClick={()=>setFoldSectionsToDepth(editor,2)}
-              className="rounded-md border px-2 py-1.5 text-xs">2 уровня</button>
             <button type="button" onClick={()=>setFoldSectionsToDepth(editor,1)}
               className="rounded-md border px-2 py-1.5 text-xs">Уровень 1</button>
             <button type="button" onClick={()=>setFoldSectionsToDepth(editor,2)}

@@ -11,3 +11,10 @@ for(const marker of ['toolVisible("audio")','toolVisible("drawing")','toolVisibl
 assert.ok(page.includes("data-wave-page-break"));
 assert.ok(css.includes("break-after:page"));
 console.log("Toolbar preferences and explicit page breaks are wired to editor and settings");
+
+const source=readFileSync("src/routes/editor.$id.tsx","utf8");
+assert.ok(source.includes("Страницы · управление"));
+assert.ok(source.includes("Блоки · управление"));
+assert.ok(source.includes("Разделить здесь"));
+assert.ok(!source.includes(">1 уровень</button>"));
+assert.ok(!source.includes(">2 уровня</button>"));
