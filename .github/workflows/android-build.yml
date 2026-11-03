@@ -3,12 +3,6 @@ name: Android APK - Wave Notes
 # One click in Actions -> Run workflow. Pushing the staging branch tests the setup.
 on:
   workflow_dispatch:
-    inputs:
-      feedback_telegram_test:
-        description: 'Build a short-lived feedback test APK using a GitHub Secret. NEVER publish this APK.'
-        type: boolean
-        required: false
-        default: false
   push:
     branches:
       - main
@@ -457,24 +451,11 @@ jobs:
 
           test -s android/app/src/main/assets/public/index.html
 
-      - name: Verify optional feedback test secret is configured
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.feedback_telegram_test }}
-        env:
-          WAVE_FEEDBACK_BOT_TOKEN: ${{ secrets.WAVE_FEEDBACK_BOT_TOKEN }}
-        run: |
-          if [ -z "$WAVE_FEEDBACK_BOT_TOKEN" ]; then
-            echo "::error::Configure Settings > Secrets and variables > Actions > WAVE_FEEDBACK_BOT_TOKEN"
-            exit 1
-          fi
-          # Only a local boolean, never log or echo the secret.
-          echo "Feedback test secret is present."
-
       - name: Compile APK
         working-directory: android
         env:
           # Public URL only. Secret bot credentials live on the HTTPS relay.
           WAVE_FEEDBACK_RELAY_URL: ${{ vars.WAVE_FEEDBACK_RELAY_URL }}
-          WAVE_FEEDBACK_BOT_TOKEN: ${{ github.event_name == 'workflow_dispatch' && inputs.feedback_telegram_test && secrets.WAVE_FEEDBACK_BOT_TOKEN || '' }}
         run: |
           set -euo pipefail
           chmod +x gradlew
@@ -496,26 +477,10 @@ jobs:
           echo "Source commit: \`$GITHUB_SHA\`" >> "$GITHUB_STEP_SUMMARY"
           echo "SHA-256: \`$(cut -d' ' -f1 output/SuperNotes-debug.apk.sha256)\`" >> "$GITHUB_STEP_SUMMARY"
 
-      # Token-free debug APK only: downloadable by the owner for local
-      # private testing and offline post-build customization. Never upload
-      # an APK containing feedback credentials to this public repository.
-      - name: Upload credential-free APK for private local test preparation
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.feedback_telegram_test) }}
+      - name: Upload token-free APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Wave-Notes-base-APK-no-token
-          path: output/SuperNotes-debug.apk
-          retention-days: 1
-          if-no-files-found: error
-
-      # A token-bearing test APK must never be uploaded to a public Release.
-      # ACTIONS artifacts may still be accessible to repository readers.
-      # Keep this opt-in one-day artifact strictly for an owner's short test.
-      - name: Upload opt-in feedback test APK (short-lived, no public Release)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.feedback_telegram_test }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: Wave-Notes-Telegram-feedback-test
+          name: Wave-Notes-APK-no-Telegram-credentials
           path: output/SuperNotes-debug.apk
           retention-days: 1
           if-no-files-found: error
@@ -524,7 +489,6 @@ jobs:
 
       # The app is published as ONE replaceable GitHub Release asset instead.
       - name: Publish APK with a download link
-        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.feedback_telegram_test) }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
