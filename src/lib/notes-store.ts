@@ -1,4 +1,5 @@
 import {validReminderTime} from "./note-reminders";
+import {combineReturnedBodies} from "./wave-note-conflicts";
 import { useSyncExternalStore } from "react";
 import { markBackupDirty } from "./backup-signals";
 import { NEW_NOTE_YELLOW,NEW_NOTE_INK } from "./note-appearance";
@@ -691,6 +692,39 @@ export function updateNote(id: string, patch: Partial<Note>) {
   if(typeof patch.body==="string"&&oldBody!==undefined&&patch.body!==oldBody){
     void reclaimDetachedAttachments(oldBody);
   }
+}
+
+/**
+ * Commit a returned editable .wnote and a safety copy together, or not at all.
+ * The earlier multi-write path could leave a backup without a replacement.
+ */
+export function acceptReturnedNote(originalId:string,receivedId:string,mode:"replace"|"combine",expectedUpdatedAt:number):Note{
+  ensureReadyForMutation();
+  if(originalId===receivedId||!(mode==="replace"||mode==="combine"))throw Error("Неверный выбор версий");
+  const original=state.notes.find(note=>note.id===originalId);
+  const received=state.notes.find(note=>note.id===receivedId);
+  if(!original||!received||original.kind==="pdf"||received.kind==="pdf")
+    throw Error("Для объединения нужны две текстовые заметки");
+  const lineage=original.originId??original.id;
+  if(received.originId!==lineage&&received.originId!==original.id)
+    throw Error("Полученная версия не принадлежит исходной заметке");
+  if(original.updatedAt!==expectedUpdatedAt)
+    throw Error("Исходная заметка изменилась. Проверьте версии заново");
+  const now=Date.now();
+  let backupId=createId();
+  while(state.notes.some(note=>note.id===backupId))backupId=createId();
+  const backup:Note={...original,id:backupId,title:original.title+" — до замены",
+    originId:lineage,pinned:false,manualOrder:undefined,createdAt:now,updatedAt:now};
+  const changed:Note={...original,updatedAt:now,
+    ...(mode==="replace"
+      ? {title:received.title.replace(/ — получено$/,""),body:received.body,style:received.style}
+      : {body:combineReturnedBodies(original,received)})};
+  // Original identity and local reminder preferences remain unchanged.
+  // The backup still references the old attachments, so do not delete them.
+  const next=[backup,...state.notes.map(note=>note.id===originalId?changed:note)];
+  persistNotes(next);
+  commit({notes:next,hydrated:true,status:"ready",error:null});
+  return backup;
 }
 
 /** Reschedule every overdue reminder in the active folder atomically.

@@ -7,10 +7,10 @@ const native=readFileSync("android-overlay/app/src/main/java/app/lovable/superno
 for(const marker of ["findReturnedOriginal","n.id===originId","n.originId===originId","combineReturnedBodies","replacementBackup","source.title+\" — до замены\"","local.body+","received.body"]){
  assert.ok(helper.includes(marker),marker);
 }
-for(const marker of ['doImportWave("copy")','doImportWave("replace")','doImportWave("combine")','createNote(replacementBackup(','updateNote(original.id','receiveWaveNote(incomingWave.file','returnedOriginal?.kind!=="pdf"']){
+for(const marker of ['doImportWave("copy")','doImportWave("replace")','doImportWave("combine")','acceptReturnedNote(original.id,incoming.id,mode,original.updatedAt)','receiveWaveNote(incomingWave.file','returnedOriginal?.kind!=="pdf"']){
  assert.ok(home.includes(marker),marker);
 }
 assert.ok(transfer.includes('kind:envelope.note.kind==="pdf"?"pdf":"note"'));
 assert.ok(native.includes('if(System.currentTimeMillis()-started<300){clean();'));
-assert.ok(home.indexOf("createNote(replacementBackup(")<home.indexOf("updateNote(original.id,{body:incoming.body"),"Backup must be saved before replacement");
+assert.ok(readFileSync("src/lib/notes-store.ts","utf8").includes("export function acceptReturnedNote"),"Atomic accept function must exist");
 console.log("Safe note-return choices, audio release and version preservation verified");

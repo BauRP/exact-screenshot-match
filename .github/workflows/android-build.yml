@@ -301,6 +301,9 @@ jobs:
       - name: Verify safe returned note preview
         run: bun scripts/test-wave-return-preview.ts
 
+      - name: Verify atomic returned-note replacement and rollback
+        run: bun scripts/test-wave-atomic-return.ts
+
       - name: Verify safe return-note conflicts and audio cleanup
         run: bun scripts/test-wave-return-conflicts.ts
 

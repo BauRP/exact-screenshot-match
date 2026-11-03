@@ -94,7 +94,7 @@ import { useT } from "@/lib/i18n";
 import { pickPdfFile, savePdfFile } from "@/lib/pdf-files";
 import { toast } from "sonner";
 import {inspectWaveFile,receiveWaveNote,shareWaveNote} from "@/lib/note-transfer";
-import {findReturnedOriginal,combineReturnedBodies,replacementBackup,returnedNoteComparison} from "@/lib/wave-note-conflicts";
+import {findReturnedOriginal,returnedNoteComparison} from "@/lib/wave-note-conflicts";
 import {noteMatchesSearch,type NoteSearchFilter} from "@/lib/note-search";
 import {shareNoteExport,type NoteExportFormat} from "@/lib/note-export";
 import {reminderIsDue,snoozeReminderTime,reminderLabel,type ReminderSnooze} from "@/lib/note-reminders";
@@ -300,16 +300,10 @@ function Index() {
       if(mode==="copy"){
         toast.success("Заметка получена как отдельная копия");
       }else if(original){
-        if(mode==="replace"){
-          // Never replace a user's only copy: the backup is a real note,
-          // saved before changing the original.
-          createNote(replacementBackup(original,crypto.randomUUID()));
-          updateNote(original.id,{body:incoming.body,style:incoming.style,title:incoming.title.replace(/ — получено$/,"")});
-          toast.success("Исходная версия сохранена как резервная заметка");
-        }else{
-          updateNote(original.id,{body:combineReturnedBodies(original,incoming)});
-          toast.success("Обе версии объединены. Полученная копия также сохранена");
-        }
+        acceptReturnedNote(original.id,incoming.id,mode,original.updatedAt);
+        toast.success(mode==="replace"
+          ?"Исходная версия сохранена отдельной копией"
+          :"Обе версии объединены, предыдущая версия сохранена");
       }
       setIncomingWave(null);
     }catch(error){toast.error(error instanceof Error?error.message:"Не удалось получить заметку");}
