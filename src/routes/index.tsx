@@ -22,6 +22,7 @@ import {
   Plus,
   ListChecks,
   Search,
+  PanelLeft,
   Table2,
   Trash2,
 } from "lucide-react";
@@ -48,6 +49,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {Sheet,SheetContent,SheetHeader,SheetTitle} from "@/components/ui/sheet";
 import {
   addFolder,
   deleteFolder,
@@ -153,13 +155,14 @@ function Index() {
   const [transferBusy,setTransferBusy]=useState(false);
   const [incomingWave,setIncomingWave]=useState<{file:File;title:string;originId:string;kind:"note"|"pdf";preview:string;comparisonText:string;visibleLength:number;audioCount:number;imageCount:number;modifiedAt:number|null}|null>(null);
   const [folderDialog, setFolderDialog] = useState<FolderDialogState>(null);
+  const [drawerOpen,setDrawerOpen]=useState(false);
   // The menu floats above the list without moving folders or ads.
   // Google renders native ads above WebView; temporarily hide that overlay
   // while the popup is open so the popup remains readable and clickable.
   useEffect(() => {
-    setNativeAdDialogBlocked(menuOpen || renameValue !== null || confirmDelete || Boolean(folderDialog) || exportDialog || Boolean(incomingWave) || colorDialog || moveDialog);
+    setNativeAdDialogBlocked(drawerOpen || menuOpen || renameValue !== null || confirmDelete || Boolean(folderDialog) || exportDialog || Boolean(incomingWave) || colorDialog || moveDialog);
     return () => setNativeAdDialogBlocked(false);
-  }, [menuOpen, renameValue, confirmDelete, folderDialog, exportDialog, incomingWave, colorDialog, moveDialog]);
+  }, [drawerOpen,menuOpen, renameValue, confirmDelete, folderDialog, exportDialog, incomingWave, colorDialog, moveDialog]);
 
   // Selection is scoped to the folder being viewed and to notes that still exist.
   useEffect(() => setSelected(new Set()), [activeFolder]);
@@ -403,6 +406,10 @@ function Index() {
           title={t("general")}
           right={
             <>
+              <button type="button" aria-label="Открыть папки" aria-expanded={drawerOpen}
+                onClick={()=>setDrawerOpen(true)} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary">
+                <PanelLeft className="h-4 w-4"/>
+              </button>
               <button type="button" aria-label="Поиск по заметкам" aria-expanded={searchOpen}
                 onClick={()=>setSearchOpen(value=>!value)}
                 className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-secondary text-foreground hover:bg-secondary/70">
@@ -604,6 +611,28 @@ function Index() {
         </main>
       )}
 
+      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <SheetContent side="left" aria-describedby={undefined}
+          className="flex max-w-[min(22rem,90vw)] flex-col overflow-hidden pt-[max(3rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+          <SheetHeader><SheetTitle>Папки Wave Notes</SheetTitle></SheetHeader>
+          <nav aria-label="Дерево папок" className="mt-4 min-h-0 flex-1 space-y-1 overflow-y-auto">
+            {folders.map(folder=>{
+              const depth=Math.min(5,folderDepth(folders,folder.id));
+              const count=notes.filter(note=>folder.id==="all"||
+                descendantFolderIds(folders,folder.id).has(note.folderId??"all")).length;
+              return <button key={folder.id} type="button"
+                aria-current={activeFolder===folder.id?"page":undefined}
+                onClick={()=>{setActiveFolder(folder.id);setDrawerOpen(false);}}
+                className={"flex min-h-11 w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm "+
+                  (activeFolder===folder.id?"bg-primary text-primary-foreground":"hover:bg-secondary") }
+                style={{paddingLeft:(12+depth*15)+"px"}}>
+                <span className="min-w-0 truncate">{localizedFolderName(folder)}</span>
+                <span className="ml-2 rounded-md border border-current/20 px-1.5 text-xs">{count}</span>
+              </button>;
+            })}
+          </nav>
+        </SheetContent>
+      </Sheet>
       <Dialog open={Boolean(incomingWave)} onOpenChange={open=>{if(!open&&!transferBusy)setIncomingWave(null)}}>
         <DialogContent className="max-w-sm rounded-2xl">
           <DialogHeader><DialogTitle>Получить заметку Wave Notes</DialogTitle></DialogHeader>
