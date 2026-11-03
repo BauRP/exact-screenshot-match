@@ -1,4 +1,3 @@
-
 package app.lovable.supernotes;
 
 import com.getcapacitor.JSObject;
@@ -24,8 +23,8 @@ public final class TelegramFeedbackPlugin extends Plugin {
 
     private static final long GROUP_ID = -5591888667L;
 
-    // ЗАМЕНИ ТОЛЬКО ТЕКСТ ВНУТРИ КАВЫЧЕК НА ТОКЕН БОТА.
-    private static final String BOT_TOKEN = "ВСТАВЬ_РЕАЛЬНЫЙ_ТОКЕН";
+    // Telegram-бот Tengri Studio Feedback
+    private static final String BOT_TOKEN = "9182440482:AAEa10MIKzQNCXOmY14MR7j2Rn_8nqr3NAA";
 
     private static final int MAX_TOPIC = 200;
     private static final int MAX_TEXT = 3000;
