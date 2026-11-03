@@ -142,6 +142,9 @@ jobs:
       - name: Verify atomic completion of overdue reminders
         run: bun scripts/test-wave-bulk-reminder-completion.ts
 
+      - name: Verify Android reminder scheduling and permission wiring
+        run: bun scripts/test-wave-native-reminders.ts
+
       - name: Verify daily and weekly repeating reminders
         run: bun scripts/test-wave-recurring-reminders.ts
 
