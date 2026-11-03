@@ -271,6 +271,9 @@ jobs:
       - name: Verify real PDF export RTL writing and task shortcuts
         run: bun scripts/test-wave-pdf-rtl.ts
 
+      - name: Verify cross-format attachment markers and list pagination
+        run: bun scripts/test-wave-export-attachment-markers.ts
+
       - name: Verify embedded Word pictures and annotations
         run: bun scripts/test-wave-docx-media.ts
 
