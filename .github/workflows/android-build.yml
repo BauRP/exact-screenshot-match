@@ -85,6 +85,9 @@ jobs:
       - name: TypeScript static checks
         run: bunx tsc --noEmit
 
+      - name: Verify Telegram feedback draft, request safety and build mode
+        run: bun scripts/test-wave-telegram-feedback.ts
+
       - name: Verify yellow new-note defaults and Save button
         run: bun scripts/test-note-default-save.ts
 
