@@ -11,6 +11,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import java.util.Calendar;
+import java.util.HashSet;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import androidx.core.content.ContextCompat;
@@ -48,12 +49,14 @@ public class NativeReminderPlugin extends Plugin {
   if(incoming==null){call.reject("Нет расписания напоминаний");return;}
   try{
    JSONArray next=new JSONArray();
+   HashSet<String> seenIds=new HashSet<>();
    for(int i=0;i<incoming.length()&&next.length()<MAX;i++){
     JSONObject e=incoming.optJSONObject(i);
     if(e==null)continue;
     String id=e.optString("id","");
     long at=e.optLong("at",0);
-    if(!id.matches("[a-zA-Z0-9_-]{1,128}")||at<=System.currentTimeMillis()||at>=4102444800000L)continue;
+    if(!id.matches("[a-zA-Z0-9_-]{1,128}")||seenIds.contains(id)||at<=System.currentTimeMillis()||at>=4102444800000L)continue;
+    seenIds.add(id);
     JSONObject item=new JSONObject();item.put("id",id);item.put("at",at);
     String repeat=e.optString("repeat","");
     if("daily".equals(repeat)||"weekly".equals(repeat))item.put("repeat",repeat);
