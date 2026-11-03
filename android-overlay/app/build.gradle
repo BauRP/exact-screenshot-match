@@ -9,6 +9,8 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+        def feedbackToken = System.getenv("WAVE_FEEDBACK_BOT_TOKEN") ?: ""
+        buildConfigField "String", "WAVE_FEEDBACK_BOT_TOKEN", '"' + feedbackToken.replace('\\', '\\\\').replace('"', '\\"') + '"'
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         multiDexEnabled true
         aaptOptions {
@@ -17,6 +19,7 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    buildFeatures { buildConfig true }
     buildTypes {
         release {
             minifyEnabled false
