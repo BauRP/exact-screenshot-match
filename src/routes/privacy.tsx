@@ -37,7 +37,17 @@ function PrivacyPage() {
       </header>
       <main className="flex flex-1 flex-col items-center justify-center gap-5 px-6 text-center">
         <ShieldCheck className="h-12 w-12 text-primary" />
-        <p className="text-sm text-muted-foreground">Официальная политика конфиденциальности Wave Notes от Tengrize studio опубликована на нашем сайте.</p>
+        <p className="text-sm text-muted-foreground">Официальная политика конфиденциальности Wave Notes опубликована на нашем сайте.</p>
+        <p className="text-xs text-muted-foreground">
+          Ваши заметки остаются на устройстве. Если вы сами отправляете пожелание разработчику,
+          текст пожелания передаётся через Telegram в закрытую группу разработчика.
+          Мы не прикладываем к нему ваши заметки, контакты и местоположение.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Notes stay on your device. If you voluntarily submit feedback, its text is sent
+          through Telegram to the developer’s private group. Notes, contacts and location
+          are not attached to feedback.
+        </p>
         <button onClick={() => void openOfficialPolicy()} className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-3 font-semibold text-primary-foreground">
           Перейти на сайт <ArrowUpRight className="h-4 w-4" />
         </button>
