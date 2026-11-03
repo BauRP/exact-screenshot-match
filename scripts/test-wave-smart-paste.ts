@@ -16,3 +16,8 @@ for(const token of ["element.style.backgroundColor","out.style.backgroundColor=h
  assert.ok(paste.includes(token),token);
 }
 assert.ok(!paste.includes("out.style.cssText"),"Never paste arbitrary clipboard styles");
+assert.ok(paste.includes('!url.username&&!url.password&&url.href.length<=2048'),
+ "Imported browser links must not contain embedded credentials or huge URLs");
+assert.ok(paste.includes('if(url.protocol==="http:"||url.protocol==="https:")')===false,
+ "No permissive unconditional URL acceptance");
+
