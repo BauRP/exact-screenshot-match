@@ -87,7 +87,7 @@ export const ru: Dict = {
   strike: "Зачёркнутый",
   not_found: "Заметка не найдена",
   to_list: "К списку",
-  ideas_wishes: "Ваши идеи и пожелания",
+  ideas_wishes: "Ваши пожелания",
   fb_topic: "Тема",
   fb_text: "Что улучшить",
   fb_send: "Отправить",
