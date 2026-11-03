@@ -107,6 +107,29 @@ export function mergeCurrentPageWithNext(editor:Editor):boolean{
  return true;
 }
 
+
+/** Remove all truly empty pages in ONE undoable document transaction.
+ * Page 1 is never removed. Work backwards so positions don't shift;
+ * keep every non-empty page, binary reference, style and nested block. */
+export function removeAllEmptyPages(editor:Editor):number{
+ if(!editor.isEditable||editor.isDestroyed)return 0;
+ const {doc}=editor.state,pages=topLevelPageRanges(doc),removed:number[]=[];
+ for(let i=1;i<pages.length;i++){
+  const p=pages[i],body=doc.content.cut(p.bodyStart,p.end);
+  if(body.childCount===1&&body.firstChild?.type.name==="paragraph"&&
+    body.firstChild.content.size===0)removed.push(i);
+ }
+ if(!removed.length)return 0;
+ let tr=editor.state.tr;
+ for(let i=removed.length-1;i>=0;i--){
+  const page=pages[removed[i]];
+  tr=tr.delete(page.start,page.end);
+ }
+ if(!tr.doc.type.validContent(tr.doc.content))return 0;
+ editor.view.dispatch(tr.scrollIntoView());
+ return removed.length;
+}
+
 /** Erase only a completely empty page. Never remove text, photos, drawings,
  * audio, checklists, or a page that contains even one non-empty nested block. */
 export function removeEmptyCurrentPage(editor:Editor):boolean{
