@@ -26,3 +26,7 @@ assert.equal(safeMarkdownInline("[danger](https://user:pass@example.com/)"),
 assert.ok(structuredMarkdownClipboardHtml("# Title\n- **bold**\n- *italic*").includes("<strong>bold</strong>"));
 assert.ok(structuredMarkdownClipboardHtml("> ~~gone~~\n# Header").includes("<s>gone</s>"));
 assert.ok(structuredMarkdownClipboardHtml("## Code\n- `x < y`").includes("<code>x &lt; y</code>"));
+
+assert.equal(safeMarkdownInline("[invalid](https://%)"),"[invalid](https://%)");
+assert.equal(safeMarkdownInline("**good** [invalid](https://%)"),
+ "<strong>good</strong> [invalid](https://%)");

@@ -144,12 +144,13 @@ export function safeMarkdownInline(text:string):string{
   else if(match[4]!==undefined)output+="<code>"+escape(match[4])+"</code>";
   else if(match[5]!==undefined||match[6]!==undefined)output+="<em>"+escape(match[5]??match[6])+"</em>";
   else{
-   const url=new URL(match[8]);
-   // Fully qualified browser links only. These are inert markup and can
-   // open only through the existing external-browser consent path.
-   if(["http:","https:"].includes(url.protocol)&&!url.username&&!url.password)
-    output+='<a href="'+escape(url.href)+'">'+escape(match[7])+"</a>";
-   else output+=escape(match[0]);
+   try{
+    const url=new URL(match[8]);
+    // Invalid clipboard URLs must never crash the editor paste handler.
+    if(["http:","https:"].includes(url.protocol)&&!url.username&&!url.password)
+     output+='<a href="'+escape(url.href)+'">'+escape(match[7])+"</a>";
+    else output+=escape(match[0]);
+   }catch{output+=escape(match[0]);}
   }
   last=tokens.lastIndex;
  }
