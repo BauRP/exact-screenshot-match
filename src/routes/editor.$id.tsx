@@ -484,8 +484,8 @@ function EditorPage() {
     if(isNew||!editor||savingRef.current)return;
     savingRef.current=true;setSaving(true);
     try{
-      const body=editor.getHTML();
       await Promise.allSettled([...pendingImagesRef.current]);
+      const body=editor.getHTML();
       const copy=saveDraftAfterExternalChange(id,{
         title:title.trim()||note?.title||"Заметка",body,
         folderId,pinned:false,style:{background:canvasBg,paperMood,paperRule},
