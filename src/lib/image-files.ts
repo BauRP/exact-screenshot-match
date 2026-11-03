@@ -70,11 +70,44 @@ export function imageIdsInHtml(html:string):string[]{
 }
 
 /** Verify the actual bytes, rather than trusting MIME or extension in an imported ZIP. */
+/** Reject truncated and implausible imported image containers before storing
+ * binary attachments. Full pixel decoding still happens in Android WebView. */
 export function imageBlobFromBytes(bytes:Uint8Array):Blob{
- if(bytes.byteLength===0||bytes.byteLength>LIMIT)throw Error("Повреждённая или слишком большая фотография");
- const png=bytes.length>=8&&bytes[0]===137&&bytes[1]===80&&bytes[2]===78&&bytes[3]===71&&bytes[4]===13&&bytes[5]===10&&bytes[6]===26&&bytes[7]===10;
- const jpeg=bytes.length>=3&&bytes[0]===255&&bytes[1]===216&&bytes[2]===255;
- const webp=bytes.length>=12&&String.fromCharCode(...bytes.slice(0,4))==="RIFF"&&String.fromCharCode(...bytes.slice(8,12))==="WEBP";
- if(!png&&!jpeg&&!webp)throw Error("Формат изображения в архиве не поддерживается");
- return new Blob([bytes.slice().buffer],{type:png?"image/png":jpeg?"image/jpeg":"image/webp"});
+ const length=bytes.byteLength;
+ if(length<16||length>LIMIT)throw Error("Повреждённая или слишком большая фотография");
+ const read32=(offset:number)=>((bytes[offset]*0x1000000)+(bytes[offset+1]<<16)+(bytes[offset+2]<<8)+bytes[offset+3])>>>0;
+ const isPng=length>=33&&bytes[0]===137&&bytes[1]===80&&bytes[2]===78&&bytes[3]===71&&
+  bytes[4]===13&&bytes[5]===10&&bytes[6]===26&&bytes[7]===10;
+ if(isPng){
+  const width=read32(16),height=read32(20);
+  if(read32(8)!==13||String.fromCharCode(...bytes.slice(12,16))!=="IHDR"||
+     !width||!height||width>20000||height>20000||width*height>100_000_000||
+     bytes[24]===0||bytes[24]>16)throw Error("Повреждённый заголовок PNG");
+  // A real PNG terminates with IEND, not just the eight-byte signature.
+  const end=length-12;
+  if(end<33||read32(end)!==0||String.fromCharCode(...bytes.slice(end+4,end+8))!=="IEND")
+   throw Error("Неполный PNG: отсутствует конец изображения");
+  return new Blob([bytes.slice().buffer],{type:"image/png"});
+ }
+ const isJpeg=length>=4&&bytes[0]===255&&bytes[1]===216&&bytes[2]===255;
+ if(isJpeg){
+  // JPEG files may include trailing camera metadata; inspect the final
+  // 64 bytes for an end-of-image marker instead of requiring it at EOF.
+  let completed=false;
+  for(let i=Math.max(2,length-64);i<length-1;i++)if(bytes[i]===255&&bytes[i+1]===217)completed=true;
+  if(!completed)throw Error("Неполный JPEG: отсутствует конец изображения");
+  return new Blob([bytes.slice().buffer],{type:"image/jpeg"});
+ }
+ const isWebp=length>=20&&String.fromCharCode(...bytes.slice(0,4))==="RIFF"&&
+  String.fromCharCode(...bytes.slice(8,12))==="WEBP";
+ if(isWebp){
+  const riffSize=(bytes[4]|(bytes[5]<<8)|(bytes[6]<<16)|(bytes[7]<<24))>>>0;
+  const chunk=String.fromCharCode(...bytes.slice(12,16));
+  const chunkLength=(bytes[16]|(bytes[17]<<8)|(bytes[18]<<16)|(bytes[19]<<24))>>>0;
+  if(riffSize+8>length||riffSize<12||!["VP8 ","VP8L","VP8X"].includes(chunk)||
+     chunkLength===0||20+chunkLength>length)
+   throw Error("Неполный или повреждённый WebP");
+  return new Blob([bytes.slice().buffer],{type:"image/webp"});
+ }
+ throw Error("Формат изображения в архиве не поддерживается");
 }

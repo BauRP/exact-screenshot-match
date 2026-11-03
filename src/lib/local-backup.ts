@@ -121,6 +121,10 @@ async function writeBackup(blob: Blob): Promise<void> {
   await Filesystem.writeFile({ path: STAGING_FILE, directory: Directory.Data, data });
   const stage = await Filesystem.stat({ path: STAGING_FILE, directory: Directory.Data });
   if (stage.size !== blob.size) throw new Error("Ошибка проверки размера резервной копии");
+  // A matching file size alone does not prove that Android wrote valid ZIP
+  // contents. Verify the staged snapshot before replacing the good backup.
+  // On failure the existing active backup is untouched and recoverable.
+  await validateFullBackup(await readStored(STAGING_FILE));
   // Pending is known complete and recoverable even if Android closes the app
   // between the write of active and cleanup of staging.
   await Filesystem.writeFile({ path: BACKUP_FILE, directory: Directory.Data, data });
