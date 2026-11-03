@@ -394,6 +394,12 @@ function EditorPage() {
       imageSessionRef.current=false;
       if(nativeRecordingRef.current){
         nativeRecordingRef.current=false;
+        // Discard never writes an attachment. Settle the recording promise
+        // before the abandoned draft's cleanup awaits it, otherwise that
+        // cleanup could remain pending forever after unmount.
+        settleRecordingRef.current?.resolve();
+        settleRecordingRef.current=null;
+        recordingWriteRef.current=null;
         void cancelNativeAudio().catch(error=>console.error("Microphone discard failed",error));
       }
       if (!committedNoteRef.current) {

@@ -11,3 +11,9 @@ assert.ok(editor.includes("if(nativeRecordingRef.current){"));
 assert.ok(editor.includes('toast.error("Не удалось выключить микрофон")'));
 assert.ok(editor.includes("if(recordingWriteRef.current)await recordingWriteRef.current;"));
 console.log("Native audio discard, permission-race cleanup and save sequencing verified");
+
+const abandon=editor.indexOf("if(nativeRecordingRef.current){");
+const settle=editor.indexOf("settleRecordingRef.current?.resolve();",abandon);
+const cleanup=editor.indexOf("const pending=recordingWriteRef.current;",abandon);
+assert.ok(abandon>=0&&settle>abandon&&cleanup>settle,
+ "Abandoned microphone promise must settle before orphan cleanup");
