@@ -3,10 +3,10 @@ import { z } from "zod";
 
 const FeedbackInput = z.object({
   topic: z.string().trim().min(1).max(200),
-  text: z.string().trim().min(1).max(4000),
+  text: z.string().trim().min(1).max(3000),
 });
 
-const CHAT_ID = "8345856853";
+const CHAT_ID = "-5591888667";
 
 export const sendFeedback = createServerFn({ method: "POST" })
   .validator((data) => FeedbackInput.parse(data))
@@ -40,7 +40,10 @@ export const sendFeedback = createServerFn({ method: "POST" })
         console.error("Telegram sendMessage failed", res.status, await res.text());
         return { ok: false, status: res.status } as const;
       }
-      return { ok: true, status: 200 } as const;
+      const confirmation=await res.json();
+      if(confirmation?.ok!==true || confirmation?.result?.chat?.id?.toString()!==CHAT_ID ||
+         !Number.isInteger(confirmation?.result?.message_id)) return {ok:false,status:200} as const;
+      return {ok:true,status:200} as const;
     } catch (err) {
       console.error("Telegram sendMessage error", err);
       return { ok: false, status: 0 } as const;
