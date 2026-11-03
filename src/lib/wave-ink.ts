@@ -1,6 +1,6 @@
 /** Offline vector ink with bounded markup, no server, base64 or binary files. */
 export type InkPoint=[number,number];
-export type InkStroke={tool:"pen"|"marker"|"line";color:string;width:number;points:InkPoint[]};
+export type InkStroke={tool:"pen"|"marker"|"line"|"rectangle";color:string;width:number;points:InkPoint[]};
 const COLORS=new Set(["#161b22","#e11d48","#2563eb","#16a34a","#f8fafc","#f59e0b"]);
 export function parseInk(encoded:unknown):InkStroke[]{
  if(typeof encoded!=="string"||encoded.length>120000)return [];
@@ -11,11 +11,12 @@ export function parseInk(encoded:unknown):InkStroke[]{
  for(const raw of parsed){
   if(!raw||typeof raw!=="object")return [];
   const item=raw as Record<string,unknown>;
-  if(item.tool!=="pen"&&item.tool!=="marker"&&item.tool!=="line")return [];
+  if(item.tool!=="pen"&&item.tool!=="marker"&&item.tool!=="line"&&item.tool!=="rectangle")return [];
   if(typeof item.color!=="string"||!COLORS.has(item.color))return [];
   if(typeof item.width!=="number"||!Number.isFinite(item.width)||item.width<1||item.width>28)return [];
   if(!Array.isArray(item.points)||item.points.length===0||item.points.length>500||
-     (item.tool==="line"&&item.points.length!==2))return [];
+     (item.tool==="line"&&item.points.length!==2)||
+     (item.tool==="rectangle"&&item.points.length!==5))return [];
   const points:InkPoint[]=[];
   for(const p of item.points){
    if(!Array.isArray(p)||p.length!==2||p.some(n=>typeof n!=="number"||!Number.isFinite(n)||n<0||n>1000))return [];
