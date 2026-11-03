@@ -51,4 +51,16 @@ export function verifyBackupArchiveStructure(
   throw Error("Список вложений не соответствует содержимому заметок");
  for(const filename of expected)if(!files[filename]?.byteLength)
   throw Error("В резервной копии отсутствует файл: "+filename);
+ // Do not publish malformed PDF data as an apparently successful restore.
+ // The PDF header may legally follow a short binary prefix.
+ for(const id of pdf){
+  const bytes=files["pdf/"+id+".pdf"];
+  const limit=Math.min(bytes.length,1024);
+  let valid=false;
+  for(let i=0;i+4<limit;i++){
+   if(bytes[i]===37&&bytes[i+1]===80&&bytes[i+2]===68&&
+      bytes[i+3]===70&&bytes[i+4]===45){valid=true;break;}
+  }
+  if(!valid)throw Error("В резервной копии повреждён PDF: "+id);
+ }
 }

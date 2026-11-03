@@ -19,4 +19,12 @@ assert.throws(()=>check({...manifest,notes:[{...notes[0],id:"../escape"}]}),/п�
 assert.throws(()=>check({...manifest,notes:[{...notes[0],body:"x".repeat(2_000_001)}]}),/повреждённая/);
 assert.throws(()=>check({...manifest,notes:[{...notes[0],body:"not referring to attachments"}]}),/не соответствует/);
 assert.throws(()=>check(manifest,{...entries,"manifest.json":new Uint8Array(24*1024*1024+1)}),/описание/);
+
+const pdfNote={id:"pdf1",title:"Document",body:"",kind:"pdf"};
+const pdfManifest={notes:[pdfNote],pdfIds:["pdf1"],audioIds:[],imageIds:[],folders:[],hiddenSystem:[]};
+const validPdf=new TextEncoder().encode("%PDF-1.4\\n1 0 obj\\n<<>>\\nendobj\\n%%EOF");
+const pdfFiles={"manifest.json":strToU8(JSON.stringify(pdfManifest)),"pdf/pdf1.pdf":validPdf};
+verifyBackupArchiveStructure(pdfFiles,pdfManifest,audioIdsInHtml,imageIdsInHtml);
+assert.throws(()=>verifyBackupArchiveStructure({...pdfFiles,"pdf/pdf1.pdf":new Uint8Array([1,2,3])},
+ pdfManifest,audioIdsInHtml,imageIdsInHtml),/повреждён PDF/);
 console.log("Backup guard rejects ZIP path injection, duplicate IDs, missing and unreferenced binary data, oversized metadata");
