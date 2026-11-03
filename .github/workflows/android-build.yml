@@ -367,6 +367,9 @@ jobs:
       - name: Verify unchanged note saves do not rewrite storage
         run: bun scripts/test-wave-noop-note-save.ts
 
+      - name: Verify restored reminders remain distinct backup versions
+        run: bun scripts/test-wave-backup-reminder-variants.ts
+
       - name: Verify backup triggers only on committed edits
         run: bun scripts/test-backup-save-triggers.ts
 
