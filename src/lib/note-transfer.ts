@@ -75,7 +75,16 @@ function parseManifest(files:Record<string,Uint8Array>):Envelope{
   imageBlobFromBytes(files["images/"+id+".blob"]);
  }
  if(p.hasPdf){
-  if(n.kind!=="pdf"||!files["document.pdf"]?.byteLength)throw Error("Отсутствует оригинал PDF");
+  const pdf=files["document.pdf"];
+  if(n.kind!=="pdf"||!pdf?.byteLength)throw Error("Отсутствует оригинал PDF");
+  // A ZIP may claim to contain a PDF while providing arbitrary bytes.
+  // Do not create a local note until its document has a genuine header.
+  const limit=Math.min(pdf.length,1024);
+  let valid=false;
+  for(let i=0;i+4<limit;i++)if(pdf[i]===37&&pdf[i+1]===80&&pdf[i+2]===68&&pdf[i+3]===70&&pdf[i+4]===45){
+    valid=true;break;
+  }
+  if(!valid)throw Error("Повреждённый PDF в переданной заметке");
  }
  if(n.kind==="pdf"&&!p.hasPdf)throw Error("Не указан PDF");
  return p as Envelope;

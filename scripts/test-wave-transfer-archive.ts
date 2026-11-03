@@ -21,3 +21,10 @@ await rejected({audioIds:["a"]},{"audio/a.blob":strToU8("audio")},"orphaned audi
 await rejected({imageIds:["a"]},{"images/a.blob":strToU8("image")},"orphaned image file");
 await rejected({hasPdf:true},{"document.pdf":strToU8("bad")},"PDF on a text note");
 console.log("Rejected malformed, unreferenced and untrusted .wnote archive members");
+
+const pdfNote={...base.note,kind:"pdf",pdf:{fileName:"document.pdf"}};
+await rejected({note:pdfNote,hasPdf:true},{"document.pdf":strToU8("not a PDF")},"reject forged PDF payload");
+const validPdf=strToU8("%PDF-1.7\\n1 0 obj\\n<<>>\\nendobj\\n%%EOF");
+const checked=await inspectWaveFile(make({note:pdfNote,hasPdf:true},{"document.pdf":validPdf}));
+assert.equal(checked.containsPdf,true);
+assert.equal(checked.kind,"pdf");
