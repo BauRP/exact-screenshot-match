@@ -19,3 +19,10 @@ assert.deepEqual(parseInk(serializeInk([straight])),[straight]);
 assert.equal(inkStrokeAt([straight],[500,500],5),0);
 assert.equal(inkStrokeAt([straight],[500,800],5),-1);
 assert.deepEqual(parseInk(JSON.stringify([{...straight,points:[[100,100]]}])),[]);
+
+const box:InkStroke={tool:"rectangle",color:"#2563eb",width:6,
+ points:[[100,100],[400,100],[400,300],[100,300],[100,100]]};
+assert.deepEqual(parseInk(serializeInk([box])),[box]);
+assert.equal(inkStrokeAt([box],[250,103],4),0);
+assert.equal(inkStrokeAt([box],[250,200],4),-1);
+assert.deepEqual(parseInk(JSON.stringify([{...box,points:[[100,100],[400,300]]}])),[]);
