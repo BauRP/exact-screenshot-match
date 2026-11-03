@@ -74,6 +74,7 @@ import {
   updateNote,
   snoozeOverdueReminders,
   completeNoteReminder,
+  acceptReturnedNote,
   completeOverdueReminders,
   setSelectedNotesPinned,
   setSort,
