@@ -10,8 +10,11 @@ function savedContent(note:Note):unknown {
     // Reminder appointments are saved user data. A backup with another
     // deadline or repeat mode is a different note version, even if its
     // visible text has not changed.
-    reminderAt:note.reminderAt??null,
-    reminderRepeat:note.reminderRepeat??null,
+    // Omit absent reminder metadata to retain stable recovery IDs from
+    // older Wave Notes builds. Only explicitly saved reminder changes
+    // create distinct backup versions.
+    ...(note.reminderAt===undefined?{}:{reminderAt:note.reminderAt}),
+    ...(note.reminderRepeat===undefined?{}:{reminderRepeat:note.reminderRepeat}),
     pdf:note.kind==="pdf"?(note.pdf??null):null,
   };
 }
