@@ -41,7 +41,7 @@ import {
   biometricAvailability,
 } from "@/lib/app-lock";
 import { pinIsValid } from "@/lib/pin-security";
-import { readEditorPreferences,saveEditorPreferences,TOOLBAR_TOOLS,moveToolbarTool } from "@/lib/editor-preferences";
+import { readEditorPreferences,saveEditorPreferences,TOOLBAR_TOOLS,moveToolbarTool,toolbarPreset } from "@/lib/editor-preferences";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [
@@ -422,7 +422,16 @@ function SettingsPage() {
           </Row>
           <div className="h-px bg-border"/>
           <div className="p-3">
-            <p className="text-sm font-semibold">Кнопки панели редактора</p>
+            <p className="text-sm font-semibold">Готовые наборы панели</p>
+            <div className="mt-2 flex flex-wrap gap-2" aria-label="Наборы панели инструментов">
+              {(["writing","media","all"] as const).map(mode=>
+                <button type="button" key={mode}
+                  onClick={()=>changePref(toolbarPreset(mode))}
+                  className="rounded-lg border border-border bg-secondary/50 px-3 py-2 text-xs">
+                  {mode==="writing"?"Для текста":mode==="media"?"Фото и звук":"Все инструменты"}
+                </button>)}
+            </div>
+            <p className="mt-4 text-sm font-semibold">Кнопки панели редактора</p>
             <p className="mt-1 text-xs text-muted-foreground">Выберите инструменты, которые хотите видеть. Сохранение и отмена остаются доступными.</p>
             <div className="mt-3 grid grid-cols-2 gap-2">
               {TOOLBAR_TOOLS.map(tool=><div key={tool.id} className="flex items-center justify-between gap-2 rounded-xl border border-border p-2">
