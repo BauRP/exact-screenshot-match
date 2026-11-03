@@ -70,8 +70,19 @@ export function safeBrowserClipboardHtml(html:string):string{
   for(const attr of ["rowspan","colspan"]){const raw=element.getAttribute(attr)||"";if(/^\d{1,2}$/.test(raw)&&Number(raw)>=1&&Number(raw)<=20)out.setAttribute(attr,raw);}
  }
  if(tag==="SPAN"){
+   // Preserve only safe text formatting from copied browser spans.
    const ink=element.style.color;
    if(/^#[0-9a-f]{6}$/i.test(ink))out.style.color=ink;
+   const highlight=element.style.backgroundColor;
+   if(/^#[0-9a-f]{6}$/i.test(highlight))out.style.backgroundColor=highlight;
+   const size=element.style.fontSize;
+   if(/^(?:[8-9]|[1-6][0-9]|7[0-2])px$/.test(size))out.style.fontSize=size;
+   const weight=element.style.fontWeight;
+   if(weight==="bold"||/^[6-9]00$/.test(weight))out.style.fontWeight="bold";
+   if(element.style.fontStyle==="italic")out.style.fontStyle="italic";
+   const line=element.style.textDecorationLine;
+   if(line==="underline"||line==="line-through"||line==="underline line-through")
+     out.style.textDecorationLine=line;
   }
   Array.from(element.childNodes).forEach(child=>out.appendChild(clean(child)));
   return out;

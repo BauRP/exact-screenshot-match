@@ -7,3 +7,12 @@ for(const tag of ["TABLE","THEAD","TBODY","TR","TH","TD","TEMPLATE","SELECT","TE
 assert.ok(editor.includes("if(!cleaned)return false;"));
 assert.ok(editor.includes("if(!slice.content.size)return false;"));
 assert.ok(!paste.includes("fetch("));console.log("Offline safe rich clipboard importer wired");
+
+for(const token of ["element.style.backgroundColor","out.style.backgroundColor=highlight",
+ "out.style.fontSize=size","out.style.fontWeight=\"bold\"",
+ 'out.style.fontStyle="italic"',"out.style.textDecorationLine=line",
+ 'if(/^#[0-9a-f]{6}$/i.test(highlight))',
+ 'if(/^(?:[8-9]|[1-6][0-9]|7[0-2])px$/.test(size))']){
+ assert.ok(paste.includes(token),token);
+}
+assert.ok(!paste.includes("out.style.cssText"),"Never paste arbitrary clipboard styles");
