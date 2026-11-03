@@ -1,7 +1,7 @@
 import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection} from "@tiptap/pm/state";
-import {duplicateCurrentPage,moveCurrentPage,topLevelPageRanges,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,isEmptyPageBody} from "../src/lib/wave-page-actions";
+import {duplicateCurrentPage,moveCurrentPage,topLevelPageRanges,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,isEmptyPageBody,splitPageAtCaret} from "../src/lib/wave-page-actions";
 const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},wavePageBreak:{group:"block",atom:true,attrs:{label:{default:""}}},waveFold:{group:"block",content:"block+"},text:{group:"inline"}},marks:{}});
 const p=(s:string)=>schema.nodes.paragraph.create(null,schema.text(s));
 const page=(s:string)=>schema.nodes.wavePageBreak.create({label:s});
@@ -77,3 +77,33 @@ const emptyPage=topLevelPageRanges(single.doc)[1];
 single=single.apply(single.tr.setSelection(TextSelection.create(single.doc,emptyPage.bodyStart+1)));
 assert.equal(removeEmptyCurrentPage(controlSingle),true);
 assert.equal(single.doc.textContent,"keep");
+
+const strongSchema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},
+ wavePageBreak:{group:"block",atom:true,attrs:{label:{default:""}}},
+ waveFold:{group:"block",content:"block+"},
+ text:{group:"inline"}},marks:{strong:{}}});
+const marks=strongSchema.marks.strong.create();
+const textParagraph=strongSchema.nodes.paragraph.create(null,[
+ strongSchema.text("abc"),strongSchema.text("DEF", [marks]),strongSchema.text("ghi")
+]);
+let splitState=EditorState.create({schema:strongSchema,doc:strongSchema.nodes.doc.create(null,[textParagraph])});
+const splitEditor={isEditable:true,isDestroyed:false,get state(){return splitState;},
+ view:{dispatch(tr:any){splitState=splitState.apply(tr);}}} as any;
+splitState=splitState.apply(splitState.tr.setSelection(TextSelection.create(splitState.doc,4)));
+assert.equal(splitPageAtCaret(splitEditor),true);
+assert.equal(topLevelPageRanges(splitState.doc).length,2);
+assert.equal(splitState.doc.child(0).textContent,"abc");
+assert.equal(splitState.doc.child(2).textContent,"DEFghi");
+assert.equal(splitState.doc.child(2).firstChild?.marks[0].type.name,"strong");
+assert.equal(splitState.selection.$from.parent.textContent,"DEFghi");
+assert.equal(splitState.doc.check(),undefined);
+assert.equal(splitPageAtCaret(splitEditor),false,"Do not split at the start of a block");
+const nestedDoc=strongSchema.nodes.doc.create(null,[
+ strongSchema.nodes.waveFold.create(null,[strongSchema.nodes.paragraph.create(null,strongSchema.text("fold text"))])
+]);
+let nestState=EditorState.create({schema:strongSchema,doc:nestedDoc});
+nestState=nestState.apply(nestState.tr.setSelection(TextSelection.create(nestState.doc,3)));
+const nestedEditor={isEditable:true,isDestroyed:false,get state(){return nestState;},
+ view:{dispatch(tr:any){nestState=nestState.apply(tr);}}} as any;
+assert.equal(splitPageAtCaret(nestedEditor),false,"Nested sections must remain intact");
+assert.equal(nestState.doc.check(),undefined);

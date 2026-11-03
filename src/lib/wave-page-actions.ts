@@ -1,5 +1,6 @@
 import {Fragment,type Node as PMNode} from "@tiptap/pm/model";
 import type {Editor} from "@tiptap/react";
+import {TextSelection} from "@tiptap/pm/state";
 
 /** A page consists of its divider and all following top-level blocks up to
  * the next divider. Nested dividers are intentionally not rearranged:
@@ -89,6 +90,40 @@ export function insertBlankPageBefore(editor:Editor):boolean{
  const $at=doc.resolve(at);
  if($at.parent!==doc||!doc.canReplace($at.index(),$at.index(),content))return false;
  editor.view.dispatch(editor.state.tr.insert(at,content).scrollIntoView());
+ return true;
+}
+
+/** Split a top-level text paragraph at the caret into two pages.
+ * The original rich ProseMirror fragments are reused verbatim. Everything
+ * after the caret (including inline marks) stays on the new page, and the
+ * operation remains one undoable transaction. Refuse nested/table selections. */
+export function splitPageAtCaret(editor:Editor):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const {state,view}=editor,{doc,schema,selection}=state;
+ if(!selection.empty)return false;
+ const $pos=selection.$from;
+ if($pos.depth!==1||!$pos.parent.isTextblock)return false;
+ const paragraph=$pos.parent;
+ const offset=$pos.parentOffset;
+ // Splitting at a boundary creates an unexpected blank page. Use the
+ // explicit "before" / "after" actions instead.
+ if(offset<=0||offset>=paragraph.content.size)return false;
+ const divider=schema.nodes.wavePageBreak;
+ if(!divider)return false;
+ const left=paragraph.copy(paragraph.content.cut(0,offset));
+ const right=paragraph.copy(paragraph.content.cut(offset));
+ if(!left.type.validContent(left.content)||!right.type.validContent(right.content))return false;
+ const replacement=Fragment.fromArray([left,divider.create(),right]);
+ const index=$pos.index(0),root=doc;
+ if(!root.canReplace(index,index+1,replacement))return false;
+ const from=$pos.before(1),to=from+paragraph.nodeSize;
+ const tr=state.tr.replaceWith(from,to,replacement);
+ // Place the cursor at the beginning of the continuation paragraph.
+ const cursor=from+left.nodeSize+divider.create().nodeSize+1;
+ if(cursor<=tr.doc.content.size){
+  tr.setSelection(TextSelection.create(tr.doc,cursor));
+ }
+ view.dispatch(tr.scrollIntoView());
  return true;
 }
 

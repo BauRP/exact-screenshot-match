@@ -71,7 +71,7 @@ import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection,directionForText} from "@/lib/wave-text-direction";
 import {collectNoteOutline,filterNoteOutline,type OutlineFilter,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
 import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
-import {duplicateCurrentPage,moveCurrentPage,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage} from "@/lib/wave-page-actions";
+import {duplicateCurrentPage,moveCurrentPage,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,splitPageAtCaret} from "@/lib/wave-page-actions";
 import {revealOutlinePosition} from "@/lib/wave-outline-navigation";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
@@ -1117,6 +1117,11 @@ function EditorPage() {
             }}>Объединить страницы</button>}
           <button type="button" aria-label="Добавить пустую страницу перед текущей" className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>{if(!insertBlankPageBefore(editor))toast("Не удалось добавить страницу");}}>Страница перед +</button>
+          <button type="button" aria-label="Разделить страницу в месте курсора"
+            title="Создать следующую страницу с текста после курсора"
+            className="rounded-md border px-2 py-1 text-xs"
+            onMouseDown={event=>event.preventDefault()}
+            onClick={()=>{if(!splitPageAtCaret(editor))toast("Поставьте курсор внутри обычного абзаца страницы");}}>Разделить здесь</button>
           <button type="button" aria-label="Объединить со следующей страницей" disabled={currentPage>=pagePositions.length}
             className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
             onClick={()=>{if(!mergeCurrentPageWithNext(editor))toast("Не удалось объединить страницы");}}>Со след. объединить</button>
