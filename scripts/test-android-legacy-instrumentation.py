@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from scripts.verify_android_instrumentation import verify
+from verify_android_instrumentation import verify
 
 def transcript(count=2):
     out = []
