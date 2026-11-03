@@ -32,3 +32,12 @@ assert.ok(native.includes("Calendar.DAY_OF_YEAR"));
 assert.ok(native.includes('item.put("repeat",repeat)'));
 assert.ok(native.includes("manager.notify(BASE+slot"));
 assert.ok(native.includes('prefs.edit().putString(KEY,list.toString()).commit()'));
+
+const dupe=(id:string,minute:number)=>({...list[0],id,reminderAt:now+minute*60_000});
+const valid=reminderSchedule([dupe("same",30),dupe("same",5),dupe("other",10),dupe("bad/id",1)],now);
+assert.deepEqual(valid.map(e=>e.id),["same","other"],"Deduplicate IDs and exclude invalid Android alarm IDs");
+assert.equal(valid[0].at,now+5*60_000,"Prefer nearest due time for the same note");
+assert.deepEqual(reminderSchedule([dupe("one",1)],Number.NaN),[]);
+assert.deepEqual(reminderSchedule([dupe("one",1)],Number.POSITIVE_INFINITY),[]);
+assert.deepEqual(reminderSchedule([dupe("one",1.5)],now),[],"Noninteger due timestamps are rejected");
+
