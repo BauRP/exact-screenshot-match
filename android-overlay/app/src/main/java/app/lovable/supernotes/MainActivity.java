@@ -25,6 +25,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(PrivacyLinkPlugin.class);
         registerPlugin(ExternalNoteLinkPlugin.class);
         registerPlugin(FeedbackEmailPlugin.class);
+        registerPlugin(TelegramFeedbackPlugin.class);
         registerPlugin(OfflineCyrillicOcrPlugin.class);
         registerPlugin(NativeAudioRecorderPlugin.class);
         registerPlugin(NativeReminderPlugin.class);
