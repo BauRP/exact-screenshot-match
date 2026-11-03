@@ -53,14 +53,28 @@ export function normalizeSearchText(value:string):string {
  return value.normalize("NFKC").toLocaleLowerCase().replace(/ё/g,"е")
   .replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();
 }
+/** Normalizing Unicode can EXPAND a character (e.g. ﬃ -> ffi).
+ * Translate a match offset back to the original note, so a preview never
+ * skips the match or cuts from the wrong part of the note. */
+function originalSnippetOffset(source:string,normalizedOffset:number):number{
+ if(normalizedOffset<=0)return 0;
+ let normalizedPos=0,sourcePos=0;
+ for(const character of source){
+  const part=character===" "?" ":normalizeSearchText(character);
+  if(normalizedPos+part.length>normalizedOffset)return sourcePos;
+  normalizedPos+=part.length;
+  sourcePos+=character.length;
+ }
+ return source.length;
+}
 export function noteSearchSnippet(note:Note,query:string,maxLength=155):string {
  const source=readableText(note.body||"").trim();
  if(!source)return "";
  const normalized=normalizeSearchText(source),needle=normalizeSearchText(parseNoteQuery(query).query);
  const match=needle?normalized.indexOf(needle):-1;
- const offset=match<0?0:Math.max(0,match-40);
- const fragment=source.slice(offset,offset+Math.max(30,maxLength));
- return (offset?"…":"")+fragment+(offset+fragment.length<source.length?"…":"");
+ const start=match<0?0:originalSnippetOffset(source,Math.max(0,match-40));
+ const fragment=source.slice(start,start+Math.max(30,maxLength));
+ return (start?"…":"")+fragment+(start+fragment.length<source.length?"…":"");
 }
 export function noteMatchesSearch(note:Note,input:string,selected:NoteSearchFilter="all"):boolean {
   const {query,filter}=parseNoteQuery(input,selected);
