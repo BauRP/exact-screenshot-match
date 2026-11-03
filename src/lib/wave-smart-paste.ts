@@ -63,7 +63,7 @@ export function safeBrowserClipboardHtml(html:string):string{
    const href=element.getAttribute("href")||"";
    try{
     const url=new URL(href);
-    if(url.protocol==="http:"||url.protocol==="https:")out.setAttribute("href",url.href);
+    if((url.protocol==="http:"||url.protocol==="https:")&&!url.username&&!url.password&&url.href.length<=2048)out.setAttribute("href",url.href);
    }catch{/* Unsafe or relative links become plain text. */}
   }
   if(textBlock.has(tag)){
