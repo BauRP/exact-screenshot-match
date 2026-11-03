@@ -7,6 +7,7 @@ import {zip} from "fflate";
 import type {Note} from "./notes-store";
 import {loadImageFile} from "./image-files";
 import {paintInk} from "./wave-ink";
+import {renderWordMedia,wordImageParagraph,wordMediaRelationships,type WordMedia} from "./wave-docx-media";
 
 export type NoteExportFormat="txt"|"html"|"docx"|"png"|"pdf";
 type Exported={blob:Blob;name:string;mime:string};
@@ -135,8 +136,8 @@ export function wordParagraph(content:string,heading=false,rtl=false):string{
   return "<w:p>"+(properties?"<w:pPr>"+properties+"</w:pPr>":"")+
     (content||docxRun(" "))+"</w:p>";
 }
-function wordBody(note:Note):string{
-  const root=parseBody(note),paragraphs=[wordParagraph(docxRun(note.title,{bold:true}),true)];
+function wordBody(note:Note,root=parseBody(note),media=new Map<Element,{relation:string;index:number;width:number;height:number}>()):string{
+  const paragraphs=[wordParagraph(docxRun(note.title,{bold:true}),true)];
   const traverse=(node:Node):void=>{
     if(node.nodeType===3){
       const t=(node.textContent||"").trim();
@@ -146,6 +147,13 @@ function wordBody(note:Note):string{
     if(node.nodeType!==1)return;
     const el=node as Element,tag=el.tagName;
     if(el.hasAttribute("data-wave-page-break")){paragraphs.push("<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>");return;}
+    if(el.hasAttribute("data-wave-image")||el.hasAttribute("data-wave-drawing")){
+      const item=media.get(el);
+      if(!item)throw Error("Не подготовлено изображение для Word");
+      paragraphs.push(wordImageParagraph(item.relation,item.index,item.width,item.height));
+      return;
+    }
+    if(el.hasAttribute("data-audio-note")){paragraphs.push(wordParagraph(docxRun("[Аудиозапись доступна в .wnote]")));return;}
     if(["P","H1","H2","H3","H4","H5","H6","LI","BLOCKQUOTE","PRE"].includes(tag)||el.getAttribute("data-type")==="wave-check-item"){
       const prefix=el.getAttribute("data-type")==="wave-check-item"?(el.getAttribute("data-done")==="true"?"[x] ":"[ ] "):tag==="LI"?"• ":"";
       // Preserve ordered list starts and gaps in exported Word text. The
@@ -167,12 +175,30 @@ function wordBody(note:Note):string{
   return paragraphs.join("");
 }
 async function docxBlob(note:Note):Promise<Blob>{
-  const xml="<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body>"+
-    wordBody(note)+"<w:sectPr><w:pgSz w:w=\"11906\" w:h=\"16838\"/><w:pgMar w:top=\"1440\" w:right=\"1440\" w:bottom=\"1440\" w:left=\"1440\"/></w:sectPr></w:body></w:document>";
+  const root=parseBody(note);
+  // parseBody masks hidden Tape answers. Never disclose their media.
+  const nodes=Array.from(root.querySelectorAll("[data-wave-image],[data-wave-drawing]"));
+  if(nodes.length>24)throw Error("Word поддерживает не более 24 рисунков в одной заметке");
+  const media=new Map<Element,{relation:string;index:number;width:number;height:number}>();
   const files:Record<string,Uint8Array>={};
+  let used=0;
+  for(let i=0;i<nodes.length;i++){
+    const image:WordMedia=await renderWordMedia(nodes[i]);
+    used+=image.bytes.length;
+    if(used>24*1024*1024)throw Error("Слишком большой документ Word. Используйте .wnote");
+    files["word/media/image"+(i+1)+".png"]=image.bytes;
+    media.set(nodes[i],{relation:"rId"+(i+1),index:i+1,width:image.width,height:image.height});
+  }
+  const xml='<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'+
+    ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'+
+    ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"'+
+    ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'+
+    ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body>'+
+    wordBody(note,root,media)+'<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>';
   const encode=new TextEncoder();
-  files["[Content_Types].xml"]=encode.encode('<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+  files["[Content_Types].xml"]=encode.encode('<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
   files["_rels/.rels"]=encode.encode('<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+  files["word/_rels/document.xml.rels"]=encode.encode(wordMediaRelationships(nodes.length));
   files["word/document.xml"]=encode.encode('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'+xml);
   const packed=await new Promise<Uint8Array>((resolve,reject)=>zip(files,{level:6},(error,data)=>error?reject(error):resolve(data)));
   return new Blob([packed.slice().buffer],{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
