@@ -7,6 +7,11 @@ function savedContent(note:Note):unknown {
   return {
     title:note.title,body:note.body,kind:note.kind??"note",
     style:note.style??null,
+    // Reminder appointments are saved user data. A backup with another
+    // deadline or repeat mode is a different note version, even if its
+    // visible text has not changed.
+    reminderAt:note.reminderAt??null,
+    reminderRepeat:note.reminderRepeat??null,
     pdf:note.kind==="pdf"?(note.pdf??null):null,
   };
 }
