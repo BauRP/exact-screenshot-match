@@ -32,6 +32,9 @@ function plainNode(node:Node):string{
   const el=node as Element,tag=el.tagName;
   if(tag==="BR")return "\n";
   if(el.hasAttribute("data-wave-page-break"))return "\n\n--- Новая страница ---\n\n";
+  if(el.hasAttribute("data-wave-image"))return "[Фотография — вложение доступно в .wnote]\n";
+  if(el.hasAttribute("data-wave-drawing"))return "[Рисунок — вложение доступно в .wnote]\n";
+  if(el.hasAttribute("data-audio-note"))return "[Аудиозапись — вложение доступно в .wnote]\n";
   if(tag==="IMG")return "[Изображение — сохраните .wnote для передачи вложения]";
   if(tag==="AUDIO")return "[Аудиозапись — сохраните .wnote для передачи вложения]";
   const inner=Array.from(node.childNodes).map(plainNode).join("");
@@ -60,6 +63,9 @@ function sanitizedBody(note:Note):string{
     const el=node as HTMLElement, tag=el.tagName;
     if(["SCRIPT","STYLE","IFRAME","OBJECT","EMBED","FORM","META","LINK","SVG"].includes(tag))return doc.createTextNode("");
     if(tag==="IMG"||tag==="AUDIO")return doc.createTextNode("[Вложение — используйте .wnote]");
+    if(el.hasAttribute("data-wave-image"))return doc.createTextNode("[Фотография — используйте .wnote]");
+    if(el.hasAttribute("data-wave-drawing"))return doc.createTextNode("[Рисунок — используйте .wnote]");
+    if(el.hasAttribute("data-audio-note"))return doc.createTextNode("[Аудиозапись — используйте .wnote]");
     if(el.hasAttribute("data-wave-page-break")){
       const page=doc.createElement("div");page.setAttribute("style","break-after:page;page-break-after:always;border-top:1px dashed #888;margin:24px 0");return page;
     }
@@ -233,9 +239,19 @@ function exportItems(note:Note):ExportItem[]{
    items.push({kind:"drawing",ink:el.getAttribute("data-wave-ink")||"[]"});
    return;
   }
-  if(["H1","H2","H3","H4","H5","H6","P","LI","BLOCKQUOTE","PRE"].includes(tag)){
+  if(["H1","H2","H3","H4","H5","H6","P","LI","BLOCKQUOTE","PRE"].includes(tag)||
+      el.getAttribute("data-type")==="wave-check-item"){
    let value=el.textContent||"";
-   if(tag==="LI")value="• "+value;
+   if(el.getAttribute("data-type")==="wave-check-item")
+     value=(el.getAttribute("data-done")==="true"?"☑ ":"☐ ")+value;
+   else if(tag==="LI"){
+     const parent=el.parentElement;
+     if(parent?.tagName==="OL"){
+       const start=Number(parent.getAttribute("start")||1);
+       const index=Array.from(parent.children).indexOf(el);
+       value=(Number.isSafeInteger(start)&&start>=1&&index>=0?(start+index)+". ":"• ")+value;
+     }else value="• "+value;
+   }
    if(value.trim())items.push({kind:"text",text:value.trim(),heading:tag.startsWith("H")});
    return;
   }
