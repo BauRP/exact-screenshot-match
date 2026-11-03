@@ -18,6 +18,8 @@ import { NativeShellBoot } from "../lib/native-shell";
 import { NativeBackHandler } from "../lib/native-back";
 import { NativeAdRuntime } from "@/components/NativeAdRuntime";
 import { startLocalBackupAutoSync } from "../lib/local-backup";
+import { initializeNotesDatabase,getAllSavedNotes } from "../lib/notes-store";
+import {queueNativeReminderSync} from "../lib/native-reminders";
 import { normalizeLang, dirOf } from "../lib/i18n";
 
 
@@ -143,6 +145,7 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   useEffect(() => startLocalBackupAutoSync(), []);
+  useEffect(()=>{void initializeNotesDatabase().then(()=>queueNativeReminderSync(getAllSavedNotes())).catch(console.error);},[]);
 
   useEffect(() => {
     try {
