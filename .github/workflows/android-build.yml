@@ -491,6 +491,18 @@ jobs:
           echo "Source commit: \`$GITHUB_SHA\`" >> "$GITHUB_STEP_SUMMARY"
           echo "SHA-256: \`$(cut -d' ' -f1 output/SuperNotes-debug.apk.sha256)\`" >> "$GITHUB_STEP_SUMMARY"
 
+      # Token-free debug APK only: downloadable by the owner for local
+      # private testing and offline post-build customization. Never upload
+      # an APK containing feedback credentials to this public repository.
+      - name: Upload credential-free APK for private local test preparation
+        if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.feedback_telegram_test) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: Wave-Notes-base-APK-no-token
+          path: output/SuperNotes-debug.apk
+          retention-days: 1
+          if-no-files-found: error
+
       # A token-bearing test APK must never be uploaded to a public Release.
       # ACTIONS artifacts may still be accessible to repository readers.
       # Keep this opt-in one-day artifact strictly for an owner's short test.
