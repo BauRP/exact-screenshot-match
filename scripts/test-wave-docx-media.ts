@@ -16,6 +16,7 @@ for(const marker of ['wordBody(note,root,media)','wordImageParagraph(item.relati
  assert.ok(code.includes(marker),marker);
 }
 const renderer=readFileSync("src/lib/wave-docx-media.ts","utf8");
+assert.ok(renderer.includes('node.getAttribute("data-width")'),"Image sizing must preserve note layout");
 for(const marker of ['loadImageFile(id)','paintInk(ctx,node.getAttribute','canvas.toBlob','URL.revokeObjectURL','naturalWidth']){
  assert.ok(renderer.includes(marker),marker);
 }
