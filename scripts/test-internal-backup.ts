@@ -52,20 +52,20 @@ assert.equal(notes.getNote(second.id)?.body, "Другой текст");
 // a plausible manifest. The guard applies to restore, validation and retained
 // old backup snapshots before any file is published.
 const {validateFullBackup}=await import("../src/lib/backup");
-const beforeDamaged=notes.exportNotes();
+const beforeDamaged=JSON.parse(notes.exportNotes()).notes;
 const damagedEntries=unzipSync(new Uint8Array(await copy4.arrayBuffer()));
 damagedEntries["unexpected/install.sh"]=strToU8("not a backup member");
 const damaged=new File([zipSync(damagedEntries,{level:0})],"broken.zip");
 await assert.rejects(()=>validateFullBackup(damaged),/посторонние/);
 await assert.rejects(()=>restoreFullBackup(damaged),/посторонние/);
 await assert.rejects(()=>createFullBackup(damaged),/посторонние/);
-assert.equal(notes.exportNotes(),beforeDamaged,"Rejected backup must not alter existing note data");
+assert.deepEqual(JSON.parse(notes.exportNotes()).notes,beforeDamaged,"Rejected backup must not alter existing note data");
 const duplicateEntries=unzipSync(new Uint8Array(await copy4.arrayBuffer()));
 const duplicateManifest=JSON.parse(strFromU8(duplicateEntries["manifest.json"]));
 duplicateManifest.notes.push({...duplicateManifest.notes[0]});
 duplicateEntries["manifest.json"]=strToU8(JSON.stringify(duplicateManifest));
 await assert.rejects(()=>restoreFullBackup(new File([zipSync(duplicateEntries,{level:0})],"duplicate.zip")),/повторная заметка/);
-assert.equal(notes.exportNotes(),beforeDamaged);
+assert.deepEqual(JSON.parse(notes.exportNotes()).notes,beforeDamaged);
 
 // A different saved version never overwrites the current note. Repeated
 // restore of the same internal snapshot never creates extra copies.
