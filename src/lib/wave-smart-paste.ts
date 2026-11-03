@@ -117,6 +117,34 @@ export function structuredPlainClipboardHtml(input:string):string{
 }
 
 
+/** Convert a constrained subset of Markdown inline style into safe editable
+ * HTML. This runs only after Markdown block structure has been recognized.
+ * No arbitrary HTML, images, inline HTML or active URL schemes are allowed. */
+export function safeMarkdownInline(text:string):string{
+ if(typeof text!=="string"||text.length>20_000)return "";
+ const escape=(value:string)=>value.replace(/&/g,"&amp;").replace(/</g,"&lt;")
+  .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+ const tokens=/\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|\x60([^\x60\n]+)\x60|\*([^*\n]+)\*|_([^_\n]+)_|\[([^\]\n]+)\]\((https?:\/\/[^\s)\n]+)\)/g;
+ let output="",last=0,match:RegExpExecArray|null;
+ while((match=tokens.exec(text))!==null){
+  output+=escape(text.slice(last,match.index));
+  if(match[1]!==undefined||match[2]!==undefined)output+="<strong>"+escape(match[1]??match[2])+"</strong>";
+  else if(match[3]!==undefined)output+="<s>"+escape(match[3])+"</s>";
+  else if(match[4]!==undefined)output+="<code>"+escape(match[4])+"</code>";
+  else if(match[5]!==undefined||match[6]!==undefined)output+="<em>"+escape(match[5]??match[6])+"</em>";
+  else{
+   const url=new URL(match[8]);
+   // Fully qualified browser links only. These are inert markup and can
+   // open only through the existing external-browser consent path.
+   if(["http:","https:"].includes(url.protocol)&&!url.username&&!url.password)
+    output+='<a href="'+escape(url.href)+'">'+escape(match[7])+"</a>";
+   else output+=escape(match[0]);
+  }
+  last=tokens.lastIndex;
+ }
+ return output+escape(text.slice(last));
+}
+
 /** Offline, opt-in Markdown block detection for text-only clipboard content.
  * Recognizes document structure without evaluating markdown HTML, URLs or JS.
  * If the clipboard has no unambiguous block syntax, native text paste wins. */
@@ -148,15 +176,15 @@ export function structuredMarkdownClipboardHtml(input:string):string{
   if(check){
    close();
    html+='<div data-type="wave-check-item" data-done="'+(check[1].toLowerCase()==="x"?"true":"false")+
-     '" data-shape="square">'+safe(check[2])+"</div>";
+     '" data-shape="square">'+safeMarkdownInline(check[2])+"</div>";
    meaningful++;continue;
   }
-  if(h){close();html+="<h"+h[1].length+">"+safe(h[2])+"</h"+h[1].length+">";meaningful++;continue;}
-  if(q){close();html+="<blockquote><p>"+safe(q[1])+"</p></blockquote>";meaningful++;continue;}
+  if(h){close();html+="<h"+h[1].length+">"+safeMarkdownInline(h[2])+"</h"+h[1].length+">";meaningful++;continue;}
+  if(q){close();html+="<blockquote><p>"+safeMarkdownInline(q[1])+"</p></blockquote>";meaningful++;continue;}
   if(trimmed==="---"||trimmed==="***"){close();html+="<hr>";meaningful++;continue;}
   if(u){
    if(listType!=="ul"){close();html+="<ul>";listType="ul";}
-   html+="<li><p>"+safe(u[1])+"</p></li>";meaningful++;continue;
+   html+="<li><p>"+safeMarkdownInline(u[1])+"</p></li>";meaningful++;continue;
   }
   if(o){
    const num=Number(o[1]);
@@ -164,9 +192,9 @@ export function structuredMarkdownClipboardHtml(input:string):string{
     close();html+='<ol'+(num!==1?' start="'+num+'"':"")+">";listType="ol";
    }
    expected=num+1;
-   html+="<li><p>"+safe(o[2])+"</p></li>";meaningful++;continue;
+   html+="<li><p>"+safeMarkdownInline(o[2])+"</p></li>";meaningful++;continue;
   }
-  close();html+="<p>"+safe(line)+"</p>";
+  close();html+="<p>"+safeMarkdownInline(line)+"</p>";
  }
  close();
  return meaningful>=2?html:"";
