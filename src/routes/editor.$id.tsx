@@ -677,9 +677,24 @@ function EditorPage() {
   const addCameraImage=()=>enqueueImage(takeNotePhoto);
   const attachAudio = async (blob: Blob) => {
     if (!blob.size) throw new Error("Пустая аудиозапись");
+    // A recording can finish after its editor was closed by Android Back.
+    // Never store a binary for an abandoned draft.
+    if(!imageSessionRef.current||!editor||editor.isDestroyed)
+      throw new Error("Редактор закрыт, запись не сохранена");
     const audioId=await saveAudioFile(blob);
+    if(!imageSessionRef.current||editor.isDestroyed){
+      await deleteAudioFile(audioId);
+      throw new Error("Редактор закрыт, запись не сохранена");
+    }
     createdAudioIdsRef.current.add(audioId);
-    if (!editor || editor.isDestroyed || !editor.chain().focus().insertAudioNote(`audiodb:${audioId}`).run()) throw new Error("Не удалось вставить аудио в заметку");
+    try{
+      if(!editor.chain().focus().insertAudioNote(`audiodb:${audioId}`).run())
+        throw new Error("Не удалось вставить аудио в заметку");
+    }catch(error){
+      createdAudioIdsRef.current.delete(audioId);
+      await deleteAudioFile(audioId).catch(cleanup=>console.error("Audio rollback failed",cleanup));
+      throw error;
+    }
   };
   const startRecording = async () => {
     if (recording || startingAudioRef.current || recordingWriteRef.current) return;
@@ -693,7 +708,7 @@ function EditorPage() {
         nativeRecordingRef.current=true;setRecording(true);
       } catch(err) {
         console.error("Native microphone start",err);
-        alert(err instanceof Error?err.message:"Нет доступа к микрофону");
+        if(imageSessionRef.current)alert(err instanceof Error?err.message:"Нет доступа к микрофону");
       } finally {startingAudioRef.current=false;setStartingAudio(false);}
       return;
     }
@@ -709,7 +724,7 @@ function EditorPage() {
       rec.ondataavailable=ev=>{if(ev.data.size)chunksRef.current.push(ev.data);};
       rec.onstop=async()=>{
         try {await attachAudio(new Blob(chunksRef.current,{type:rec.mimeType||"audio/webm"}));settleRecordingRef.current?.resolve();}
-        catch(err){settleRecordingRef.current?.reject(err);alert("Не удалось сохранить аудио");}
+        catch(err){settleRecordingRef.current?.reject(err);if(imageSessionRef.current)alert("Не удалось сохранить аудио");}
         finally{recordingWriteRef.current=null;settleRecordingRef.current=null;stream.getTracks().forEach(t=>t.stop());streamRef.current=null;}
       };
       rec.onerror=()=>{settleRecordingRef.current?.reject(new Error("Ошибка аудиозаписи"));recordingWriteRef.current=null;settleRecordingRef.current=null;stream.getTracks().forEach(t=>t.stop());setRecording(false);};
@@ -720,7 +735,7 @@ function EditorPage() {
     if(nativeRecordingRef.current){
       nativeRecordingRef.current=false;setRecording(false);
       void stopNativeAudio().then(attachAudio).then(()=>settleRecordingRef.current?.resolve())
-        .catch(err=>{settleRecordingRef.current?.reject(err);alert(err instanceof Error?err.message:"Не удалось сохранить запись");})
+        .catch(err=>{settleRecordingRef.current?.reject(err);if(imageSessionRef.current)alert(err instanceof Error?err.message:"Не удалось сохранить запись");})
         .finally(()=>{recordingWriteRef.current=null;settleRecordingRef.current=null;});
       return;
     }

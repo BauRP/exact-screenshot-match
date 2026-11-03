@@ -17,3 +17,13 @@ const settle=editor.indexOf("settleRecordingRef.current?.resolve();",abandon);
 const cleanup=editor.indexOf("const pending=recordingWriteRef.current;",abandon);
 assert.ok(abandon>=0&&settle>abandon&&cleanup>settle,
  "Abandoned microphone promise must settle before orphan cleanup");
+
+assert.ok(editor.includes("if(!imageSessionRef.current||!editor||editor.isDestroyed)"));
+assert.ok(editor.includes("if(!imageSessionRef.current||editor.isDestroyed){"));
+assert.ok(editor.includes("await deleteAudioFile(audioId);"));
+assert.ok(editor.includes("createdAudioIdsRef.current.delete(audioId);"));
+assert.ok(editor.includes("if(imageSessionRef.current)alert"));
+const playback=readFileSync("src/components/editor/AudioNode.tsx","utf8");
+assert.ok(playback.includes("if(!AC)return;"),"Old Android WebViews must still play audio");
+assert.ok(playback.includes("if(!analyser)return;"));
+assert.ok(playback.includes("Audio visualization is unavailable on this WebView"));

@@ -133,18 +133,29 @@ function AudioNoteView({ node, deleteNode, editor }: NodeViewProps) {
     if (!audio || !cvs) return;
 
     if (!ctxRef.current) {
-      const AC =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext })
-          .webkitAudioContext;
-      ctxRef.current = new AC();
-      sourceRef.current = ctxRef.current.createMediaElementSource(audio);
-      analyserRef.current = ctxRef.current.createAnalyser();
-      analyserRef.current.fftSize = 128;
-      sourceRef.current.connect(analyserRef.current);
-      analyserRef.current.connect(ctxRef.current.destination);
+      const AC = window.AudioContext ||
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      // Old WebViews may play audio but expose no Web Audio API. In that case
+      // playback remains functional with the static waveform.
+      if(!AC)return;
+      try{
+        const context=new AC();
+        const source=context.createMediaElementSource(audio);
+        const analyser=context.createAnalyser();
+        analyser.fftSize=128;
+        source.connect(analyser);
+        analyser.connect(context.destination);
+        ctxRef.current=context;
+        sourceRef.current=source;
+        analyserRef.current=analyser;
+      }catch(error){
+        console.warn("Audio visualization is unavailable on this WebView",error);
+        // Avoid cancelling native HTMLAudioElement playback.
+        return;
+      }
     }
-    const analyser = analyserRef.current!;
+    const analyser = analyserRef.current;
+    if(!analyser)return;
     const data = new Uint8Array(analyser.frequencyBinCount);
     const ctx2d = cvs.getContext("2d")!;
 
