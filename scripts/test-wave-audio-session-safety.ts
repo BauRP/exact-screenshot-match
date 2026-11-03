@@ -27,3 +27,12 @@ const playback=readFileSync("src/components/editor/AudioNode.tsx","utf8");
 assert.ok(playback.includes("if(!AC)return;"),"Old Android WebViews must still play audio");
 assert.ok(playback.includes("if(!analyser)return;"));
 assert.ok(playback.includes("Audio visualization is unavailable on this WebView"));
+
+assert.ok(native.includes("startRecordingWithFormat(44100,64000)"));
+assert.ok(native.includes("startRecordingWithFormat(16000,32000)"));
+assert.ok(native.includes("fallbackFailure.addSuppressed(standardFailure)"));
+assert.ok(native.includes('file=File.createTempFile("wave-audio-"'));
+assert.ok(native.includes("rec.prepare();"));
+assert.ok(native.includes("rec.start();"));
+assert.ok(native.includes("}catch(Exception standardFailure){\n   clean();"),
+ "The failed recorder and its temporary file must be released before retry");

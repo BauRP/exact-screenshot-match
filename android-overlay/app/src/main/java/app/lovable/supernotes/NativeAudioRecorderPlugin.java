@@ -28,19 +28,39 @@ public class NativeAudioRecorderPlugin extends Plugin{
   if(ContextCompat.checkSelfPermission(getContext(),Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){call.reject("Разрешите микрофон в настройках Android");return;}
   begin(call);
  }
+ /** Different Android audio HALs support different AAC sampling rates.
+  * Recreate the recorder after a failed prepare/start; never reuse a failed
+  * MediaRecorder and never keep a partially recorded file. */
+ private void startRecordingWithFormat(int sampleRate,int bitRate)throws Exception{
+  file=File.createTempFile("wave-audio-", ".m4a",getContext().getCacheDir());
+  rec=Build.VERSION.SDK_INT>=31?new MediaRecorder(getContext()):new MediaRecorder();
+  rec.setAudioSource(MediaRecorder.AudioSource.MIC);
+  rec.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+  rec.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+  rec.setAudioEncodingBitRate(bitRate);
+  rec.setAudioSamplingRate(sampleRate);
+  rec.setOutputFile(file.getAbsolutePath());
+  rec.prepare();
+  rec.start();
+  active=true;started=System.currentTimeMillis();
+ }
  private synchronized void begin(PluginCall call){
   if(active){call.reject("Запись уже выполняется");return;}
   try{
-   file=File.createTempFile("wave-audio-", ".m4a",getContext().getCacheDir());
-   rec=Build.VERSION.SDK_INT>=31?new MediaRecorder(getContext()):new MediaRecorder();
-   rec.setAudioSource(MediaRecorder.AudioSource.MIC);
-   rec.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-   rec.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
-   rec.setAudioEncodingBitRate(64000);
-   rec.setAudioSamplingRate(44100);
-   rec.setOutputFile(file.getAbsolutePath());rec.prepare();rec.start();
-   active=true;started=System.currentTimeMillis();call.resolve();
-  }catch(Exception ex){clean();call.reject("Не удалось включить микрофон",ex);}
+   startRecordingWithFormat(44100,64000);
+   call.resolve();
+  }catch(Exception standardFailure){
+   clean();
+   try{
+    // Older devices and emulators can reject 44.1 kHz despite accepting AAC.
+    startRecordingWithFormat(16000,32000);
+    call.resolve();
+   }catch(Exception fallbackFailure){
+    clean();
+    fallbackFailure.addSuppressed(standardFailure);
+    call.reject("Не удалось включить микрофон ни в обычном, ни в совместимом режиме",fallbackFailure);
+   }
+  }
  }
  /** Abandon audio without serializing private microphone data. */
  @PluginMethod public synchronized void cancel(PluginCall call){
