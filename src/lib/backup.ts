@@ -10,6 +10,7 @@ import { loadPdfFile, saveNewPdfFile, deletePdfFile } from "./pdf-files";
 import { exportNotes, importBackupNotes, type Note } from "./notes-store";
 import { exportFolderBackup, restoreFolderBackup, rollbackFolderBackup, type Folder } from "./folders-store";
 import { equalDocumentBytes, hasDifferentSavedContent, recoveredVersionId, restoredNoteTitle } from "./backup-restore-plan";
+import {verifyBackupArchiveStructure} from "./backup-archive-guard";
 
 const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
 const MAX_ENTRY_BYTES = 100 * 1024 * 1024;
@@ -20,14 +21,15 @@ const VERSION = 1;
  * Reject a malicious zip bomb before applying restored data.
  */
 async function unpackArchive(bytes: Uint8Array): Promise<Record<string, Uint8Array>> {
-  let total = 0;
+  let total = 0, count = 0;
   return new Promise((resolve, reject) => {
     let invalid = false;
     unzip(bytes, {
       filter: (entry) => {
         if (invalid) return false;
         total += entry.originalSize;
-        if (entry.originalSize > MAX_ENTRY_BYTES || total > MAX_ARCHIVE_BYTES) {
+        count += 1;
+        if (count > 31_000 || entry.originalSize > MAX_ENTRY_BYTES || total > MAX_ARCHIVE_BYTES) {
           invalid = true;
           return false;
         }
@@ -85,6 +87,7 @@ export async function validateFullBackup(blob: Blob): Promise<void> {
   const metadata=entries["manifest.json"];
   if (!metadata) throw new Error("В резервной копии отсутствует описание данных");
   const manifest=parseManifest(metadata);
+  verifyBackupArchiveStructure(entries,manifest,audioIdsInHtml,imageIdsInHtml);
   for (const id of uniqueIds(manifest.pdfIds)) {
     if (!entries["pdf/"+id+".pdf"]?.byteLength) throw new Error("В архиве отсутствует PDF: "+id);
   }
@@ -128,6 +131,7 @@ export async function createFullBackup(previous?: Blob): Promise<Blob> {
     previousEntries = await unpackArchive(new Uint8Array(await previous.arrayBuffer()));
     if (!previousEntries["manifest.json"]) throw new Error("В прежней копии отсутствуют данные");
     const old = parseManifest(previousEntries["manifest.json"]);
+    verifyBackupArchiveStructure(previousEntries,old,audioIdsInHtml,imageIdsInHtml);
     const oldDeletions = old.deletedAt ?? {};
     const now = Date.now();
     for (const note of old.notes) {
@@ -221,6 +225,7 @@ export async function restoreFullBackup(file: File): Promise<number> {
   const metadata = entries["manifest.json"];
   if (!metadata) throw new Error("В архиве отсутствует manifest.json");
   const manifest = parseManifest(metadata);
+  verifyBackupArchiveStructure(entries,manifest,audioIdsInHtml,imageIdsInHtml);
   const pdfIds = uniqueIds(manifest.pdfIds);
   const audioIds = uniqueIds(manifest.audioIds);
   const imageIds = uniqueIds(manifest.imageIds??[]);

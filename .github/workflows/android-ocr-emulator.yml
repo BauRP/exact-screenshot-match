@@ -28,6 +28,8 @@ on:
       - 'src/components/BottomNav.tsx'
       - 'src/styles.css'
       - 'scripts/run-android-emulator-tests.sh'
+      - 'scripts/verify_android_instrumentation.py'
+      - 'scripts/test-android-legacy-instrumentation.py'
       - 'scripts/prepare-android-emulator.sh'
       - 'scripts/test-android-emulator-sdk-retry.sh'
       - 'scripts/test-launch-intro.ts'
