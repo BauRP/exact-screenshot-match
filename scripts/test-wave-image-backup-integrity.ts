@@ -12,7 +12,7 @@ assert.equal(imageBlobFromBytes(png()).type,"image/png");
 for(const damaged of [new Uint8Array([137,80,78,71,13,10,26,10]),png(0,64),png(30000,2),png(20000,20000),png().subarray(0,33)]){
  assert.throws(()=>imageBlobFromBytes(damaged));
 }
-const jpg=new Uint8Array([255,216,255,224,0,8,1,2,3,4,5,6,255,217]);
+const jpg=new Uint8Array([255,216,255,224,0,12,1,2,3,4,5,6,7,8,9,10,255,217]);
 assert.equal(imageBlobFromBytes(jpg).type,"image/jpeg");
 assert.throws(()=>imageBlobFromBytes(jpg.slice(0,-2)));
 const webp=new Uint8Array(24);
