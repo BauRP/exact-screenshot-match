@@ -64,3 +64,18 @@ export function saveEditorPreferences(patch:Partial<EditorPreferences>):EditorPr
  }
  return next;
 }
+
+/** One-tap professional toolbar layouts, stored by the existing preferences
+ * system. They change controls only, not note content or spelling settings. */
+export function toolbarPreset(mode:"writing"|"media"|"all"):Pick<EditorPreferences,"hiddenToolbar"|"toolbarOrder">{
+ const all=TOOLBAR_TOOLS.map(tool=>tool.id);
+ if(mode==="writing")return {
+  hiddenToolbar:["audio","drawing","camera","gallery"],
+  toolbarOrder:validToolbarOrder(["search","outline","checklist","insert","audio","drawing","camera","gallery"]),
+ };
+ if(mode==="media")return {
+  hiddenToolbar:[],
+  toolbarOrder:validToolbarOrder(["camera","gallery","drawing","audio","insert","search","outline","checklist"]),
+ };
+ return {hiddenToolbar:[],toolbarOrder:all};
+}
