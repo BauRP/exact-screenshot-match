@@ -50,6 +50,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from "@/components/ui/sheet";
+import {noteCountsByFolder} from "@/lib/folder-tree-counts";
 import {
   addFolder,
   deleteFolder,
@@ -244,6 +245,7 @@ function Index() {
   // Compute the subtree ONCE per folder switch, not once for each note.
   // This matters for large offline notebooks and older Android phones.
   const scopedFolderIds=useMemo(()=>descendantFolderIds(folders,activeFolder),[folders,activeFolder]);
+  const countsByFolder=useMemo(()=>noteCountsByFolder(folders,notes),[folders,notes]);
   const filteredNotes = useMemo(() => notes.filter((note) => {
     const inScope=searchOpen&&searchAllFolders||activeFolder==="all"||scopedFolderIds.has(note.folderId??"all");
     return inScope && (!searchOpen || noteMatchesSearch(note,searchTerm,searchFilter));
@@ -618,8 +620,7 @@ function Index() {
           <nav aria-label="Дерево папок" className="mt-4 min-h-0 flex-1 space-y-1 overflow-y-auto">
             {folders.map(folder=>{
               const depth=Math.min(5,folderDepth(folders,folder.id));
-              const count=notes.filter(note=>folder.id==="all"||
-                descendantFolderIds(folders,folder.id).has(note.folderId??"all")).length;
+              const count=countsByFolder.get(folder.id)??0;
               return <button key={folder.id} type="button"
                 aria-current={activeFolder===folder.id?"page":undefined}
                 onClick={()=>{setActiveFolder(folder.id);setDrawerOpen(false);}}
