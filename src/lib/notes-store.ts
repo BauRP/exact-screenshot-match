@@ -680,7 +680,7 @@ export function updateNote(id: string, patch: Partial<Note>) {
       id: note.id,
       createdAt: note.createdAt,
       style: patch.style ? { ...note.style, ...patch.style } : note.style,
-      updatedAt: contentChanged ? Date.now() : note.updatedAt,
+      updatedAt: contentChanged ? Math.max(Date.now(),note.updatedAt+1) : note.updatedAt,
     };
     // Saving an unchanged editor draft must not rewrite storage, trigger a
     // backup, or falsely move the note's modification timestamp.
