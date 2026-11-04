@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownAZ,
   X,
@@ -52,6 +52,7 @@ import { Input } from "@/components/ui/input";
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from "@/components/ui/sheet";
 import {noteCountsByFolder} from "@/lib/folder-tree-counts";
 import {folderNavigationRows,folderDisplayPath} from "@/lib/folder-navigation";
+import {paginateFolderNotes,readFolderNotePageSize,saveFolderNotePageSize,FOLDER_NOTE_PAGE_SIZES,type FolderNotePageSize} from "@/lib/folder-note-pages";
 import {
   addFolder,
   deleteFolder,
@@ -148,6 +149,12 @@ function Index() {
   const [searchTerm,setSearchTerm]=useState("");
   const [searchAllFolders,setSearchAllFolders]=useState(false);
   const [searchFilter,setSearchFilter]=useState<NoteSearchFilter>("all");
+  // Folder pages only affect the visible slice. All selected notes, search
+  // results and saved media remain untouched when browsing pages.
+  const [folderPage,setFolderPage]=useState(1);
+  const [folderPageSize,setFolderPageSize]=useState<FolderNotePageSize>(readFolderNotePageSize);
+  const notesViewportRef=useRef<HTMLElement|null>(null);
+  useEffect(()=>{setFolderPage(1);},[activeFolder,sort,searchOpen,searchTerm,searchFilter,searchAllFolders]);
   // Refresh due-state while the list stays open; no polling or network traffic.
   const [reminderMinute,setReminderMinute]=useState(()=>Math.floor(Date.now()/60000));
   useEffect(()=>{
@@ -270,6 +277,17 @@ function Index() {
     const inScope=searchOpen&&searchAllFolders||activeFolder==="all"||scopedFolderIds.has(note.folderId??"all");
     return inScope && (!searchOpen || noteMatchesSearch(note,searchTerm,searchFilter));
   }),[activeFolder,notes,scopedFolderIds,searchOpen,searchAllFolders,searchTerm,searchFilter,reminderMinute]);
+
+  const pagedNotes=useMemo(()=>paginateFolderNotes(filteredNotes,folderPage,folderPageSize),[filteredNotes,folderPage,folderPageSize]);
+  const changeFolderPage=(next:number)=>{
+    setFolderPage(next);
+    notesViewportRef.current?.scrollTo({top:0,behavior:"auto"});
+  };
+  const changeFolderPageSize=(value:FolderNotePageSize)=>{
+    setFolderPageSize(saveFolderNotePageSize(value));
+    setFolderPage(1);
+    notesViewportRef.current?.scrollTo({top:0,behavior:"auto"});
+  };
 
   const dueNotes=useMemo(()=>notes.filter(note=>
     (activeFolder==="all"||descendantFolderIds(folders,activeFolder).has(note.folderId??"all"))&&reminderIsDue(note.reminderAt)
@@ -565,7 +583,7 @@ function Index() {
           {searchOpen ? <p className="py-8 text-center text-sm text-muted-foreground">Совпадений не найдено</p> : <NativeAdCard slotKey="home-first" />}
         </main>
       ) : (
-        <main className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-4 [-webkit-overflow-scrolling:touch]" style={{ marginBottom: "var(--wave-bottom-nav-occlusion, 104px)" }}>
+        <main ref={notesViewportRef} className="mx-auto w-full min-h-0 max-w-xl flex-1 overflow-y-auto overscroll-contain px-4 pb-5 pt-4 [-webkit-overflow-scrolling:touch]" style={{ marginBottom: "var(--wave-bottom-nav-occlusion, 104px)" }}>
           {!hydrated ? (
             <LoadingState />
           ) : status === "error" ? (
@@ -620,8 +638,15 @@ function Index() {
                 </div>
                 <p className="mt-2 text-[11px] text-muted-foreground">Напоминания отображаются внутри приложения; Android-уведомления пока не включены.</p>
               </section>}
-              <NotesGrid view={view} notes={filteredNotes} selected={selected} searchQuery={searchOpen?searchTerm:""} onToggle={toggleSelected} onOpen={openNote}
+              {filteredNotes.length>12&&<FolderPageControls page={pagedNotes.page} pageCount={pagedNotes.pageCount}
+                from={pagedNotes.from} to={pagedNotes.to} total={pagedNotes.total} size={folderPageSize}
+                onPageChange={changeFolderPage} onSizeChange={changeFolderPageSize}/>}
+              <NotesGrid view={view} notes={pagedNotes.items} selected={selected} searchQuery={searchOpen?searchTerm:""} onToggle={toggleSelected} onOpen={openNote}
               onMove={(id,target)=>{try{if(moveNoteBefore(id,target))toast.success("Порядок заметок сохранён");}catch(error){toast.error(error instanceof Error?error.message:"Не удалось переместить");}}} />
+              {pagedNotes.pageCount>1&&<FolderPageControls page={pagedNotes.page} pageCount={pagedNotes.pageCount}
+                from={pagedNotes.from} to={pagedNotes.to} total={pagedNotes.total} size={folderPageSize}
+                onPageChange={changeFolderPage} onSizeChange={changeFolderPageSize}/>}
+
             </>
           )}
         </main>
@@ -1139,6 +1164,36 @@ function SortItem({ current, value, label, icon }: { current: SortMode; value: S
       {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />}
     </DropdownMenuItem>
   );
+}
+
+function FolderPageControls({page,pageCount,from,to,total,size,onPageChange,onSizeChange}:{
+  page:number;pageCount:number;from:number;to:number;total:number;
+  size:FolderNotePageSize;
+  onPageChange:(page:number)=>void;onSizeChange:(size:FolderNotePageSize)=>void;
+}){
+ return <nav aria-label="Страницы раздела" className="my-3 rounded-xl border border-border bg-card/50 p-2">
+   <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+     <span>Страница {page} из {pageCount} · {from}–{to} из {total}</span>
+     <label className="flex shrink-0 items-center gap-1">
+       <span className="sr-only">Сколько заметок на странице</span>
+       <select aria-label="Сколько заметок на странице" value={size}
+         onChange={e=>onSizeChange(Number(e.target.value) as FolderNotePageSize)}
+         className="rounded-lg border border-border bg-background px-1 py-2 text-xs">
+         {FOLDER_NOTE_PAGE_SIZES.map(s=><option key={s} value={s}>{s} шт.</option>)}
+       </select>
+     </label>
+   </div>
+   {pageCount>1&&<div className="mt-2 flex justify-center gap-2">
+     <button type="button" className="min-h-10 min-w-10 rounded-lg border px-2 disabled:opacity-30"
+       aria-label="Первая страница раздела" disabled={page<=1} onClick={()=>onPageChange(1)}>«</button>
+     <button type="button" className="min-h-10 min-w-10 rounded-lg border px-2 disabled:opacity-30"
+       aria-label="Предыдущая страница раздела" disabled={page<=1} onClick={()=>onPageChange(page-1)}>‹</button>
+     <button type="button" className="min-h-10 min-w-10 rounded-lg border px-2 disabled:opacity-30"
+       aria-label="Следующая страница раздела" disabled={page>=pageCount} onClick={()=>onPageChange(page+1)}>›</button>
+     <button type="button" className="min-h-10 min-w-10 rounded-lg border px-2 disabled:opacity-30"
+       aria-label="Последняя страница раздела" disabled={page>=pageCount} onClick={()=>onPageChange(pageCount)}>»</button>
+   </div>}
+ </nav>;
 }
 
 function NotesGrid({
