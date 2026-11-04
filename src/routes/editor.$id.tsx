@@ -70,7 +70,7 @@ import { AudioNote } from "@/components/editor/AudioNode";
 import { WaveImage } from "@/components/editor/WaveImage";
 import { WaveDrawing } from "@/components/editor/WaveDrawing";
 import {WavePageBreak} from "@/lib/wave-page-break";
-import {WaveTextDirection,directionForText} from "@/lib/wave-text-direction";
+import {WaveTextDirection,setWaveTextDirection} from "@/lib/wave-text-direction";
 import {collectNoteOutline,filterNoteOutline,type OutlineFilter,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
 import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
 import {duplicateCurrentPage,moveCurrentPage,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,splitPageAtCaret} from "@/lib/wave-page-actions";
@@ -1079,23 +1079,32 @@ function EditorPage() {
               </button>)}
             </PopoverContent>
           </Popover>}
-          <button type="button" aria-label="Направление текста справа налево" title="Для арабского и других языков справа налево"
-            onClick={()=>{if(!editor)return;editor.commands.focus();const {$from}=editor.state.selection;
-              const node=$from.parent;const pos=$from.before();if(!node.isTextblock)return;
-              const next=node.attrs.textDirection==="rtl"?"ltr":"rtl";
-              editor.view.dispatch(editor.state.tr.setNodeMarkup(pos,undefined,{...node.attrs,textDirection:next}));
+          <button type="button" aria-label="Направление текста справа налево"
+            title="Изменить направление текущего абзаца или выделенных абзацев"
+            onMouseDown={event=>event.preventDefault()}
+            onClick={()=>{if(!editor)return;
+              const next=editor.state.selection.$from.parent.attrs.textDirection==="rtl"?"ltr":"rtl";
+              if(!setWaveTextDirection(editor,next))toast("Выделите текстовый блок");
             }}
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
             <span aria-hidden="true" className="text-xs font-bold">RTL</span>
           </button>
-          <button type="button" title="Определить направление по тексту абзаца"
+          <button type="button" title="Определить направление выделенных абзацев по первой букве"
             aria-label="Автоматическое направление текста"
+            onMouseDown={event=>event.preventDefault()}
             className="grid h-8 shrink-0 place-items-center rounded-full px-2 text-xs font-semibold hover:bg-secondary"
-            onClick={()=>{if(!editor)return;const {$from}=editor.state.selection;
-              const node=$from.parent;if(!node.isTextblock)return;
-              editor.view.dispatch(editor.state.tr.setNodeMarkup($from.before(),undefined,
-                {...node.attrs,textDirection:directionForText(node.textContent)}));
+            onClick={()=>{if(!editor)return;
+              const changed=setWaveTextDirection(editor,"auto");
+              if(changed)toast.success("Направление абзацев обновлено");
             }}>Авто RTL</button>
+          <button type="button" title="Определить направление во всех абзацах и задачах заметки"
+            aria-label="Автоматическое направление всей заметки"
+            onMouseDown={event=>event.preventDefault()}
+            className="grid h-8 shrink-0 place-items-center rounded-full px-2 text-xs font-semibold hover:bg-secondary"
+            onClick={()=>{if(!editor)return;
+              const changed=setWaveTextDirection(editor,"auto","document");
+              if(changed)toast.success("Направление обновлено в "+changed+" блоках");
+            }}>Все RTL</button>
           <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
           {editor && (
             <>

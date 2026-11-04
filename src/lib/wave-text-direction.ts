@@ -25,3 +25,32 @@ export function directionForText(text:string):"ltr"|"rtl"{
  }
  return "ltr";
 }
+
+  // Whole note and selected RTL actions share a single ProseMirror transaction
+  // instead of rebuilding HTML or losing text marks.
+/** A single undoable operation can change the selected paragraphs, headings
+ * and task rows, even inside nested sections. Never edit the text itself or
+ * discard bold/italic marks, attachment IDs, and saved page dividers. */
+import type {Editor} from "@tiptap/react";
+export type WaveDirectionMode="ltr"|"rtl"|"auto";
+export type WaveDirectionScope="selection"|"document";
+export function setWaveTextDirection(editor:Editor,mode:WaveDirectionMode,scope:WaveDirectionScope="selection"):number{
+ if(!editor.isEditable||editor.isDestroyed)return 0;
+ const {doc,selection}=editor.state;
+ const from=selection.from,to=selection.to;
+ const changes:{pos:number;attrs:Record<string,unknown>}[]=[];
+ doc.descendants((node,pos)=>{
+  if(!node.isTextblock||!("textDirection" in node.attrs))return;
+  const end=pos+node.nodeSize;
+  const selected=from===to?pos<from&&from<end:pos<to&&end>from;
+  if(scope==="selection"&&!selected)return;
+  const next=mode==="auto"?directionForText(node.textContent):mode;
+  if(node.attrs.textDirection!==next)
+   changes.push({pos,attrs:{...node.attrs,textDirection:next}});
+ });
+ if(!changes.length)return 0;
+ let transaction=editor.state.tr;
+ for(const change of changes)transaction=transaction.setNodeMarkup(change.pos,undefined,change.attrs);
+ editor.view.dispatch(transaction.scrollIntoView());
+ return changes.length;
+}
