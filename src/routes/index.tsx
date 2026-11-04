@@ -761,7 +761,7 @@ function Index() {
                 value={folderDialog?.parentId??(folderDialog?.mode==="add"?activeFolder:"all")}
                 onChange={event=>setFolderDialog(current=>current?{...current,parentId:event.target.value}:current)}
                 className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm">
-                {folderNavigationRows(folders,new Set(),folderParentSearch)
+                {folderNavigationRows(folders,new Set())
                   .filter(({folder})=>(folderDialog?.mode!=="rename"||
                     !descendantFolderIds(folders,folderDialog.id??"").has(folder.id))&&
                     (!folderParentSearch.trim()||folder.id==="all"||

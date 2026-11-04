@@ -80,7 +80,7 @@ import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib
 import {safeBrowserClipboardHtml,structuredPlainClipboardHtml,structuredMarkdownClipboardHtml} from "@/lib/wave-smart-paste";
 import {DOMParser as PMDOMParser} from "@tiptap/pm/model";
 import { useFolders, type Folder } from "@/lib/folders-store";
-import {folderDisplayPath,folderNavigationRows} from "@/lib/folder-navigation";
+import {folderNavigationRows} from "@/lib/folder-navigation";
 import {matchingSlashCommands,nextSlashIndex} from "@/lib/wave-slash-commands";
 import {
   DropdownMenu,

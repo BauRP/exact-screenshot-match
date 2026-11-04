@@ -25,7 +25,7 @@ const home=readFileSync("src/routes/index.tsx","utf8");
 const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
 for(const phrase of ["folderNavigationRows(folders,drawerCollapsed,drawerQuery)","Свернуть все","Развернуть все","Поиск папки","moveSearch","folderDisplayPath(folders,folder.id)"])
  assert.ok(home.includes(phrase),phrase);
-assert.ok(editor.includes("folderDisplayPath(folders,f.id)"));
+assert.ok(editor.includes("folderNavigationRows(folders,new Set(),editorFolderQuery)"));
 
 assert.ok(home.includes('aria-label="Найти родительскую папку"'));
 assert.ok(home.includes("folderParentSearch"));
