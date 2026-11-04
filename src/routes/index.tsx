@@ -161,7 +161,21 @@ function Index() {
   const [transferBusy,setTransferBusy]=useState(false);
   const [incomingWave,setIncomingWave]=useState<{file:File;title:string;originId:string;kind:"note"|"pdf";preview:string;comparisonText:string;visibleLength:number;audioCount:number;imageCount:number;modifiedAt:number|null}|null>(null);
   const [folderDialog, setFolderDialog] = useState<FolderDialogState>(null);
+  const [folderParentSearch,setFolderParentSearch]=useState("");
   const [drawerOpen,setDrawerOpen]=useState(false);
+  // Reopen the active folder's parent chain when the drawer is opened. The
+  // user's other collapse choices are retained for a compact navigator.
+  useEffect(()=>{
+    if(!drawerOpen)return;
+    const ancestorIds=new Set(folderAncestors(folders,activeFolder).slice(0,-1).map(f=>f.id));
+    if(!ancestorIds.size)return;
+    setDrawerCollapsed(current=>{
+      if(![...ancestorIds].some(id=>current.has(id)))return current;
+      const next=new Set(current);
+      for(const id of ancestorIds)next.delete(id);
+      return next;
+    });
+  },[drawerOpen,activeFolder,folders]);
   // The menu floats above the list without moving folders or ads.
   // Google renders native ads above WebView; temporarily hide that overlay
   // while the popup is open so the popup remains readable and clickable.
@@ -724,7 +738,7 @@ function Index() {
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog open={!!folderDialog} onOpenChange={(open) => !open && setFolderDialog(null)}>
+      <Dialog open={!!folderDialog} onOpenChange={open=>{if(!open){setFolderDialog(null);setFolderParentSearch("");}}}>
         <DialogContent className="max-w-sm rounded-2xl">
           <DialogHeader>
             <DialogTitle>{folderDialog?.mode === "rename" ? t("rename") : t("new_folder")}</DialogTitle>
@@ -738,15 +752,26 @@ function Index() {
               if (event.key === "Enter") saveFolderDialog();
             }}
           />
-          <label className="block text-xs">Родительская папка
-            <select aria-label="Родительская папка" value={folderDialog?.parentId??(folderDialog?.mode==="add"?activeFolder:"all")}
-              onChange={e=>setFolderDialog(current=>current?{...current,parentId:e.target.value}:current)}
-              className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm">
-              {folders.filter(folder=>folderDialog?.mode!=="rename"||
-                !descendantFolderIds(folders,folderDialog.id??"").has(folder.id)).map(folder=>
-                <option key={folder.id} value={folder.id}>{localizedFolderName(folder)}</option>)}
-            </select>
-          </label>
+          <div className="space-y-2">
+            <Input aria-label="Найти родительскую папку" placeholder="Поиск родительской папки…"
+              value={folderParentSearch} maxLength={80}
+              onChange={event=>setFolderParentSearch(event.target.value)}/>
+            <label className="block text-xs">Родительская папка
+              <select aria-label="Родительская папка"
+                value={folderDialog?.parentId??(folderDialog?.mode==="add"?activeFolder:"all")}
+                onChange={event=>setFolderDialog(current=>current?{...current,parentId:event.target.value}:current)}
+                className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-sm">
+                {folderNavigationRows(folders,new Set(),folderParentSearch)
+                  .filter(({folder})=>(folderDialog?.mode!=="rename"||
+                    !descendantFolderIds(folders,folderDialog.id??"").has(folder.id))&&
+                    (!folderParentSearch.trim()||folder.id==="all"||
+                      folder.id===(folderDialog?.parentId??activeFolder)||
+                      folderDisplayPath(folders,folder.id).toLocaleLowerCase().includes(folderParentSearch.trim().toLocaleLowerCase())))
+                  .map(({folder,path})=>
+                    <option key={folder.id} value={folder.id}>{folder.id==="all"?localizedFolderName(folder):path}</option>)}
+              </select>
+            </label>
+          </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setFolderDialog(null)}>
               {t("cancel")}

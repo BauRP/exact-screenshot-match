@@ -26,4 +26,11 @@ const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
 for(const phrase of ["folderNavigationRows(folders,drawerCollapsed,drawerQuery)","Свернуть все","Развернуть все","Поиск папки","moveSearch","folderDisplayPath(folders,folder.id)"])
  assert.ok(home.includes(phrase),phrase);
 assert.ok(editor.includes("folderDisplayPath(folders,f.id)"));
-console.log("Nested drawer, collapsed folder search and searchable move destinations passed");
+
+assert.ok(home.includes('aria-label="Найти родительскую папку"'));
+assert.ok(home.includes("folderParentSearch"));
+assert.ok(home.includes("folderAncestors(folders,activeFolder)"));
+assert.ok(editor.includes('aria-label="Поиск папки в редакторе"'));
+assert.ok(editor.includes("folderNavigationRows(folders,new Set(),editorFolderQuery)"));
+assert.ok(editor.includes("max-h-[min(24rem,70dvh)]"));
+console.log("Nested drawer, parent-picker search and editor folder navigation passed");

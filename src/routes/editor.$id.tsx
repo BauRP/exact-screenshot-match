@@ -79,8 +79,8 @@ import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files"
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
 import {safeBrowserClipboardHtml,structuredPlainClipboardHtml,structuredMarkdownClipboardHtml} from "@/lib/wave-smart-paste";
 import {DOMParser as PMDOMParser} from "@tiptap/pm/model";
-import { useFolders, folderAncestors, orderedFolderTree, type Folder } from "@/lib/folders-store";
-import {folderDisplayPath} from "@/lib/folder-navigation";
+import { useFolders, type Folder } from "@/lib/folders-store";
+import {folderDisplayPath,folderNavigationRows} from "@/lib/folder-navigation";
 import {matchingSlashCommands,nextSlashIndex} from "@/lib/wave-slash-commands";
 import {
   DropdownMenu,
@@ -146,6 +146,7 @@ function EditorPage() {
   const [folderId, setFolderId] = useState<string>(
     note?.folderId ?? folderParam ?? "all",
   );
+  const [editorFolderQuery,setEditorFolderQuery]=useState("");
   const [recording, setRecording] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const nativeRecordingRef = useRef(false);
@@ -790,7 +791,7 @@ function EditorPage() {
             placeholder={t("new_note")}
             className="min-w-0 flex-1 bg-transparent px-2 py-2 font-display text-base font-semibold outline-none placeholder:text-muted-foreground"
           />
-            <DropdownMenu>
+            <DropdownMenu onOpenChange={open=>{if(!open)setEditorFolderQuery("");}}>
               <DropdownMenuTrigger asChild>
                 <button
                   className="flex h-7 max-w-[6.5rem] shrink-0 items-center rounded-full border border-border bg-secondary/50 px-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary"
@@ -799,21 +800,34 @@ function EditorPage() {
                   <span className="truncate">{localizedFolderName(folders.find((f) => f.id === folderId) ?? folders[0])}</span>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" sideOffset={6} className="w-48 rounded-2xl">
-                {orderedFolderTree(folders).map((f) => (
+              <DropdownMenuContent align="end" sideOffset={6}
+                className="max-h-[min(24rem,70dvh)] w-64 overflow-y-auto rounded-2xl">
+                <div className="sticky top-0 z-10 bg-popover p-2">
+                  <Input aria-label="Поиск папки в редакторе" placeholder="Найти папку…"
+                    maxLength={80} value={editorFolderQuery}
+                    onKeyDown={event=>event.stopPropagation()}
+                    onChange={event=>setEditorFolderQuery(event.target.value)}/>
+                </div>
+                {folderNavigationRows(folders,new Set(),editorFolderQuery).map(({folder:f,path,depth}) => (
                   <DropdownMenuItem
                     key={f.id}
-                    onClick={() => handleFolder(f.id)}
-                    className={`gap-2 py-2 text-xs font-semibold uppercase tracking-wider ${
+                    onClick={() => {handleFolder(f.id);setEditorFolderQuery("");}}
+                    title={path}
+                    className={`gap-2 py-2 text-xs font-semibold ${
                       folderId === f.id ? "text-primary" : ""
                     }`}
                   >
-                    <span className="min-w-0 truncate">{f.id==="all"?localizedFolderName(f):folderDisplayPath(folders,f.id)}</span>
+                    <span className="min-w-0 truncate" style={{paddingLeft:depth*7}}>
+                      {f.id==="all"?localizedFolderName(f):path}
+                    </span>
                     {folderId === f.id && (
-                      <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
+                      <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
                     )}
                   </DropdownMenuItem>
                 ))}
+                {editorFolderQuery.trim()&&
+                  folderNavigationRows(folders,new Set(),editorFolderQuery).length===1&&
+                  <p className="px-3 py-2 text-xs text-muted-foreground">Другие папки не найдены</p>}
               </DropdownMenuContent>
             </DropdownMenu>
           <Popover>
