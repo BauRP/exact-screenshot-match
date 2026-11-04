@@ -51,6 +51,7 @@ import {
 import { Input } from "@/components/ui/input";
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from "@/components/ui/sheet";
 import {noteCountsByFolder} from "@/lib/folder-tree-counts";
+import {folderNavigationRows,folderDisplayPath} from "@/lib/folder-navigation";
 import {
   addFolder,
   deleteFolder,
@@ -139,6 +140,9 @@ function Index() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [colorDialog,setColorDialog]=useState(false);
   const [moveDialog,setMoveDialog]=useState(false);
+  const [moveSearch,setMoveSearch]=useState("");
+  const [drawerQuery,setDrawerQuery]=useState("");
+  const [drawerCollapsed,setDrawerCollapsed]=useState<Set<string>>(()=>new Set());
   const [exportDialog,setExportDialog]=useState(false);
   const [searchOpen,setSearchOpen]=useState(false);
   const [searchTerm,setSearchTerm]=useState("");
@@ -247,6 +251,7 @@ function Index() {
   // This matters for large offline notebooks and older Android phones.
   const scopedFolderIds=useMemo(()=>descendantFolderIds(folders,activeFolder),[folders,activeFolder]);
   const countsByFolder=useMemo(()=>noteCountsByFolder(folders,notes),[folders,notes]);
+  const drawerRows=useMemo(()=>folderNavigationRows(folders,drawerCollapsed,drawerQuery),[folders,drawerCollapsed,drawerQuery]);
   const filteredNotes = useMemo(() => notes.filter((note) => {
     const inScope=searchOpen&&searchAllFolders||activeFolder==="all"||scopedFolderIds.has(note.folderId??"all");
     return inScope && (!searchOpen || noteMatchesSearch(note,searchTerm,searchFilter));
@@ -612,20 +617,36 @@ function Index() {
         <SheetContent side="left" aria-describedby={undefined}
           className="flex max-w-[min(22rem,90vw)] flex-col overflow-hidden pt-[max(3rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
           <SheetHeader><SheetTitle>Папки Wave Notes</SheetTitle></SheetHeader>
-          <nav aria-label="Дерево папок" className="mt-4 min-h-0 flex-1 space-y-1 overflow-y-auto">
-            {folders.map(folder=>{
-              const depth=Math.min(5,folderDepth(folders,folder.id));
+          <div className="mt-3 shrink-0 space-y-2">
+            <Input aria-label="Поиск папки" placeholder="Найти папку…" value={drawerQuery}
+              maxLength={80} onChange={event=>setDrawerQuery(event.target.value)}/>
+            <div className="flex gap-2 text-xs">
+              <button type="button" className="rounded-lg border px-3 py-2" onClick={()=>setDrawerCollapsed(new Set(folders.filter(f=>f.id!=="all").map(f=>f.id)))}>Свернуть все</button>
+              <button type="button" className="rounded-lg border px-3 py-2" onClick={()=>setDrawerCollapsed(new Set())}>Развернуть все</button>
+            </div>
+          </div>
+          <nav aria-label="Дерево папок" className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto">
+            {drawerRows.map(({folder,depth,hasChildren})=>{
               const count=countsByFolder.get(folder.id)??0;
-              return <button key={folder.id} type="button"
-                aria-current={activeFolder===folder.id?"page":undefined}
-                onClick={()=>{setActiveFolder(folder.id);setDrawerOpen(false);}}
-                className={"flex min-h-11 w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm "+
-                  (activeFolder===folder.id?"bg-primary text-primary-foreground":"hover:bg-secondary") }
-                style={{paddingLeft:(12+depth*15)+"px"}}>
-                <span className="min-w-0 truncate">{localizedFolderName(folder)}</span>
-                <span className="ml-2 rounded-md border border-current/20 px-1.5 text-xs">{count}</span>
-              </button>;
+              const expanded=drawerQuery.trim()?true:!drawerCollapsed.has(folder.id);
+              return <div key={folder.id} className="flex min-h-11 w-full items-center gap-1 rounded-xl"
+                style={{paddingLeft:(depth*14)+"px"}}>
+                {hasChildren&&folder.id!=="all"
+                  ? <button type="button" aria-label={(expanded?"Свернуть":"Развернуть")+" подпапки: "+localizedFolderName(folder)}
+                      aria-expanded={expanded}
+                      onClick={()=>setDrawerCollapsed(current=>{const next=new Set(current);if(next.has(folder.id))next.delete(folder.id);else next.add(folder.id);return next;})}
+                      className="grid h-10 w-8 shrink-0 place-items-center rounded-lg border border-border">{expanded?"▾":"▸"}</button>
+                  : <span className="w-8 shrink-0" aria-hidden="true"/>}
+                <button type="button" aria-current={activeFolder===folder.id?"page":undefined}
+                  onClick={()=>{setActiveFolder(folder.id);setDrawerOpen(false);setDrawerQuery("");}}
+                  className={"flex min-h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-xl px-2 py-2 text-left text-sm "+
+                    (activeFolder===folder.id?"bg-primary text-primary-foreground":"hover:bg-secondary")}>
+                  <span className="min-w-0 truncate">{localizedFolderName(folder)}</span>
+                  <span className="shrink-0 rounded-md border border-current/20 px-1.5 text-xs">{count}</span>
+                </button>
+              </div>;
             })}
+            {drawerRows.length===1&&drawerQuery.trim()&&<p className="p-3 text-xs text-muted-foreground">Папки не найдены</p>}
           </nav>
         </SheetContent>
       </Sheet>
@@ -687,14 +708,19 @@ function Index() {
           </div>
         </DialogContent>
       </Dialog>
-      <Dialog open={moveDialog} onOpenChange={setMoveDialog}>
+      <Dialog open={moveDialog} onOpenChange={open=>{setMoveDialog(open);if(!open)setMoveSearch("");}}>
         <DialogContent className="max-w-sm rounded-2xl">
           <DialogHeader><DialogTitle>Переместить заметку</DialogTitle></DialogHeader>
+          <Input aria-label="Найти папку для переноса" placeholder="Поиск папки…" maxLength={80}
+            value={moveSearch} onChange={event=>setMoveSearch(event.target.value)}/>
           <div className="max-h-64 space-y-1 overflow-y-auto">
-            {folders.map(folder=><button type="button" key={folder.id} onClick={()=>{
-              try{moveSelectedNotesToFolder(selectedNotes.map(note=>note.id),folder.id);setSelected(new Set());setMoveDialog(false);toast.success("Заметки перемещены");}
+            {folderNavigationRows(folders,new Set(),moveSearch).map(({folder,path})=><button type="button" key={folder.id} onClick={()=>{
+              try{moveSelectedNotesToFolder(selectedNotes.map(note=>note.id),folder.id);setSelected(new Set());setMoveDialog(false);setMoveSearch("");toast.success("Заметки перемещены");}
               catch(error){toast.error(error instanceof Error?error.message:"Не удалось переместить");}
-            }} className="flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm hover:bg-secondary">{localizedFolderName(folder)}</button>)}
+            }} className="flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm hover:bg-secondary"
+              title={folderDisplayPath(folders,folder.id)}>{path==="ALL"?localizedFolderName(folder):path}</button>)}
+            {!folderNavigationRows(folders,new Set(),moveSearch).some(r=>r.folder.id!=="all")&&moveSearch.trim()&&
+              <p className="px-3 py-2 text-xs text-muted-foreground">Папки не найдены</p>}
           </div>
         </DialogContent>
       </Dialog>

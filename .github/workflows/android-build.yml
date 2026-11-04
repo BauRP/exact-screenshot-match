@@ -136,8 +136,14 @@ jobs:
       - name: Verify nested folders and safe hierarchy
         run: bun scripts/test-wave-nested-folders.ts
 
+      - name: Verify collapsible folder drawer and searchable move destinations
+        run: bun scripts/test-wave-folder-navigation.ts
+
       - name: Verify compact selected actions and mobile list continuation
         run: bun scripts/test-wave-editor-menu.ts
+
+      - name: Verify slash palette keyboard and page naming
+        run: bun scripts/test-wave-slash-keyboard.ts
 
       - name: Reject malformed or ambiguous Wave Notes archives
         run: bun scripts/test-wave-transfer-archive.ts

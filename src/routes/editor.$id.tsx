@@ -58,6 +58,8 @@ import {
   useNotes,
 } from "@/lib/notes-store";
 import { Button } from "@/components/ui/button";
+import {Dialog,DialogContent,DialogFooter,DialogHeader,DialogTitle} from "@/components/ui/dialog";
+import {Input} from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -77,7 +79,9 @@ import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files"
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
 import {safeBrowserClipboardHtml,structuredPlainClipboardHtml,structuredMarkdownClipboardHtml} from "@/lib/wave-smart-paste";
 import {DOMParser as PMDOMParser} from "@tiptap/pm/model";
-import { useFolders, type Folder } from "@/lib/folders-store";
+import { useFolders, folderAncestors, orderedFolderTree, type Folder } from "@/lib/folders-store";
+import {folderDisplayPath} from "@/lib/folder-navigation";
+import {matchingSlashCommands,nextSlashIndex} from "@/lib/wave-slash-commands";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -184,6 +188,9 @@ function EditorPage() {
   },[]);
   const toolVisible=(tool:EditorTool)=>!prefs.hiddenToolbar.includes(tool);
   const [slashText,setSlashText]=useState<string|null>(null);
+  const [slashActive,setSlashActive]=useState(0);
+  const [pageRename,setPageRename]=useState<{pos:number;label:string}|null>(null);
+  useEffect(()=>{setSlashActive(0);},[slashText]);
 
   const [currentFontFamily, setCurrentFontFamily] = useState(FONTS[0].value);
   const [currentFontSize, setCurrentFontSize] = useState<number>(18);
@@ -480,7 +487,7 @@ function EditorPage() {
     else if(id==="tip"||id==="warning"||id==="info")insertWaveBlock("callout",id);
     else insertWaveBlock(id);
   };
-  const visibleSlashChoices=slashText===null?[]:blockChoices.filter(item=>item.label.toLocaleLowerCase().includes(slashText.toLocaleLowerCase()));
+  const visibleSlashChoices=slashText===null?[]:matchingSlashCommands(blockChoices,slashText);
   
   // Keep archive work out of the editor completely, even if a previous
   // committed edit was waiting to be archived. A checkmark navigates away
@@ -793,7 +800,7 @@ function EditorPage() {
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" sideOffset={6} className="w-48 rounded-2xl">
-                {folders.map((f) => (
+                {orderedFolderTree(folders).map((f) => (
                   <DropdownMenuItem
                     key={f.id}
                     onClick={() => handleFolder(f.id)}
@@ -801,7 +808,7 @@ function EditorPage() {
                       folderId === f.id ? "text-primary" : ""
                     }`}
                   >
-                    {localizedFolderName(f)}
+                    <span className="min-w-0 truncate">{f.id==="all"?localizedFolderName(f):folderDisplayPath(folders,f.id)}</span>
                     {folderId === f.id && (
                       <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
                     )}
@@ -1093,13 +1100,16 @@ function EditorPage() {
             </>
           )}
         </div>
-        {slashText!==null && visibleSlashChoices.length>0 && <div className="mt-2 max-h-44 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-lg"
+        {slashText!==null && <div className="mt-2 max-h-44 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-lg"
             role="listbox" aria-label="Быстрое меню вставки">
-            {visibleSlashChoices.map(item=><button type="button" key={item.id}
+            {visibleSlashChoices.length?visibleSlashChoices.map((item,index)=><button type="button" key={item.id}
+              role="option" aria-selected={slashActive===index}
               onMouseDown={event=>event.preventDefault()} onClick={()=>chooseBlock(item.id)}
-              className="flex min-h-9 w-full items-center gap-2 rounded-lg px-3 text-left text-xs hover:bg-secondary">
+              className={"flex min-h-9 w-full items-center gap-2 rounded-lg px-3 text-left text-xs hover:bg-secondary "+
+                (slashActive===index?"bg-secondary font-semibold":"")}>
               <span className="w-5 text-center">{item.icon}</span>{item.label}
-            </button>)}
+            </button>):<p className="px-3 py-2 text-xs text-muted-foreground">Команда не найдена</p>}
+            <p className="px-3 py-1 text-[10px] text-muted-foreground">↑ ↓ выбор · Enter вставить · Esc закрыть</p>
           </div>}
         {editor&&<div className="mt-2 flex flex-wrap items-center gap-1 rounded-lg border border-border px-2 py-1" aria-label="Страницы и перемещение блоков">
           <span className="mr-1 text-xs text-muted-foreground">Страница {currentPage}/{pagePositions.length}</span>
@@ -1118,9 +1128,7 @@ function EditorPage() {
               const found=renameCurrentPage(editor.state.doc,editor.state.selection.from,"");
               if(!found)return;
               const current=String(editor.state.doc.nodeAt(found.pos)?.attrs.label||"");
-              const label=window.prompt("Название страницы (до 80 символов)",current);
-              if(label===null)return;
-              editor.view.dispatch(editor.state.tr.setNodeMarkup(found.pos,undefined,{...editor.state.doc.nodeAt(found.pos)?.attrs,label:label.trim().slice(0,80)}));
+              setPageRename({pos:found.pos,label:current});
             }}>Название страницы</button>}
           {pagePositions.length>1&&<select aria-label="Выбрать страницу" value={String(currentPage)}
             onChange={event=>{const index=Number(event.target.value)-1;const pos=pagePositions[index];if(pos!==undefined)editor.chain().focus().setTextSelection(Math.min(pos,editor.state.doc.content.size)).run();}}
@@ -1344,11 +1352,44 @@ function EditorPage() {
       )}
       </div>
 
+      <Dialog open={pageRename!==null} onOpenChange={open=>{if(!open)setPageRename(null);}}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader><DialogTitle>Название страницы</DialogTitle></DialogHeader>
+          <Input autoFocus aria-label="Название страницы" value={pageRename?.label??""} maxLength={80}
+            onChange={event=>setPageRename(current=>current?{...current,label:event.target.value}:null)}
+            onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();document.getElementById("wave-page-rename-save")?.click();}}}/>
+          <DialogFooter>
+            <Button variant="outline" onClick={()=>setPageRename(null)}>Отмена</Button>
+            <Button id="wave-page-rename-save" onClick={()=>{
+              if(!editor||!pageRename)return;
+              const node=editor.state.doc.nodeAt(pageRename.pos);
+              if(node?.type.name!=="wavePageBreak"){toast.error("Страница была изменена");setPageRename(null);return;}
+              editor.view.dispatch(editor.state.tr.setNodeMarkup(pageRename.pos,undefined,{...node.attrs,label:pageRename.label.trim()}));
+              setPageRename(null);
+            }}>Сохранить</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Editor — flexes to fill remaining height, shrinks when toolbar expands */}
       <main className="mx-auto flex w-full min-h-0 max-w-xl flex-1 flex-col px-3 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-3">
         <div
           className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border p-3 shadow-inner transition-colors [-webkit-overflow-scrolling:touch]"
           style={{ backgroundColor: canvasBg, ...paperAppearance(paperMood,paperRule) }}
+          onKeyDownCapture={event=>{
+            if(slashText===null||event.nativeEvent.isComposing)return;
+            if(event.key==="Escape"){
+              event.preventDefault();event.stopPropagation();setSlashText(null);return;
+            }
+            if(!visibleSlashChoices.length)return;
+            if(event.key==="ArrowDown"||event.key==="ArrowUp"){
+              event.preventDefault();event.stopPropagation();
+              setSlashActive(current=>nextSlashIndex(visibleSlashChoices.length,current,event.key==="ArrowDown"?1:-1));
+            }else if(event.key==="Enter"){
+              event.preventDefault();event.stopPropagation();
+              chooseBlock(visibleSlashChoices[Math.min(slashActive,visibleSlashChoices.length-1)].id);
+            }
+          }}
         >
           <EditorContent editor={editor} style={{
             "--wave-note-caret": noteCaretColor(canvasBg),
