@@ -100,7 +100,8 @@ import {inspectWaveFile,receiveWaveNote,shareWaveNote} from "@/lib/note-transfer
 import {findReturnedOriginal,returnedNoteComparison} from "@/lib/wave-note-conflicts";
 import {noteMatchesSearch,type NoteSearchFilter} from "@/lib/note-search";
 import {shareNoteExport,type NoteExportFormat} from "@/lib/note-export";
-import {reminderIsDue,snoozeReminderTime,reminderLabel,type ReminderSnooze} from "@/lib/note-reminders";
+import {snoozeReminderTime,reminderLabel,type ReminderSnooze} from "@/lib/note-reminders";
+import {reminderHomePreview} from "@/lib/reminder-dashboard";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -289,9 +290,11 @@ function Index() {
     notesViewportRef.current?.scrollTo({top:0,behavior:"auto"});
   };
 
-  const dueNotes=useMemo(()=>notes.filter(note=>
-    (activeFolder==="all"||descendantFolderIds(folders,activeFolder).has(note.folderId??"all"))&&reminderIsDue(note.reminderAt)
-  ).sort((a,b)=>(a.reminderAt??0)-(b.reminderAt??0)).slice(0,3),[notes,scopedFolderIds,activeFolder,reminderMinute]);
+  const reminderPreview=useMemo(()=>
+    reminderHomePreview(notes,activeFolder==="all"?"all":scopedFolderIds,reminderMinute*60000),
+    [notes,scopedFolderIds,activeFolder,reminderMinute]);
+  const dueNotes=reminderPreview.overdue;
+  const upcomingNotes=reminderPreview.upcoming;
   const changeDueReminder=(id:string,operation:ReminderSnooze|"clear")=>{
     try{
       updateNote(id,{reminderAt:operation==="clear"?undefined:snoozeReminderTime(operation)});
@@ -636,11 +639,28 @@ function Index() {
                       className="rounded-md border border-border px-2 py-2 text-xs">Снять</button>
                   </div>)}
                 </div>
-                <p className="mt-2 text-[11px] text-muted-foreground">Напоминания отображаются внутри приложения; Android-уведомления пока не включены.</p>
+                <p className="mt-2 text-[11px] text-muted-foreground">Android-уведомления доступны после разрешения в системе. Энергосбережение телефона может немного задерживать их.</p>
               </section>}
               {filteredNotes.length>12&&<FolderPageControls page={pagedNotes.page} pageCount={pagedNotes.pageCount}
                 from={pagedNotes.from} to={pagedNotes.to} total={pagedNotes.total} size={folderPageSize}
                 onPageChange={changeFolderPage} onSizeChange={changeFolderPageSize}/>}
+              {!searchOpen&&upcomingNotes.length>0&&<section aria-label="Ближайшие напоминания"
+                className="mb-3 rounded-xl border border-border bg-secondary/40 p-3">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold">Скоро напомнить</h2>
+                  <button type="button" className="rounded-lg px-2 py-1 text-xs text-primary"
+                    onClick={()=>{setSearchOpen(true);setSearchFilter("upcoming");setSearchTerm("");}}>
+                    Показать все
+                  </button>
+                </div>
+                <div className="space-y-1">
+                  {upcomingNotes.map(note=><button key={note.id} type="button" onClick={()=>openNote(note)}
+                    className="flex min-h-11 w-full flex-wrap items-center justify-between gap-2 rounded-lg bg-background/70 px-3 py-2 text-left text-xs">
+                    <span className="min-w-0 flex-1 truncate font-medium">{note.title}</span>
+                    <span className="text-muted-foreground">{reminderLabel(note.reminderAt)}</span>
+                  </button>)}
+                </div>
+              </section>}
               <NotesGrid view={view} notes={pagedNotes.items} selected={selected} searchQuery={searchOpen?searchTerm:""} onToggle={toggleSelected} onOpen={openNote}
               onMove={(id,target)=>{try{if(moveNoteBefore(id,target))toast.success("Порядок заметок сохранён");}catch(error){toast.error(error instanceof Error?error.message:"Не удалось переместить");}}} />
               {pagedNotes.pageCount>1&&<FolderPageControls page={pagedNotes.page} pageCount={pagedNotes.pageCount}

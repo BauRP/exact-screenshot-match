@@ -141,6 +141,9 @@ jobs:
       - name: Test folder page navigation, limits and search isolation
         run: bun scripts/test-wave-folder-pages.ts
 
+      - name: Verify home overdue and upcoming reminder previews
+        run: bun scripts/test-wave-reminder-home.ts
+
       - name: Verify compact selected actions and mobile list continuation
         run: bun scripts/test-wave-editor-menu.ts
 
