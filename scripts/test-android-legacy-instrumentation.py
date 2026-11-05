@@ -25,4 +25,11 @@ with TemporaryDirectory() as tmp:
     assert verify(transcript().replace("OK (2 tests)", "OK (3 tests)"), target) != 0
     assert verify(transcript().replace("INSTRUMENTATION_STATUS_CODE: 0", "INSTRUMENTATION_STATUS_CODE: -2", 1), target) != 0
     assert verify(transcript() + "FAILURES!!!\n", target) != 0
+# API 24 uses manual adb install of BOTH APKs. The app APK is not
+# guaranteed to exist after only assembleDebugAndroidTest.
+workflow = Path(".github/workflows/android-ocr-emulator.yml").read_text(encoding="utf-8")
+runner = Path("scripts/run-android-emulator-tests.sh").read_text(encoding="utf-8")
+assert "run: ./gradlew assembleDebug assembleDebugAndroidTest" in workflow
+assert "test -s android/app/build/outputs/apk/debug/app-debug.apk" in runner
+assert "test -s android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" in runner
 print("API 24 legacy instrumentation parser rejects missing, incomplete and failing test runs")
