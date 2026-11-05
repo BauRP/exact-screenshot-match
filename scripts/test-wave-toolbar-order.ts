@@ -10,5 +10,9 @@ assert.equal(moved[3],"camera");
 assert.deepEqual(moveToolbarTool(original,"audio","up"),original);
 const settings=readFileSync("src/routes/settings.tsx","utf8"),editor=readFileSync("src/routes/editor.$id.tsx","utf8");
 assert.ok(settings.includes("moveToolbarTool(editorPrefs.toolbarOrder,id"));
-for(const id of original)assert.ok(editor.includes('prefs.toolbarOrder.indexOf("'+id+'")'),id);
+for(const id of original.filter(id=>id!=="pageActions"))
+ assert.ok(editor.includes('prefs.toolbarOrder.indexOf("'+id+'")'),id);
+assert.ok(editor.includes('toolVisible("pageActions")'));
+assert.ok(settings.includes('editorPrefs.toolbarOrder.filter(id=>id!=="pageActions")'));
+assert.deepEqual(moveToolbarTool(original,"pageActions","up"),original);
 console.log("Toolbar ordering saved, backward-compatible and applied to editor");

@@ -443,14 +443,14 @@ function SettingsPage() {
               </div>)}
             </div>
             <p className="mt-3 text-xs font-semibold">Порядок инструментов</p>
-            <p className="mt-1 text-xs text-muted-foreground">Переставляйте кнопки стрелками. Порядок сохраняется для следующих заметок.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Стрелки меняют порядок кнопок верхнего ряда. Отдельную панель страниц можно скрыть выше, её положение фиксировано.</p>
             <div className="mt-2 space-y-1">
-              {editorPrefs.toolbarOrder.map((id,index)=><div key={id} className="flex items-center gap-2 rounded-md border border-border px-2 py-1">
+              {editorPrefs.toolbarOrder.filter(id=>id!=="pageActions").map((id,index)=><div key={id} className="flex items-center gap-2 rounded-md border border-border px-2 py-1">
                 <span className="min-w-0 flex-1 text-xs">{TOOLBAR_TOOLS.find(tool=>tool.id===id)?.label||id}</span>
                 <button type="button" aria-label={"Выше: "+id} disabled={index===0}
                   className="rounded border border-border px-3 py-1 disabled:opacity-30"
                   onClick={()=>changePref({toolbarOrder:moveToolbarTool(editorPrefs.toolbarOrder,id,"up")})}>↑</button>
-                <button type="button" aria-label={"Ниже: "+id} disabled={index===editorPrefs.toolbarOrder.length-1}
+                <button type="button" aria-label={"Ниже: "+id} disabled={index===editorPrefs.toolbarOrder.length-2}
                   className="rounded border border-border px-3 py-1 disabled:opacity-30"
                   onClick={()=>changePref({toolbarOrder:moveToolbarTool(editorPrefs.toolbarOrder,id,"down")})}>↓</button>
               </div>)}

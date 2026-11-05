@@ -34,12 +34,16 @@ export function validHiddenToolbar(input:unknown):EditorTool[]{
 export function validToolbarOrder(input:unknown):EditorTool[]{
  const supplied=Array.isArray(input)?input:[];
  const unique=validHiddenToolbar(supplied);
- return [...unique,...TOOLBAR_TOOLS.map(tool=>tool.id).filter(id=>!unique.includes(id))];
+ // The page navigation is a separate row, so it can be shown or hidden,
+ // but must not pretend to move between buttons in the upper toolbar.
+ return [...unique.filter(id=>id!=="pageActions"),
+   ...TOOLBAR_TOOLS.map(tool=>tool.id).filter(id=>id!=="pageActions"&&!unique.includes(id)),
+   "pageActions"];
 }
 export function moveToolbarTool(order:readonly EditorTool[],tool:EditorTool,direction:"up"|"down"):EditorTool[]{
  const next=validToolbarOrder(order),index=next.indexOf(tool);
  const target=index+(direction==="up"?-1:1);
- if(index<0||target<0||target>=next.length)return next;
+ if(tool==="pageActions"||index<0||target<0||target>=next.length-1)return next;
  [next[index],next[target]]=[next[target],next[index]];
  return next;
 }

@@ -8,6 +8,7 @@ assert.deepEqual(validToolbarOrder(["paperMood","pin","paperMood","bogus"]),[
  "paperMood","pin",...ids.filter(id=>id!=="paperMood"&&id!=="pin")
 ]);
 assert.deepEqual(validHiddenToolbar(["paperRule","pageActions","pageActions","bogus"]),["paperRule","pageActions"]);
+assert.equal(validToolbarOrder(["pageActions","pin"])[ids.length-1],"pageActions");
 for(const mode of ["writing","media","all"] as const){
  const preset=toolbarPreset(mode);
  assert.deepEqual([...new Set(preset.toolbarOrder)].sort(),[...ids].sort(),"Preset must retain every toolbar tool");
