@@ -95,7 +95,7 @@ import {replaceOneInNote,replaceAllInNote} from "@/lib/wave-find-replace";
 import { readEditorPreferences,EDITOR_PREFS_CHANGED,type EditorTool } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
-import {setSelectedChecklistShape,continueSelectedChecklistItem,convertSelectedChecklistBlocks,selectedSectionTaskCounts,setSelectedSectionTasksDone,currentPageTaskCounts,setCurrentPageTasksDone} from "@/lib/wave-checklist-actions";
+import {setSelectedChecklistShape,setSelectedTasksDone,continueSelectedChecklistItem,convertSelectedChecklistBlocks,selectedSectionTaskCounts,setSelectedSectionTasksDone,currentPageTaskCounts,setCurrentPageTasksDone} from "@/lib/wave-checklist-actions";
 import {setAllFoldSections,setFoldSectionsToDepth,countFoldSections} from "@/lib/wave-section-batch";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
@@ -996,6 +996,25 @@ function EditorPage() {
                     className="rounded-md bg-secondary px-2 py-2 text-xs">Сбросить раздел</button>
                 </div>
               </div>}
+              <div className="mb-2 rounded-lg border border-border p-2">
+                <p className="mb-1 text-xs font-semibold">Выделенные задачи</p>
+                <div className="flex gap-1">
+                  <button type="button" onMouseDown={event=>event.preventDefault()}
+                    aria-label="Отметить выделенные задачи выполненными"
+                    onClick={()=>{if(!editor)return;
+                      const changed=setSelectedTasksDone(editor,true);
+                      if(changed)toast.success("Выполнено выбранных задач: "+changed);
+                      else toast("Выделите незавершённые пункты списка дел");
+                    }} className="rounded-md bg-secondary px-2 py-2 text-xs">Выполнить выбор</button>
+                  <button type="button" onMouseDown={event=>event.preventDefault()}
+                    aria-label="Сбросить выполнение выделенных задач"
+                    onClick={()=>{if(!editor)return;
+                      const changed=setSelectedTasksDone(editor,false);
+                      if(changed)toast.success("Сброшено выбранных задач: "+changed);
+                      else toast("Выделите выполненные пункты списка дел");
+                    }} className="rounded-md bg-secondary px-2 py-2 text-xs">Сбросить выбор</button>
+                </div>
+              </div>
               <p className="px-2 pb-1 text-xs font-semibold">Форма отметок</p>
               {([{shape:"square",label:"Квадрат",symbol:"□"},{shape:"circle",label:"Круг",symbol:"○"},
                 {shape:"diamond",label:"Ромб",symbol:"◇"},{shape:"check",label:"Галочка",symbol:"✓"}] as const).map(choice=>(
@@ -1035,7 +1054,7 @@ function EditorPage() {
                   }}>Выбранные задачи → абзацы</button>
               </div>
               <div className="mt-2 border-t border-border pt-2">
-                <label htmlFor="wave-current-check-shape" className="block px-2 pb-1 text-xs font-semibold">Изменить выбранную отметку</label>
+                <label htmlFor="wave-current-check-shape" className="block px-2 pb-1 text-xs font-semibold">Изменить форму выделенных отметок</label>
                 <select id="wave-current-check-shape" aria-label="Изменить форму выбранной отметки"
                   defaultValue="" className="w-full rounded-md border border-border bg-background px-2 py-2 text-xs"
                   onChange={event=>{
@@ -1110,7 +1129,7 @@ function EditorPage() {
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
             <span aria-hidden="true" className="text-xs font-bold">RTL</span>
           </button>
-          <button type="button" title="Определить направление выделенных абзацев по первой букве"
+          <button style={{order:10+prefs.toolbarOrder.indexOf("direction")}} type="button" title="Определить направление выделенных абзацев по первой букве"
             aria-label="Автоматическое направление текста"
             onMouseDown={event=>event.preventDefault()}
             className="grid h-8 shrink-0 place-items-center rounded-full px-2 text-xs font-semibold hover:bg-secondary"
@@ -1118,7 +1137,7 @@ function EditorPage() {
               const changed=setWaveTextDirection(editor,"auto");
               if(changed)toast.success("Направление абзацев обновлено");
             }}>Авто RTL</button>
-          <button type="button" title="Определить направление во всех абзацах и задачах заметки"
+          <button style={{order:10+prefs.toolbarOrder.indexOf("direction")}} type="button" title="Определить направление во всех абзацах и задачах заметки"
             aria-label="Автоматическое направление всей заметки"
             onMouseDown={event=>event.preventDefault()}
             className="grid h-8 shrink-0 place-items-center rounded-full px-2 text-xs font-semibold hover:bg-secondary"

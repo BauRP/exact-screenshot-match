@@ -186,6 +186,9 @@ jobs:
       - name: Test lossless reversible conversion between paragraphs and tasks
         run: bun scripts/test-wave-convert-checklists.ts
 
+      - name: Test atomic completion and shape for selected tasks
+        run: bun scripts/test-wave-selected-checklists.ts
+
       - name: Test section-only checklist completion
         run: bun scripts/test-wave-section-checklist.ts
 

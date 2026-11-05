@@ -34,21 +34,54 @@ export function setDocumentTasksDone(editor:Editor,done:boolean):number{
  return updates.length;
 }
 
-/** Change the saved marker of the current task, without inserting a new row.
- * A single transaction makes this change undoable and preserves task text. */
+/** The active text selection may cover multiple tasks in a section.
+ * Do not accidentally touch tasks beyond the selection or cross page breaks.
+ * A caret inside a task remains a one-item operation. */
+function selectedChecklistRows(editor:Editor):{pos:number;node:PMNode}[]{
+ const {state}=editor;
+ if(!state.selection.empty){
+  const range=selectedWaveSiblingRange(editor);
+  if(!range)return [];
+  const parent=state.selection.$from.node(range.depth);
+  const rows:{pos:number;node:PMNode}[]=[];
+  let pos=range.from;
+  for(let i=range.start;i<range.end;i++){
+   const node=parent.child(i);
+   if(node.type.name!=="waveChecklistItem")return [];
+   rows.push({pos,node});
+   pos+=node.nodeSize;
+  }
+  return rows;
+ }
+ const pos=selectedWaveBlockPos(editor),node=typeof pos==="number"?state.doc.nodeAt(pos):null;
+ return node?.type.name==="waveChecklistItem"&&typeof pos==="number"?[{pos,node}]:[];
+}
+
+/** Change the saved marker of one or more selected tasks as ONE undoable edit.
+ * Preserve inline formatting, direction, completion flags and task text. */
 export function setSelectedChecklistShape(editor:Editor,shape:CheckShape):boolean{
  if(!editor.isEditable||editor.isDestroyed||
     !["square","circle","diamond","check"].includes(shape))return false;
- const {$from}=editor.state.selection;
- for(let depth=$from.depth;depth>0;depth--){
-  const node=$from.node(depth);
-  if(node.type.name!=="waveChecklistItem")continue;
-  const pos=$from.before(depth);
-  if(node.attrs.shape===shape)return true;
-  editor.view.dispatch(editor.state.tr.setNodeMarkup(pos,undefined,{...node.attrs,shape}).scrollIntoView());
-  return true;
- }
- return false;
+ const rows=selectedChecklistRows(editor);
+ if(!rows.length)return false;
+ const changed=rows.filter(({node})=>node.attrs.shape!==shape);
+ if(!changed.length)return true;
+ let tr=editor.state.tr;
+ for(const {pos,node} of changed)tr=tr.setNodeMarkup(pos,undefined,{...node.attrs,shape});
+ editor.view.dispatch(tr.scrollIntoView());
+ return true;
+}
+
+/** Change only the selected checklist rows' completion state. Does not
+ * modify other pages or tasks in the same note. One Undo reverses the group. */
+export function setSelectedTasksDone(editor:Editor,done:boolean):number{
+ if(!editor.isEditable||editor.isDestroyed)return 0;
+ const rows=selectedChecklistRows(editor).filter(({node})=>node.attrs.done!==done);
+ if(!rows.length)return 0;
+ let tr=editor.state.tr;
+ for(const {pos,node} of rows)tr=tr.setNodeMarkup(pos,undefined,{...node.attrs,done});
+ editor.view.dispatch(tr.scrollIntoView());
+ return rows.length;
 }
 
 /** Split the selected task at the actual caret, preserving both halves'
