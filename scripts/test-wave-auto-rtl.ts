@@ -44,7 +44,7 @@ const originalText=state.doc.textContent;
 const initialPos=2;
 const secondPos=state.doc.child(0).nodeSize+2;
 state=state.apply(state.tr.setSelection(TextSelection.create(state.doc,initialPos,secondPos)));
-assert.equal(setWaveTextDirection(mock,"auto"),2,"Selection changes two blocks in one transaction");
+assert.equal(setWaveTextDirection(mock,"auto"),1,"Selection checks both blocks but only updates the one with an incorrect direction");
 assert.equal(dispatched,1);
 assert.equal(state.doc.child(0).attrs.textDirection,"rtl");
 assert.equal(state.doc.child(1).attrs.textDirection,"ltr");
