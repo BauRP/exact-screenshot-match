@@ -228,6 +228,9 @@ jobs:
       - name: Test expanded customizable editor controls
         run: bun scripts/test-wave-toolbar-expanded.ts
 
+      - name: Verify touch-friendly nested list actions
+        run: bun scripts/test-wave-nested-list-controls.ts
+
       - name: Verify customizable toolbar and page breaks
         run: bun scripts/test-wave-toolbar-pages.ts
 

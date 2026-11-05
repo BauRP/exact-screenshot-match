@@ -12,6 +12,7 @@ export const TOOLBAR_TOOLS=[
  {id:"paperMood",label:"Оформление листа"},
  {id:"paperRule",label:"Разметка бумаги"},
  {id:"direction",label:"Направление текста"},
+ {id:"formatting",label:"Жирный, курсив, подчёркивание"},
  {id:"pageActions",label:"Страницы и блоки"},
 ] as const;
 export type EditorTool=(typeof TOOLBAR_TOOLS)[number]["id"];

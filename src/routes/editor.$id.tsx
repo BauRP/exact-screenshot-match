@@ -1146,9 +1146,10 @@ function EditorPage() {
               if(changed)toast.success("Направление обновлено в "+changed+" блоках");
             }}>Все RTL</button>
           </>}
-          <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
-          {editor && (
-            <>
+          {editor&&toolVisible("formatting")&&(
+            <div style={{order:10+prefs.toolbarOrder.indexOf("formatting")}}
+              className="flex shrink-0 items-center gap-1" aria-label="Группа форматирования">
+              <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
               <FormatButton active={editor.isActive("bold")} onClick={() => scoped()?.toggleBold().run()} label="Bold">
                 <Bold className="h-4 w-4" />
               </FormatButton>
@@ -1161,7 +1162,7 @@ function EditorPage() {
               <FormatButton active={editor.isActive("strike")} onClick={() => scoped()?.toggleStrike().run()} label="Strikethrough">
                 <Strikethrough className="h-4 w-4" />
               </FormatButton>
-            </>
+            </div>
           )}
         </div>
         {slashText!==null && <div className="mt-2 max-h-44 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-lg"
@@ -1242,6 +1243,16 @@ function EditorPage() {
             title="Переместить блок или выделенную группу вверх" onClick={()=>moveSelectedWaveBlock(editor,"up")}>↑</button>
           <button type="button" aria-label="Опустить блок или группу" className="rounded-md border px-2 py-1 text-xs"
             title="Переместить блок или выделенную группу вниз" onClick={()=>moveSelectedWaveBlock(editor,"down")}>↓</button>
+          <button type="button" aria-label="Увеличить отступ пункта нумерованного или маркированного списка"
+            title="Создать вложенный уровень списка, сохранив нумерацию"
+            onMouseDown={event=>event.preventDefault()}
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!editor.chain().focus().sinkListItem("listItem").run())toast("Установите курсор в пункт списка");}}>Список ↘</button>
+          <button type="button" aria-label="Уменьшить отступ пункта нумерованного или маркированного списка"
+            title="Вернуть пункт списка на внешний уровень"
+            onMouseDown={event=>event.preventDefault()}
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!editor.chain().focus().liftListItem("listItem").run())toast("Установите курсор во вложенный пункт списка");}}>Список ↗</button>
           <button type="button" aria-label="Перенести блок на предыдущую страницу"
             className="rounded-md border px-2 py-1 text-xs"
             title="Перенести блок или выделенную группу на предыдущую страницу, сохранив вложения"
