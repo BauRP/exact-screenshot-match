@@ -20,6 +20,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
  const [tool,setTool]=useState<"pen"|"marker"|"line"|"rectangle"|"ellipse"|"eraser">("pen");
  const [color,setColor]=useState("#161b22");
  const [size,setSize]=useState(4);
+ const [eraserRadius,setEraserRadius]=useState(16);
  useEffect(()=>{
    if(gesture.current!==null)return;
    // A local emission must not erase our undo history when React re-renders.
@@ -52,8 +53,8 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
     Math.round(Math.min(1000,Math.max(0,(e.clientY-rect.top)/Math.max(rect.height,1)*1000)))];
  };
  const erase=(point:InkPoint,previous:InkPoint|null=null)=>{
-   const hits=previous?inkStrokeIndicesAlong(current.current,previous,point):
-     (()=>{const result=inkStrokeAt(current.current,point);return result<0?[]:[result];})();
+   const hits=previous?inkStrokeIndicesAlong(current.current,previous,point,eraserRadius):
+     (()=>{const result=inkStrokeAt(current.current,point,eraserRadius);return result<0?[]:[result];})();
    if(!hits.length)return;
    markChanged();
    const removed=new Set(hits);
@@ -153,14 +154,22 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
        onClick={redo} className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">↷</button>
      {tool!=="eraser"&&<>
        <div className="flex items-center gap-1" aria-label="Цвет пера">
-         {(["#161b22","#e11d48","#2563eb","#16a34a","#f8fafc","#f59e0b"] as const).map(ink=>
+         {(["#161b22","#e11d48","#2563eb","#16a34a","#f8fafc","#f59e0b","#7c3aed","#0d9488","#ca8a04","#64748b","#f97316","#be185d"] as const).map(ink=>
            <button key={ink} type="button" aria-label={"Цвет "+ink} aria-pressed={color===ink}
              onClick={()=>setColor(ink)} className="h-6 w-6 rounded-full border-2"
              style={{backgroundColor:ink,borderColor:color===ink?"#64748b":"transparent"}}/>)}
        </div>
        <select aria-label="Толщина линии" value={size} onChange={e=>setSize(Number(e.target.value))}
-         className="rounded-lg bg-secondary px-1 py-1 text-xs">{[2,4,8,14,24].map(v=><option value={v} key={v}>{v}px</option>)}</select>
+         className="rounded-lg bg-secondary px-1 py-1 text-xs">{[1,2,4,8,14,24,28].map(v=><option value={v} key={v}>{v}px</option>)}</select>
      </>}
+     {tool==="eraser"&&<label className="flex items-center gap-1 text-xs">
+       <span>Размер ластика</span>
+       <select aria-label="Размер ластика" value={eraserRadius}
+         onChange={event=>setEraserRadius(Number(event.target.value))}
+         className="rounded-lg bg-secondary px-1 py-1 text-xs">
+         {[8,16,28,40].map(value=><option key={value} value={value}>{value}</option>)}
+       </select>
+     </label>}
    </div>}
  </div>;
 }

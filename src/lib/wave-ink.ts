@@ -13,7 +13,7 @@ export function ellipseInkPoints(from:InkPoint,to:InkPoint):InkPoint[]{
  pts[32]=pts[0];
  return pts;
 }
-const COLORS=new Set(["#161b22","#e11d48","#2563eb","#16a34a","#f8fafc","#f59e0b"]);
+const COLORS=new Set(["#161b22","#e11d48","#2563eb","#16a34a","#f8fafc","#f59e0b","#7c3aed","#0d9488","#ca8a04","#64748b","#f97316","#be185d"]);
 export function parseInk(encoded:unknown):InkStroke[]{
  if(typeof encoded!=="string"||encoded.length>120000)return [];
  let parsed:unknown;

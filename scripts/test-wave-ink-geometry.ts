@@ -1,4 +1,5 @@
 import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
 import {ellipseInkPoints,inkStrokeAt,inkStrokeAlong,inkStrokeIndicesAlong,parseInk,serializeInk,type InkStroke} from "../src/lib/wave-ink";
 const line:InkStroke={tool:"pen",color:"#161b22",width:4,points:[[0,0],[1000,0]]};
 assert.equal(inkStrokeAt([line],[500,5],5),0);
@@ -34,3 +35,18 @@ assert.deepEqual(parseInk(serializeInk([oval])),[oval]);
 assert.equal(inkStrokeAt([oval],[500,200],8),0);
 assert.equal(inkStrokeAt([oval],[300,200],8),-1);
 assert.deepEqual(parseInk(JSON.stringify([{...oval,points:oval.points.slice(0,-1)}])),[]);
+
+const canvas=readFileSync("src/components/editor/WaveInkCanvas.tsx","utf8");
+assert.ok(canvas.includes('aria-label="Размер ластика"'));
+assert.ok(canvas.includes('inkStrokeAt(current.current,point,eraserRadius)'));
+assert.ok(canvas.includes('inkStrokeIndicesAlong(current.current,previous,point,eraserRadius)'));
+assert.ok(canvas.includes('[8,16,28,40]'));
+for(const color of ["#7c3aed","#0d9488","#ca8a04","#64748b","#f97316","#be185d"]){
+ const colored={...line,color};
+ assert.deepEqual(parseInk(serializeInk([colored])),[colored],"New ink palette colors must survive save/restore");
+ assert.ok(canvas.includes(color),"Palette color visible in both drawing and photo tools");
+}
+assert.equal(inkStrokeAt([line],[500,30],8),-1,"Thin eraser must spare distant strokes");
+assert.equal(inkStrokeAt([line],[500,30],40),0,"Wide eraser should reach distant strokes");
+assert.deepEqual(inkStrokeIndicesAlong([line],[500,30],[600,30],8),[]);
+assert.deepEqual(inkStrokeIndicesAlong([line],[500,30],[600,30],40),[0]);
