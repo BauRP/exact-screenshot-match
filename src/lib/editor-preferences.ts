@@ -8,6 +8,11 @@ export const TOOLBAR_TOOLS=[
  {id:"search",label:"Поиск"},
  {id:"checklist",label:"Списки дел"},
  {id:"insert",label:"Вставка блоков"},
+ {id:"pin",label:"Закрепить заметку"},
+ {id:"paperMood",label:"Оформление листа"},
+ {id:"paperRule",label:"Разметка бумаги"},
+ {id:"direction",label:"Направление текста"},
+ {id:"pageActions",label:"Страницы и блоки"},
 ] as const;
 export type EditorTool=(typeof TOOLBAR_TOOLS)[number]["id"];
 export type EditorPreferences={

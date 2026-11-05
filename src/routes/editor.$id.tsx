@@ -95,7 +95,7 @@ import {replaceOneInNote,replaceAllInNote} from "@/lib/wave-find-replace";
 import { readEditorPreferences,EDITOR_PREFS_CHANGED,type EditorTool } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
-import {setSelectedChecklistShape,continueSelectedChecklistItem,selectedSectionTaskCounts,setSelectedSectionTasksDone,currentPageTaskCounts,setCurrentPageTasksDone} from "@/lib/wave-checklist-actions";
+import {setSelectedChecklistShape,continueSelectedChecklistItem,convertSelectedChecklistBlocks,selectedSectionTaskCounts,setSelectedSectionTasksDone,currentPageTaskCounts,setCurrentPageTasksDone} from "@/lib/wave-checklist-actions";
 import {setAllFoldSections,setFoldSectionsToDepth,countFoldSections} from "@/lib/wave-section-batch";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
@@ -943,7 +943,8 @@ function EditorPage() {
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
             <ImagePlus className="h-4 w-4"/>
           </button>}
-          <button
+          {toolVisible("pin")&&<button
+            style={{order:10+prefs.toolbarOrder.indexOf("pin")}}
             onClick={handlePin}
             className={`grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary ${
               pinned ? "text-primary" : "text-muted-foreground"
@@ -951,7 +952,7 @@ function EditorPage() {
             aria-label={t("star")}
           >
             <Star className="h-4 w-4" fill={pinned ? "currentColor" : "none"} />
-          </button>
+          </button>}
 
           {toolVisible("outline")&&<button style={{order:10+prefs.toolbarOrder.indexOf("outline")}} type="button" aria-label="Оглавление заметки" aria-expanded={outlineOpen}
             onClick={()=>setOutlineOpen(open=>!open)}
@@ -1014,6 +1015,25 @@ function EditorPage() {
                 onClick={()=>{if(!editor||!continueSelectedChecklistItem(editor))toast("Установите курсор внутри задачи");}}>
                 Следующий пункт от курсора
               </button>
+              <div className="mt-2 grid grid-cols-1 gap-1 border-t border-border pt-2">
+                <p className="px-2 text-xs font-semibold">Преобразование без потери текста</p>
+                <button type="button" onMouseDown={event=>event.preventDefault()}
+                  aria-label="Превратить выделенные абзацы в задачи"
+                  className="w-full rounded-md bg-secondary px-2 py-2 text-left text-xs"
+                  onClick={()=>{if(!editor)return;
+                    const count=convertSelectedChecklistBlocks(editor,"tasks",checkShape);
+                    if(count)toast.success("Преобразовано в задачи: "+count);
+                    else toast("Выделите обычные абзацы без картинок и разделителей страниц");
+                  }}>Выделенные абзацы → задачи</button>
+                <button type="button" onMouseDown={event=>event.preventDefault()}
+                  aria-label="Превратить выбранные задачи в абзацы"
+                  className="w-full rounded-md bg-secondary px-2 py-2 text-left text-xs"
+                  onClick={()=>{if(!editor)return;
+                    const count=convertSelectedChecklistBlocks(editor,"paragraphs");
+                    if(count)toast.success("Преобразовано в абзацы: "+count);
+                    else toast("Выделите пункты списка дел");
+                  }}>Выбранные задачи → абзацы</button>
+              </div>
               <div className="mt-2 border-t border-border pt-2">
                 <label htmlFor="wave-current-check-shape" className="block px-2 pb-1 text-xs font-semibold">Изменить выбранную отметку</label>
                 <select id="wave-current-check-shape" aria-label="Изменить форму выбранной отметки"
@@ -1032,9 +1052,9 @@ function EditorPage() {
               </div>
             </PopoverContent>
           </Popover>}
-          <Popover>
+          {toolVisible("paperMood")&&<Popover>
             <PopoverTrigger asChild>
-              <button type="button" aria-label="Оформление листа" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+              <button style={{order:10+prefs.toolbarOrder.indexOf("paperMood")}} type="button" aria-label="Оформление листа" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
                 <WandSparkles className="h-4 w-4"/>
               </button>
             </PopoverTrigger>
@@ -1047,10 +1067,10 @@ function EditorPage() {
                 {mood.name}
               </button>)}
             </PopoverContent>
-          </Popover>
-          <Popover>
+          </Popover>}
+          {toolVisible("paperRule")&&<Popover>
             <PopoverTrigger asChild>
-              <button type="button" aria-label="Разметка бумаги" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+              <button style={{order:10+prefs.toolbarOrder.indexOf("paperRule")}} type="button" aria-label="Разметка бумаги" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
                 <Grid3X3 className="h-4 w-4"/>
               </button>
             </PopoverTrigger>
@@ -1061,7 +1081,7 @@ function EditorPage() {
                 {rule.name}
               </button>)}
             </PopoverContent>
-          </Popover>
+          </Popover>}
           {toolVisible("insert")&&<Popover>
             <PopoverTrigger asChild>
               <button style={{order:10+prefs.toolbarOrder.indexOf("insert")}} type="button" aria-label="Вставить блок" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
@@ -1079,7 +1099,8 @@ function EditorPage() {
               </button>)}
             </PopoverContent>
           </Popover>}
-          <button type="button" aria-label="Направление текста справа налево"
+          {toolVisible("direction")&&<>
+          <button style={{order:10+prefs.toolbarOrder.indexOf("direction")}} type="button" aria-label="Направление текста справа налево"
             title="Изменить направление текущего абзаца или выделенных абзацев"
             onMouseDown={event=>event.preventDefault()}
             onClick={()=>{if(!editor)return;
@@ -1105,6 +1126,7 @@ function EditorPage() {
               const changed=setWaveTextDirection(editor,"auto","document");
               if(changed)toast.success("Направление обновлено в "+changed+" блоках");
             }}>Все RTL</button>
+          </>}
           <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
           {editor && (
             <>
@@ -1134,7 +1156,7 @@ function EditorPage() {
             </button>):<p className="px-3 py-2 text-xs text-muted-foreground">Команда не найдена</p>}
             <p className="px-3 py-1 text-[10px] text-muted-foreground">↑ ↓ выбор · Enter вставить · Esc закрыть</p>
           </div>}
-        {editor&&<div className="mt-2 flex flex-wrap items-center gap-1 rounded-lg border border-border px-2 py-1" aria-label="Страницы и перемещение блоков">
+        {editor&&toolVisible("pageActions")&&<div className="mt-2 flex flex-wrap items-center gap-1 rounded-lg border border-border px-2 py-1" aria-label="Страницы и перемещение блоков">
           <span className="mr-1 text-xs text-muted-foreground">Страница {currentPage}/{pagePositions.length}</span>
           <button type="button" aria-label="Предыдущая страница" disabled={currentPage<=1}
             className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"

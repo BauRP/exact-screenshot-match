@@ -1,5 +1,6 @@
 import type {Editor} from "@tiptap/react";
-import type {Node as PMNode} from "@tiptap/pm/model";
+import {Fragment,type Node as PMNode} from "@tiptap/pm/model";
+import {selectedWaveBlockPos,selectedWaveSiblingRange,waveChildOffset} from "./wave-block-motion";
 import {TextSelection} from "@tiptap/pm/state";
 import {canSplit} from "@tiptap/pm/transform";
 import type {CheckShape} from "./wave-checklist";
@@ -153,4 +154,53 @@ export function setCurrentPageTasksDone(editor:Editor,done:boolean):number{
  for(const item of updates)tr=tr.setNodeMarkup(item.pos,undefined,item.attrs);
  editor.view.dispatch(tr.scrollIntoView());
  return updates.length;
+}
+
+/** Turn selected paragraphs into independent saved tasks (or tasks back into
+ * paragraphs) as one undoable edit. This never reconstructs text from HTML:
+ * inline marks, bidi direction and text remain the original ProseMirror
+ * fragments. Mixed media, headings, page dividers and nested list structures
+ * are rejected together instead of silently deleting unsupported content. */
+export function convertSelectedChecklistBlocks(
+ editor:Editor,mode:"tasks"|"paragraphs",shape:CheckShape="square"
+):number{
+ if(!editor.isEditable||editor.isDestroyed)return 0;
+ const {state}=editor;
+ const selection=state.selection;
+ const range=selectedWaveSiblingRange(editor);
+ let parent:PMNode,first:number,last:number,from:number,to:number;
+ if(range){
+  if(range.depth!==0&&selection.$from.node(range.depth).type.name!=="waveFold")return 0;
+  parent=selection.$from.node(range.depth);
+  first=range.start;last=range.end;from=range.from;to=range.to;
+ }else{
+  const pos=selectedWaveBlockPos(editor);
+  if(pos===undefined)return 0;
+  const resolved=state.doc.resolve(pos);
+  parent=resolved.parent;first=resolved.index();last=first+1;
+  if(first>=parent.childCount)return 0;
+  from=pos;to=pos+parent.child(first).nodeSize;
+ }
+ if(first>=last||first<0||last>parent.childCount)return 0;
+ const fromType=mode==="tasks"?"paragraph":"waveChecklistItem";
+ const toType=mode==="tasks"?state.schema.nodes.waveChecklistItem:state.schema.nodes.paragraph;
+ if(!toType||(mode==="tasks"&&!["square","circle","diamond","check"].includes(shape)))return 0;
+ const replacements:PMNode[]=[];
+ for(let index=first;index<last;index++){
+  const node=parent.child(index);
+  if(node.type.name!==fromType)return 0;
+  const attrs=mode==="tasks"
+   ? {...node.attrs,shape,done:false}
+   : {...node.attrs,shape:undefined,done:undefined};
+  // The paragraph schema receives text-direction but not checklist metadata.
+  if(mode==="paragraphs"){delete attrs.shape;delete attrs.done;}
+  if(!toType.validContent(node.content))return 0;
+  replacements.push(toType.create(attrs,node.content,node.marks));
+ }
+ const replacement=Fragment.fromArray(replacements);
+ if(!parent.canReplace(first,last,replacement))return 0;
+ const tr=state.tr.replaceWith(from,to,replacement).scrollIntoView();
+ if(!tr.doc.type.validContent(tr.doc.content))return 0;
+ editor.view.dispatch(tr);
+ return replacements.length;
 }

@@ -183,6 +183,9 @@ jobs:
       - name: Check precise checklist split at caret
         run: bun scripts/test-wave-checklist-split.ts
 
+      - name: Test lossless reversible conversion between paragraphs and tasks
+        run: bun scripts/test-wave-convert-checklists.ts
+
       - name: Test section-only checklist completion
         run: bun scripts/test-wave-section-checklist.ts
 
@@ -218,6 +221,9 @@ jobs:
 
       - name: Verify writing and media toolbar presets
         run: bun scripts/test-wave-toolbar-presets.ts
+
+      - name: Test expanded customizable editor controls
+        run: bun scripts/test-wave-toolbar-expanded.ts
 
       - name: Verify customizable toolbar and page breaks
         run: bun scripts/test-wave-toolbar-pages.ts
