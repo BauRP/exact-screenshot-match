@@ -204,6 +204,9 @@ jobs:
       - name: Execute page boundary and nested block movement regression
         run: bun scripts/test-wave-section-pages-motion.ts
 
+      - name: Verify safe block transfers across existing note pages
+        run: bun scripts/test-wave-block-cross-pages.ts
+
       - name: Verify page labels and bulk section checklist commands
         run: bun scripts/test-wave-bulk-pages.ts
 

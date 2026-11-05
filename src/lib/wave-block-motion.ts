@@ -1,4 +1,5 @@
 import { Fragment, type Node as PMNode } from "@tiptap/pm/model";
+import {topLevelPageRanges} from "./wave-page-actions";
 import type { Editor } from "@tiptap/react";
 
 /** A Fragment has no offsetAt API; sum child sizes in the active schema. */
@@ -245,5 +246,42 @@ export function duplicateContainingWaveSection(editor:Editor):boolean{
  const node=parent.child(index);
  if(node.type.name!=="waveFold"||!parent.canReplace(index+1,index+1,Fragment.from(node)))return false;
  editor.view.dispatch(editor.state.tr.insert(pos+node.nodeSize,node).scrollIntoView());
+ return true;
+}
+
+/** Transfer a top-level text/media block, or a selection of adjacent blocks,
+ * between EXISTING logical pages. Never carry or delete page dividers.
+ * One ProseMirror transaction keeps the entire transfer undoable. */
+export function moveWaveBlocksToAdjacentPage(editor:Editor,direction:"previous"|"next"):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const {state,view}=editor,{doc}=state;
+ const group=selectedWaveSiblingRange(editor);
+ let from:number,to:number;
+ if(group&&group.depth===0&&group.end-group.start>1){
+  from=group.from;to=group.to;
+ }else{
+  const pos=selectedWaveBlockPos(editor);
+  if(pos===undefined)return false;
+  const resolved=doc.resolve(pos);
+  if(resolved.depth!==0||resolved.index()>=doc.childCount)return false;
+  from=pos;to=pos+doc.child(resolved.index()).nodeSize;
+ }
+ if(from>=to)return false;
+ const content=doc.content.cut(from,to);
+ if(!content.childCount||content.content.some(node=>node.type.name==="wavePageBreak"))return false;
+ const pages=topLevelPageRanges(doc);
+ const current=pages.findIndex(page=>from>=page.bodyStart&&from<page.end);
+ if(current<0||to>pages[current].end)return false;
+ const destinationIndex=current+(direction==="previous"?-1:1);
+ if(destinationIndex<0||destinationIndex>=pages.length)return false;
+ const destination=direction==="previous"?pages[current].start:pages[destinationIndex].bodyStart;
+ if(destination>=from&&destination<=to)return false;
+ let tr=state.tr.delete(from,to);
+ const mapped=tr.mapping.map(destination,-1);
+ const $at=tr.doc.resolve(mapped);
+ if($at.parent!==tr.doc||!tr.doc.canReplace($at.index(),$at.index(),content))return false;
+ tr=tr.insert(mapped,content);
+ if(!tr.doc.type.validContent(tr.doc.content))return false;
+ view.dispatch(tr.scrollIntoView());
  return true;
 }

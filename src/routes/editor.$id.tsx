@@ -72,7 +72,7 @@ import { WaveDrawing } from "@/components/editor/WaveDrawing";
 import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection,setWaveTextDirection} from "@/lib/wave-text-direction";
 import {collectNoteOutline,filterNoteOutline,type OutlineFilter,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
-import {moveSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
+import {moveSelectedWaveBlock,moveWaveBlocksToAdjacentPage,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
 import {duplicateCurrentPage,moveCurrentPage,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,splitPageAtCaret} from "@/lib/wave-page-actions";
 import {revealOutlinePosition} from "@/lib/wave-outline-navigation";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
@@ -1201,6 +1201,16 @@ function EditorPage() {
             title="Переместить блок или выделенную группу вверх" onClick={()=>moveSelectedWaveBlock(editor,"up")}>↑</button>
           <button type="button" aria-label="Опустить блок или группу" className="rounded-md border px-2 py-1 text-xs"
             title="Переместить блок или выделенную группу вниз" onClick={()=>moveSelectedWaveBlock(editor,"down")}>↓</button>
+          <button type="button" aria-label="Перенести блок на предыдущую страницу"
+            className="rounded-md border px-2 py-1 text-xs"
+            title="Перенести блок или выделенную группу на предыдущую страницу, сохранив вложения"
+            onMouseDown={event=>event.preventDefault()}
+            onClick={()=>{if(!moveWaveBlocksToAdjacentPage(editor,"previous"))toast("Выберите блок на странице после первой");}}>⇤ Стр.</button>
+          <button type="button" aria-label="Перенести блок на следующую страницу"
+            className="rounded-md border px-2 py-1 text-xs"
+            title="Перенести блок или выделенную группу на следующую страницу, сохранив вложения"
+            onMouseDown={event=>event.preventDefault()}
+            onClick={()=>{if(!moveWaveBlocksToAdjacentPage(editor,"next"))toast("Выберите блок перед следующей страницей");}}>Стр. ⇥</button>
           <button type="button" aria-label="Вложить блок в раздел" title="Переместить блок в предыдущий раздел"
             className="rounded-md border px-2 py-1 text-xs" onClick={()=>nestSelectedWaveBlock(editor)}>↘</button>
           <button type="button" aria-label="Дублировать блок или группу"
