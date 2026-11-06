@@ -2,31 +2,19 @@
  * Binary-only note images. Never embed base64 photos in localStorage:
  * notes contain small image IDs, while the Blobs live in IndexedDB.
  */
+import {createIndexedDbOpener} from "./indexeddb-open";
+
 const DB_NAME="wave.note.images.v1";
 const STORE="images";
 const LIMIT=12*1024*1024;
 const ID=/^[a-zA-Z0-9_-]{1,128}$/;
-let connection:Promise<IDBDatabase>|null=null;
+const db=createIndexedDbOpener(DB_NAME,STORE,{
+ unavailable:"Хранилище изображений недоступно",
+ failed:"Хранилище изображений недоступно",
+ blocked:"Хранилище изображений временно заблокировано",
+ timeout:"Хранилище изображений не ответило вовремя",
+});
 
-function db():Promise<IDBDatabase>{
- if(connection)return connection;
- connection=new Promise((resolve,reject)=>{
-  const request=indexedDB.open(DB_NAME,1);
-  request.onupgradeneeded=()=>{
-   if(!request.result.objectStoreNames.contains(STORE))request.result.createObjectStore(STORE);
-  };
-  request.onsuccess=()=>resolve(request.result);
-  request.onerror=()=>{
-   connection=null;
-   reject(request.error||new Error("Хранилище изображений недоступно"));
-  };
-  request.onblocked=()=>{
-   connection=null;
-   reject(new Error("Хранилище изображений временно заблокировано"));
-  };
- });
- return connection;
-}
 async function operation<T>(mode:IDBTransactionMode,fn:(store:IDBObjectStore)=>IDBRequest<T>):Promise<T>{
  const connection=await db();
  return new Promise((resolve,reject)=>{

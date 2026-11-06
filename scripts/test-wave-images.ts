@@ -7,7 +7,7 @@ const transfer=readFileSync("src/lib/note-transfer.ts","utf8");
 const home=readFileSync("src/routes/index.tsx","utf8");
 const store=readFileSync("src/lib/notes-store.ts","utf8");
 const backup=readFileSync("src/lib/backup.ts","utf8");
-for(const term of ["saveImageFile","loadImageFile","deleteImageFile","imageIdsInHtml","saveNewImageFile","indexedDB.open","12*1024*1024","store.add(blob,id)"])assert.ok(files.includes(term),term);
+for(const term of ["saveImageFile","loadImageFile","deleteImageFile","imageIdsInHtml","saveNewImageFile","createIndexedDbOpener","12*1024*1024","store.add(blob,id)"])assert.ok(files.includes(term),term);
 for(const term of ["addNodeView","ReactNodeViewRenderer(ImageView)","insertWaveImage","data-image-id","Ширина фотографии","URL.revokeObjectURL"])assert.ok(node.includes(term),term);
 for(const term of ["WaveImage,","addImage","Добавить фотографию из галереи","createdImageIdsRef","await saveImageFile(valid)","imageIdsInHtml(body)"])assert.ok(editor.includes(term),term);
 for(const term of ["audioIds,imageIds,hasPdf","generatedImages","saveNewImageFile","loadImageFile(id)","deleteImageFile(id)"])assert.ok(transfer.includes(term),term);

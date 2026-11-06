@@ -3,28 +3,17 @@
  * data: URLs inside localStorage note bodies. Existing data: recordings stay
  * readable through the legacy audio node path.
  */
+import {createIndexedDbOpener} from "./indexeddb-open";
+
 const DB_NAME = "sn.audio.v1";
 const STORE = "recordings";
 
-let opening: Promise<IDBDatabase> | null = null;
-
-function openAudioDB(): Promise<IDBDatabase> {
-  if (opening) return opening;
-  opening = new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      if (!request.result.objectStoreNames.contains(STORE)) {
-        request.result.createObjectStore(STORE);
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => {
-      opening = null;
-      reject(request.error ?? new Error("Audio database could not be opened"));
-    };
-  });
-  return opening;
-}
+const openAudioDB=createIndexedDbOpener(DB_NAME,STORE,{
+  unavailable:"Audio storage is unavailable",
+  failed:"Audio database could not be opened",
+  blocked:"Audio storage is blocked by another window",
+  timeout:"Audio storage did not open in time",
+});
 
 async function operate<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   const db = await openAudioDB();

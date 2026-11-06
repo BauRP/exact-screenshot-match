@@ -6,29 +6,17 @@
  * regular notes database (so PDFs show up in the unified list feed).
  */
 
+import {createIndexedDbOpener} from "./indexeddb-open";
+
 const DB_NAME = "sn.pdf.v1";
 const STORE = "files";
 
-let dbPromise: Promise<IDBDatabase> | null = null;
-
-function openDatabase(): Promise<IDBDatabase> {
-  if (typeof indexedDB === "undefined") {
-    return Promise.reject(new Error("IndexedDB is unavailable"));
-  }
-  if (dbPromise) return dbPromise;
-
-  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => { dbPromise = null; reject(request.error ?? new Error("Failed to open PDF storage")); };
-  });
-
-  return dbPromise;
-}
+const openDatabase=createIndexedDbOpener(DB_NAME,STORE,{
+  unavailable:"IndexedDB is unavailable",
+  failed:"Failed to open PDF storage",
+  blocked:"PDF storage is blocked by another window",
+  timeout:"PDF storage did not open in time",
+});
 
 function withStore<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   return openDatabase().then(

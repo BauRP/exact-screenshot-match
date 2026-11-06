@@ -309,6 +309,12 @@ jobs:
       - name: Verify newest validated backup and interrupted-write fallback
         run: bun scripts/test-wave-backup-candidate.ts
 
+      - name: Verify bounded recoverable IndexedDB opening for PDF, image and audio
+        run: bun scripts/test-wave-idb-lifecycle.ts
+
+      - name: Verify durable saved notes and failure-injected localStorage
+        run: bun scripts/test-wave-notes-storage-failure.ts
+
       - name: Verify offline note image storage, exchange and cleanup
         run: bun scripts/test-wave-images.ts
 

@@ -275,11 +275,13 @@ function persistNotes(nextNotes: Note[]) {
 }
 
 function persistPreference(key: string, value: string) {
-  if (!isBrowserStorageAvailable()) return;
+  if (!isBrowserStorageAvailable()) throw new Error("Preferences storage is unavailable");
   try {
     window.localStorage.setItem(key, value);
   } catch (error) {
-    commit({ status: "error", error: error instanceof Error ? error.message : "Storage write failed" });
+    const message=error instanceof Error?error.message:"Storage write failed";
+    commit({status:"error",error:message});
+    throw new Error("Unable to save preference: "+message);
   }
 }
 
@@ -465,14 +467,14 @@ export function useSort(): SortMode {
 
 export function setView(nextView: ViewMode) {
   ensureReadyForMutation();
-  commit({ view: nextView, status: state.status === "idle" ? "ready" : state.status });
-  persistPreference(VIEW_KEY, nextView);
+  persistPreference(VIEW_KEY,nextView);
+  commit({view:nextView,status:state.status==="idle"?"ready":state.status});
 }
 
 export function setSort(nextSort: SortMode) {
   ensureReadyForMutation();
-  commit({ sort: nextSort, status: state.status === "idle" ? "ready" : state.status });
-  persistPreference(SORT_KEY, nextSort);
+  persistPreference(SORT_KEY,nextSort);
+  commit({sort:nextSort,status:state.status==="idle"?"ready":state.status});
 }
 
 /** Move one saved note without affecting native ad slots or binary files. */
