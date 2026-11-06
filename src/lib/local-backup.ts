@@ -8,6 +8,7 @@
  */
 import { createFullBackup, restoreFullBackup, validateFullBackup } from "./backup";
 import { clearBackupDirtyRevision, getBackupDirtyRevision } from "./backup-signals";
+import {loadNewestValidatedBackup,type BackupCandidate} from "./backup-candidate";
 
 const BACKUP_FILE = "WaveNotes.backup";
 const STAGING_FILE = "WaveNotes.backup.pending";
@@ -75,34 +76,26 @@ async function readStored(path: string): Promise<Blob> {
   return decodeArchive(result.data);
 }
 
-/** Prefer the complete staging file after an interrupted replacement.
- * Ignore incomplete staging data and keep the last good active file.
- */
+/** Interrupted backups leave both active and pending copies.
+ * An old stale pending file must not shadow a newer published active copy.
+ * Only validated archives can ever become a restore base. */
 async function readBackupOrNull(): Promise<Blob | null> {
   const { Filesystem, Directory } = await nativeFilesystem();
-  let found = false;
-  let failure: unknown = null;
-  for (const path of [STAGING_FILE, BACKUP_FILE]) {
-    try {
-      await Filesystem.stat({ path, directory: Directory.Data });
-    } catch {
-      continue;
-    }
-    found = true;
-    try {
-      const blob = await readStored(path);
-      // Validate that the backup is readable before accepting it as a base
-      // for the next update. A partial stage must never hide the good copy.
-      await validateFullBackup(blob);
-      return blob;
-    } catch (error) {
-      failure = error;
-      console.warn("[Wave Notes] Invalid backup at", path, error);
+  const candidates:BackupCandidate[]=[];
+  for(const path of [BACKUP_FILE,STAGING_FILE]){
+    try{
+      const stat=await Filesystem.stat({path,directory:Directory.Data});
+      candidates.push({path,mtime:stat.mtime});
+    }catch{
+      // No such file (or unavailable): try the other candidate.
     }
   }
-  if (found) throw new Error("Резервная копия повреждена. Последнее сохранение не удалось.");
-  if (failure) throw failure;
-  return null;
+  return loadNewestValidatedBackup(
+    candidates,
+    readStored,
+    validateFullBackup,
+    (path,error)=>console.warn("[Wave Notes] Invalid backup at",path,error)
+  );
 }
 
 
@@ -128,7 +121,10 @@ async function writeBackup(blob: Blob): Promise<void> {
   // Pending is known complete and recoverable even if Android closes the app
   // between the write of active and cleanup of staging.
   await Filesystem.writeFile({ path: BACKUP_FILE, directory: Directory.Data, data });
-  await Filesystem.deleteFile({ path: STAGING_FILE, directory: Directory.Data });
+  // The active backup is already durably written and verified via staging.
+  // A failed cleanup must not turn a successful Save into a false failure.
+  try { await Filesystem.deleteFile({ path: STAGING_FILE, directory: Directory.Data }); }
+  catch (error) { console.warn("[Wave Notes] Pending backup cleanup postponed",error); }
 }
 
 export function saveLocalBackup(): Promise<void> {

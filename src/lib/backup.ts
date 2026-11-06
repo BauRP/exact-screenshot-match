@@ -351,8 +351,8 @@ export async function restoreFullBackup(file: File): Promise<number> {
     }
     // Note metadata is published only after ALL of its attachments exist.
     // Restore folder IDs ahead of note metadata to preserve their grouping.
+    touchedFolders=true; // Roll back even if folder restore partially writes before throwing.
     restoreFolderBackup(manifest.folders, manifest.hiddenSystem);
-    touchedFolders=true;
     return importBackupNotes(newNotes.map(item=>item.note));
   } catch (error) {
     if (touchedFolders) {

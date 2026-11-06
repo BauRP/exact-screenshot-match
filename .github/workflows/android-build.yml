@@ -303,6 +303,9 @@ jobs:
       - name: Reject truncated photos and validate staged backups before promotion
         run: bun scripts/test-wave-image-backup-integrity.ts
 
+      - name: Verify newest validated backup and interrupted-write fallback
+        run: bun scripts/test-wave-backup-candidate.ts
+
       - name: Verify offline note image storage, exchange and cleanup
         run: bun scripts/test-wave-images.ts
 
