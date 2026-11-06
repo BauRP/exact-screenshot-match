@@ -90,16 +90,6 @@ export default defineConfig({
         "logical-assignment": false,
       },
     },
-    optimizeDeps: {
-      esbuildOptions: {
-        target: "es2015",
-        supported: {
-          "nullish-coalescing": false,
-          "optional-chaining": false,
-          "logical-assignment": false,
-        },
-      },
-    },
     css: {
       transformer: "lightningcss",
       lightningcss: {

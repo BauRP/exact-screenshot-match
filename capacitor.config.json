@@ -1,6 +1,6 @@
 {
   "appId": "app.lovable.supernotes",
-  "appName": "Супер заметки",
+  "appName": "Wave Notes",
   "webDir": "dist/client",
   "bundledWebRuntime": false,
   "server": {
@@ -12,20 +12,19 @@
   },
   "plugins": {
     "SplashScreen": {
-      "launchShowDuration": 3000,
+      "launchShowDuration": 300,
       "launchAutoHide": true,
-      "launchFadeOutDuration": 200,
-      "backgroundColor": "#121212",
-      "androidSplashResourceName": "splash",
+      "launchFadeOutDuration": 100,
+      "backgroundColor": "#050609",
+      "androidSplashResourceName": "wave_splash_blank",
       "androidScaleType": "CENTER_CROP",
       "showSpinner": false,
-      "splashFullScreen": true,
-      "splashImmersive": true
+      "splashFullScreen": false,
+      "splashImmersive": false
     },
     "StatusBar": {
-      "overlaysWebView": true,
       "style": "DARK",
-      "backgroundColor": "#00000000"
+      "backgroundColor": "#0B0E13"
     }
   }
 }

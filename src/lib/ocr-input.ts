@@ -1,0 +1,47 @@
+/**
+ * Capacitor Camera supplies local filesystem paths, file:// URIs or
+ * content:// URIs for images. Never forward remote URLs to native OCR.
+ * A webPath is meant for WebView display and cannot substitute for a
+ * local provider URI.
+ */
+export function isLocalOcrImagePath(path: unknown): path is string {
+  if (typeof path !== "string" || !path || path.trim() !== path ||
+      /[\u0000-\u001f]/u.test(path)) return false;
+  if (path.startsWith("/")) return path.length > 1 && !path.startsWith("//");
+  if (/^content:\/\//i.test(path)) return path.length > "content://".length &&
+    !/^[^:]+:\/\/\/+/u.test(path);
+  if (/^file:\/\//i.test(path)) {
+    return /^file:\/\/\/[^/?#][^?#]*$/i.test(path);
+  }
+  return false;
+}
+
+export function chooseLocalOcrImagePath(photo: { path?: string | null; webPath?: string | null }): string {
+  if (isLocalOcrImagePath(photo.path)) return photo.path;
+  if (isLocalOcrImagePath(photo.webPath)) return photo.webPath;
+  throw new Error("Selected image has no readable local path.");
+}
+
+/** Reuse the exact local photo after a partial scan; never refetch remotely. */
+export function reusableOcrImagePath(path: unknown): string {
+  if (!isLocalOcrImagePath(path)) {
+    throw new Error("Selected image has no readable local path.");
+  }
+  return path;
+}
+
+
+/** Preview only an existing local photo using Capacitor's private WebView
+ * mapping. Never produce a remote image request or persist photo bytes.
+ * A cold-restored OCR draft intentionally does not retain a photo path.
+ */
+export function safeLocalOcrPreviewUrl(
+  path: unknown, convert: (localPath: string) => string,
+): string | null {
+  if (!isLocalOcrImagePath(path)) return null;
+  try {
+    const url = convert(path);
+    return /^(?:https?:\/\/localhost(?::\d+)?\/|capacitor:\/\/localhost\/)/iu.test(url)
+      ? url : null;
+  } catch { return null; }
+}

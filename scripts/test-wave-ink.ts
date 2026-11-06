@@ -1,0 +1,29 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+const ink=readFileSync("src/lib/wave-ink.ts","utf8");
+const canvas=readFileSync("src/components/editor/WaveInkCanvas.tsx","utf8");
+const drawing=readFileSync("src/components/editor/WaveDrawing.tsx","utf8");
+const image=readFileSync("src/components/editor/WaveImage.tsx","utf8");
+const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
+const mover=readFileSync("src/lib/wave-block-motion.ts","utf8");
+for(const x of ["serializeInk","parseInk","inkStrokeAt","120000","strokes.length>120"])assert.ok(ink.includes(x),x);
+for(const x of ["onPointerDown={start}","onPointerMove={move}","onPointerUp={stop}","onPointerCancel={stop}","Ручка","Маркер","Ластик","emit(current.current)","onChange(encoded)","Отменить штрих","Вернуть штрих"])assert.ok(canvas.includes(x),x);
+for(const x of ["data-wave-drawing","insertWaveDrawing","WaveInkCanvas","updateAttributes({strokes:encoded})","moveWaveBlock"])assert.ok(drawing.includes(x),x);
+for(const x of ["Рисовать поверх","data-ink","onChange={ink=>updateAttributes({ink})}","moveWaveBlock"])assert.ok(image.includes(x),x);
+for(const x of ["WaveDrawing,","Добавить рисунок","insertWaveDrawing().run()"])assert.ok(editor.includes(x),x);
+assert.ok(mover.includes('import { Fragment, type Node as PMNode } from "@tiptap/pm/model"'));
+assert.ok(mover.includes("state.tr.replaceWith(from, to, replacement)"));
+console.log("Vector drawing, annotations and complete block moves connected");
+
+const canvasSource=readFileSync("src/components/editor/WaveInkCanvas.tsx","utf8");
+assert.ok(canvasSource.includes('tool==="line"?[point,point]'));
+assert.ok(canvasSource.includes('tool==="rectangle"?[point,point,point,point,point]'));
+assert.ok(canvasSource.includes('tool==="ellipse"?ellipseInkPoints(point,point)'));
+assert.ok(canvasSource.includes('mode.current==="ellipse"'));
+assert.ok(canvasSource.includes('"Овал"'));
+assert.ok(canvasSource.includes('mode.current==="line"'));
+assert.ok(canvasSource.includes('"Прямая"'));
+
+assert.ok(canvasSource.includes('tool==="rectangle"?[point,point,point,point,point]'));
+assert.ok(canvasSource.includes('mode.current==="rectangle"'));
+assert.ok(canvasSource.includes('"Прямоугольник"'));

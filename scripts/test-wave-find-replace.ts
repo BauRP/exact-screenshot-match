@@ -1,0 +1,14 @@
+import {strict as assert} from "node:assert";
+import {Schema} from "@tiptap/pm/model";
+import {EditorState} from "@tiptap/pm/state";
+import {replaceOneInNote,replaceAllInNote} from "../src/lib/wave-find-replace";
+const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},text:{group:"inline"}},marks:{}});
+const paragraph=(text:string)=>schema.nodes.paragraph.create(null,schema.text(text));
+let state=EditorState.create({schema,doc:schema.nodes.doc.create(null,[paragraph("cat dog cat"),paragraph("cat again")])});
+const editor={isEditable:true,isDestroyed:false,get state(){return state;},view:{dispatch(tr:any){state=state.apply(tr);}}} as any;
+assert.equal(replaceAllInNote(editor,"cat","bird"),3);
+assert.equal(state.doc.textContent,"bird dog birdbird again");
+assert.equal(replaceOneInNote(editor,"bird","fox",1),true);
+assert.equal(state.doc.textContent,"bird dog foxbird again");
+assert.equal(replaceAllInNote(editor,"not found","x"),0);
+console.log("Single and reverse-order bulk text replacements passed");

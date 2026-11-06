@@ -40,35 +40,35 @@ export function isPluginReady(pluginName: string): boolean {
  * Resolves once the requested Capacitor plugin is reachable through the native
  * bridge, or `false` if it never shows up within `timeoutMs`.
  */
-export function waitForPlugin(pluginName: string, timeoutMs = 10_000): Promise<boolean> {
-  if (!isNativePlatform()) return Promise.resolve(false);
-  if (isPluginReady(pluginName)) return Promise.resolve(true);
+export function waitForPlugin(pluginName: string, timeoutMs = 12_000, signal?: AbortSignal): Promise<boolean> {
+  if (typeof window === "undefined" || signal?.aborted) return Promise.resolve(false);
+  if (isNativePlatform() && isPluginReady(pluginName)) return Promise.resolve(true);
 
+  // Capacitor's JS bridge may arrive AFTER React has mounted. In particular,
+  // never return false just because the bridge wasn't ready on the first frame.
   return new Promise((resolve) => {
     const started = Date.now();
     let settled = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
 
     const finish = (value: boolean) => {
       if (settled) return;
       settled = true;
-      clearInterval(timer);
-      document.removeEventListener("deviceready", onDeviceReady);
+      if (timer) clearInterval(timer);
+      document.removeEventListener("deviceready", check);
+      signal?.removeEventListener("abort", abort);
       resolve(value);
     };
-
-    const onDeviceReady = () => {
-      if (isPluginReady(pluginName)) finish(true);
+    const check = () => {
+      if (isNativePlatform() && isPluginReady(pluginName)) finish(true);
+      else if (Date.now() - started >= timeoutMs) finish(false);
     };
+    const abort = () => finish(false);
 
-    const timer = setInterval(() => {
-      if (isPluginReady(pluginName)) {
-        finish(true);
-        return;
-      }
-      if (Date.now() - started >= timeoutMs) finish(false);
-    }, 50);
-
-    document.addEventListener("deviceready", onDeviceReady, { once: true });
+    signal?.addEventListener("abort", abort, { once: true });
+    document.addEventListener("deviceready", check);
+    timer = setInterval(check, 100);
+    check();
   });
 }
 

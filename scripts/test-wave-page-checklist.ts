@@ -1,0 +1,17 @@
+import {strict as assert} from "node:assert";
+import {Schema} from "@tiptap/pm/model";
+import {EditorState,TextSelection} from "@tiptap/pm/state";
+import {currentPageTaskCounts,setCurrentPageTasksDone} from "../src/lib/wave-checklist-actions";
+const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},waveFold:{group:"block",content:"block+"},wavePageBreak:{group:"block",atom:true},waveChecklistItem:{group:"block",content:"text*",attrs:{done:{default:false}}},text:{group:"inline"}},marks:{}});
+const task=(s:string)=>schema.nodes.waveChecklistItem.create(null,schema.text(s));
+let state=EditorState.create({schema,doc:schema.nodes.doc.create(null,[task("first"),schema.nodes.wavePageBreak.create(),schema.nodes.waveFold.create(null,[task("nested")]),task("second"),schema.nodes.wavePageBreak.create(),task("third")])});
+const editor={isEditable:true,isDestroyed:false,get state(){return state;},view:{dispatch(tr:any){state=state.apply(tr);}}} as any;
+const choose=(text:string)=>{let at=-1;state.doc.descendants((n,pos)=>{if(n.type.name==="waveChecklistItem"&&n.textContent===text)at=pos+1;});assert.ok(at>0);state=state.apply(state.tr.setSelection(TextSelection.create(state.doc,at)));};
+choose("nested");assert.equal(currentPageTaskCounts(editor).total,2);
+assert.equal(setCurrentPageTasksDone(editor,true),2);
+choose("first");assert.equal(currentPageTaskCounts(editor).done,0);
+choose("third");assert.equal(currentPageTaskCounts(editor).done,0);
+choose("second");assert.equal(currentPageTaskCounts(editor).done,2);
+assert.equal(setCurrentPageTasksDone(editor,false),2);
+assert.equal(state.doc.textContent,"firstnestedsecondthird");
+console.log("Current-page checklist actions preserve neighbouring pages and nested sections");

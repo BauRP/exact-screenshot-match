@@ -1,3 +1,84 @@
+@import "@fontsource/roboto/400.css";
+@import "@fontsource/roboto/700.css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/montserrat/400.css";
+@import "@fontsource/montserrat/700.css";
+@import "@fontsource/open-sans/400.css";
+@import "@fontsource/open-sans/700.css";
+@import "@fontsource/ubuntu/400.css";
+@import "@fontsource/ubuntu/700.css";
+@import "@fontsource/pt-sans/400.css";
+@import "@fontsource/pt-sans/700.css";
+@import "@fontsource/playfair-display/400.css";
+@import "@fontsource/playfair-display/700.css";
+@import "@fontsource/merriweather/400.css";
+@import "@fontsource/merriweather/700.css";
+@import "@fontsource/lora/400.css";
+@import "@fontsource/lora/700.css";
+@import "@fontsource/nunito/400.css";
+@import "@fontsource/nunito/700.css";
+@import "@fontsource/raleway/400.css";
+@import "@fontsource/raleway/700.css";
+@import "@fontsource/fira-sans/400.css";
+@import "@fontsource/fira-sans/700.css";
+@import "@fontsource/rubik/400.css";
+@import "@fontsource/rubik/700.css";
+@import "@fontsource/work-sans/400.css";
+@import "@fontsource/work-sans/700.css";
+@import "@fontsource/manrope/400.css";
+@import "@fontsource/manrope/700.css";
+@import "@fontsource/caveat/400.css";
+@import "@fontsource/caveat/700.css";
+@import "@fontsource/comfortaa/400.css";
+@import "@fontsource/comfortaa/700.css";
+@import "@fontsource/oswald/400.css";
+@import "@fontsource/oswald/700.css";
+@import "@fontsource/source-sans-3/400.css";
+@import "@fontsource/source-sans-3/700.css";
+@import "@fontsource/noto-sans/400.css";
+@import "@fontsource/noto-sans/700.css";
+@import "@fontsource/amatic-sc/400.css";
+@import "@fontsource/amatic-sc/700.css";
+@import "@fontsource/arimo/400.css";
+@import "@fontsource/arimo/700.css";
+@import "@fontsource/comic-neue/400.css";
+@import "@fontsource/comic-neue/700.css";
+@import "@fontsource/cousine/400.css";
+@import "@fontsource/cousine/700.css";
+@import "@fontsource/eb-garamond/400.css";
+@import "@fontsource/eb-garamond/700.css";
+@import "@fontsource/noto-serif/400.css";
+@import "@fontsource/noto-serif/700.css";
+@import "@fontsource/lexend/400.css";
+@import "@fontsource/lexend/700.css";
+@import "@fontsource/lobster/400.css";
+@import "@fontsource/pacifico/400.css";
+@import "@fontsource/roboto-mono/400.css";
+@import "@fontsource/roboto-mono/700.css";
+@import "@fontsource/roboto-serif/400.css";
+@import "@fontsource/roboto-serif/700.css";
+@import "@fontsource/spectral/400.css";
+@import "@fontsource/spectral/700.css";
+@import "@fontsource/tinos/400.css";
+@import "@fontsource/tinos/700.css";
+@import "@fontsource/pt-serif/400.css";
+@import "@fontsource/pt-serif/700.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/700.css";
+@import "@fontsource/ibm-plex-serif/400.css";
+@import "@fontsource/ibm-plex-serif/700.css";
+@import "@fontsource/ubuntu-mono/400.css";
+@import "@fontsource/ubuntu-mono/700.css";
+@import "@fontsource/roboto-slab/400.css";
+@import "@fontsource/roboto-slab/700.css";
+@import "@fontsource/mulish/400.css";
+@import "@fontsource/mulish/700.css";
+@import "@fontsource/exo-2/400.css";
+@import "@fontsource/exo-2/700.css";
+@import "@fontsource/fira-mono/400.css";
+@import "@fontsource/fira-mono/700.css";
+
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
@@ -175,3 +256,96 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+
+
+/* Web fallback: stable viewport on older Android WebViews that do not
+   implement dvh. Native WebView itself is already inset by MainActivity. */
+.wave-app-frame { height:100vh; min-height:0; }
+@supports (height:100dvh) {
+  .wave-app-frame { height:100dvh; }
+}
+html.wave-native-android,
+html.wave-native-android body,
+html.wave-native-android #root {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+html.wave-native-android .wave-app-frame {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+.wave-native-android {
+  /* Android WindowInsets has already trimmed the physical WebView viewport.
+     Never add the Android system bars again through CSS env() or padding. */
+  --wave-safe-bottom:0px;
+  --wave-safe-top:0px;
+}
+.wave-native-android .wave-bottom-nav { bottom:0; }
+/* The Android IME has priority while editing. Never pin bottom tabs above
+   the keyboard where they cover an editable note or a PDF text tool. */
+.wave-ime-open .wave-bottom-nav { display:none; }
+@media (max-width:360px) {
+  .wave-bottom-nav nav, .wave-bottom-nav a { min-width:0; }
+  .wave-bottom-nav a { font-size:10px; }
+}
+
+/* A search result is outlined without changing the note font, ink or stored HTML. */
+.sn-tiptap .wave-find-hit {outline:1.5px solid var(--wave-find-contrast,#000);outline-offset:1px;border-radius:2px;}
+.sn-tiptap .wave-find-current {outline-width:2.5px;box-shadow:0 0 0 2px color-mix(in srgb,var(--wave-find-contrast,#000) 15%,transparent);}
+
+/* Editable locally saved checklist blocks, with square/circle/diamond symbols. */
+.sn-tiptap .wave-check-row {display:flex;align-items:flex-start;gap:8px;min-height:32px;padding:2px 0;}
+.sn-tiptap .wave-check-mark {display:inline-grid;place-items:center;flex:0 0 28px;width:28px;height:28px;border-radius:8px;color:inherit;font-size:22px;line-height:1;cursor:pointer;touch-action:manipulation;}
+.sn-tiptap .wave-check-row[data-shape="circle"] .wave-check-mark {border-radius:50%;}
+.sn-tiptap .wave-check-row[data-done="true"] .wave-check-mark {color:#15803d;}
+.sn-tiptap .wave-check-row[data-done="true"] .wave-check-content {opacity:.62;text-decoration:line-through;}
+.sn-tiptap .wave-check-content {flex:1;min-width:0;min-height:28px;padding:2px 0;white-space:pre-wrap;overflow-wrap:anywhere;}
+
+/* All new blocks preserve ink from the existing note; no standalone page scroll. */
+.sn-tiptap .wave-callout {border-left:3px solid #2563eb;border-radius:8px;padding:9px 12px;margin:10px 0;background:rgba(105,145,210,.12);color:inherit;}
+.sn-tiptap .wave-callout[data-kind="tip"] {border-left-color:#15803d;background:rgba(63,157,92,.12);}
+.sn-tiptap .wave-callout[data-kind="warning"] {border-left-color:#b45309;background:rgba(212,145,43,.13);}
+.sn-tiptap .wave-callout[data-kind="important"] {border-left-color:#7c3aed;background:rgba(124,58,237,.11);}
+.sn-tiptap .wave-callout > p:first-child {margin-top:0;}
+.sn-tiptap .wave-fold {border:1px solid rgba(100,110,130,.3);border-radius:8px;padding:8px;margin:8px 0;color:inherit;}
+.sn-tiptap .wave-fold-heading {display:block;width:100%;text-align:left;font-size:1rem;font-weight:650;min-height:36px;padding:5px 6px;border-radius:6px;color:inherit;touch-action:manipulation;}
+.sn-tiptap .wave-fold-body {padding:4px 6px 6px;}
+.sn-tiptap .wave-fold-body[hidden] {display:none;}
+.sn-tiptap .wave-tape {background:#303a51;color:transparent!important;border-radius:3px;box-decoration-break:clone;-webkit-box-decoration-break:clone;cursor:pointer;text-shadow:none!important;min-width:12px;}
+.sn-tiptap .wave-tape.wave-tape-open {background:rgba(70,80,100,.16);color:inherit!important;}
+
+/* Page breaks are explicit saved blocks, not simulated page slicing. */
+.sn-tiptap .wave-page-break,
+.sn-tiptap [data-wave-page-break] {
+  display:block;
+  margin:22px 0;
+  min-height:20px;
+  border-top:2px dashed rgba(100,116,139,.55);
+  position:relative;
+  user-select:none;
+}
+.sn-tiptap [data-wave-page-break]::after {
+  content:"Новая страница";
+  position:absolute;
+  top:1px;left:50%;
+  transform:translate(-50%,-50%);
+  background:var(--background,#fff);
+  color:var(--muted-foreground,#64748b);
+  padding:0 10px;
+  font-size:11px;
+}
+@media print { .sn-tiptap [data-wave-page-break]{break-after:page;page-break-after:always;border:0;} .sn-tiptap [data-wave-page-break]::after{display:none;} }
+
+/* Accessible section management that stays within the note canvas. */
+.wave-fold-heading{display:flex;align-items:center;gap:6px;min-width:0}
+.wave-fold-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.wave-fold-toggle,.wave-fold-rename,.wave-fold-nest{flex-shrink:0;min-width:30px;min-height:32px;border-radius:8px;cursor:pointer}
+.wave-fold-title-input{flex:1;min-width:0;border:1px solid var(--border);border-radius:7px;padding:5px 8px;background:var(--background);color:var(--foreground);font:inherit}
+.wave-fold-heading button:focus-visible,.wave-fold-title-input:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.wave-fold-body[hidden]{display:none!important}

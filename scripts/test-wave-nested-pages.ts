@@ -1,0 +1,11 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+const blocks=readFileSync("src/lib/wave-blocks.ts","utf8");
+const outline=readFileSync("src/lib/note-outline.ts","utf8");
+const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
+const exports=readFileSync("src/lib/note-export.ts","utf8");
+for(const token of ["Переименовать раздел","Добавить вложенный раздел","finishRename","maxLength=100","setNodeMarkup","insertContentAt(insertAt,section)"])assert.ok(blocks.includes(token),token);
+for(const token of ["wavePageBreak","Страница ","type:\"page\"","waveFold"])assert.ok(outline.includes(token),token);
+for(const token of ['item.type==="page"','item.pos+(item.type==="page"?0:1)'])assert.ok(editor.includes(token),token);
+for(const token of ["--- Новая страница ---","break-after:page","w:br w:type","— Новая страница —"])assert.ok(exports.includes(token),token);
+console.log("Nested sections, page navigation and cross-format page boundaries connected");

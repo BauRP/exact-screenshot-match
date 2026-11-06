@@ -1,0 +1,17 @@
+import {strict as assert} from "node:assert";
+import {Schema} from "@tiptap/pm/model";
+import {collectNoteOutline,notePagePositions,pageDisplayNames,visibleHeadingText} from "../src/lib/note-outline";
+import {readFileSync} from "node:fs";
+const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"inline*"},heading:{group:"block",content:"inline*",attrs:{level:{default:2}}},wavePageBreak:{group:"block",atom:true,attrs:{label:{default:""}}},waveFold:{group:"block",content:"block+",attrs:{title:{default:"Раздел"}}},text:{group:"inline"}},marks:{waveTape:{}}});
+const title=schema.nodes.heading.create(null,[schema.text("План "),schema.text("секрет",[schema.marks.waveTape.create()]),schema.text(" виден")]);
+const nested=schema.nodes.waveFold.create({title:"Задачи"},[schema.nodes.wavePageBreak.create({label:"вложенная"}),schema.nodes.paragraph.create(null,schema.text("текст"))]);
+const doc=schema.nodes.doc.create(null,[title,nested,schema.nodes.wavePageBreak.create({label:"Вторая"}),schema.nodes.paragraph.create()]);
+assert.equal(visibleHeadingText(title),"План виден");
+const outline=collectNoteOutline(doc);
+assert.ok(!JSON.stringify(outline).includes("секрет"));
+assert.ok(!outline.some(x=>x.type==="page"&&x.title==="вложенная"));
+assert.equal(outline.filter(x=>x.type==="page").length,1);
+assert.equal(notePagePositions(doc).length,2);
+assert.deepEqual(pageDisplayNames(doc),["Страница 1","Вторая"]);
+assert.ok(readFileSync("src/lib/wave-text-direction.ts","utf8").includes('"waveChecklistItem"'));
+console.log("Tape-safe outline, nested page boundary and checklist RTL passed");
