@@ -62,7 +62,7 @@ assert.equal(firstDb.closed,1,"Close obsolete handles after version change");
 const afterUpgrade=opener(), second=ok(take());
 assert.equal(await afterUpgrade,second,"After versionchange reopen cleanly");
 second.onclose?.();
-const afterClose=opener();assert.equal(await afterClose,ok(take()));
+const afterClose=opener();const third=ok(take());assert.equal(await afterClose,third);
 
 const blocked=createIndexedDbOpener("wave-test-blocked","media",errors,50);
 const attempt=blocked(),old=take();
@@ -70,7 +70,7 @@ old.onblocked?.();
 await assert.rejects(attempt,/upgrade blocked/);
 const retry=blocked(),newRequest=take();
 assert.notEqual(old,newRequest,"Rejected blocked connections must be retryable");
-assert.equal(await retry,ok(newRequest));
+const retried=ok(newRequest);assert.equal(await retry,retried);
 const stale=ok(old);
 assert.equal(stale.closed,1,"A late blocked success closes its stale connection");
 
@@ -79,17 +79,17 @@ const errorPromise=erroneous(),errRequest=take();
 errRequest.error=new Error("Injected request failure");
 errRequest.onerror?.();
 await assert.rejects(errorPromise,/Injected request failure/);
-const errorRetry=erroneous();assert.equal(await errorRetry,ok(take()));
+const errorRetry=erroneous();const recoveredFromError=ok(take());assert.equal(await errorRetry,recoveredFromError);
 
 const immediate=createIndexedDbOpener("wave-test-throw","media",errors,50);
 throwOnOpen=true;
 await assert.rejects(immediate(),/Injected native open failure/);
-const recovered=immediate();assert.equal(await recovered,ok(take()));
+const recovered=immediate();const recoveredDb=ok(take());assert.equal(await recovered,recoveredDb);
 
 const hung=createIndexedDbOpener("wave-test-hang","media",errors,8);
 const timed=hung(),oldTimed=take();
 await assert.rejects(timed,/open timeout/);
-const fresh=hung();assert.equal(await fresh,ok(take()));
+const fresh=hung();const freshDb=ok(take());assert.equal(await fresh,freshDb);
 oldTimed.onsuccess?.();
 assert.equal(oldTimed.result.closed,1,"Late timeout success must not leak native handles");
 
