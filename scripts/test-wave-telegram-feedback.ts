@@ -199,3 +199,22 @@ assert.ok(
 console.log(
   "Telegram feedback structure and direct Bot API configuration checked"
 );
+
+// The existing direct path stays available to preserve prior debug builds;
+// when WAVE_FEEDBACK_RELAY_URL is configured, HTTPS relay always wins, and
+// there is no direct fallback even for uncertain delivery outcomes.
+for(const marker of [
+ "BuildConfig.WAVE_FEEDBACK_RELAY_URL",
+ 'private JSObject deliverViaRelay(String topic, String text)',
+ '!"https".equals(url.getProtocol())',
+ '"/feedback".equals(url.getPath())',
+ 'payload.put("topic", topic)',
+ 'payload.put("text", text)',
+ 'relayUrl.isEmpty()',
+ '? deliverDirect(cleanTopic, cleanText)',
+ ': deliverViaRelay(cleanTopic, cleanText)',
+ 'result.optBoolean("ok", false) && messageId > 0'
+])assert.ok(java.includes(marker),"Missing relay safety contract: "+marker);
+const relayBranch=java.substring(java.indexOf('final String relayUrl ='),java.indexOf('"wave-feedback-http"'));
+assert.ok(relayBranch.includes('relayUrl.isEmpty()'));
+assert.ok(!relayBranch.includes('deliverDirect(cleanTopic, cleanText)\n                    : deliverDirect'),"No direct fallback on relay errors");

@@ -82,6 +82,9 @@ jobs:
       - name: Verify Telegram feedback draft, request safety and build mode
         run: bun scripts/test-wave-telegram-feedback.ts
 
+      - name: Verify optional HTTPS relay routing and no-duplicate fallback
+        run: bun scripts/test-wave-feedback-relay-routing.ts
+
       - name: Verify credential-free Telegram relay contract
         run: node scripts/test-wave-feedback-relay.mjs
 

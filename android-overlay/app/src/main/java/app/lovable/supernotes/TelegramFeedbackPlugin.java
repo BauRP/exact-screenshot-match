@@ -83,6 +83,68 @@ public final class TelegramFeedbackPlugin extends Plugin {
             "Сообщение пользователя:\n" + text;
     }
 
+    /** Use the HTTPS Worker when its URL is explicitly configured in the APK.
+     * The bot credential stays on the Worker. Never silently fall back to
+     * direct Telegram on timeout/unconfirmed results: it could send twice. */
+    private JSObject deliverViaRelay(String topic, String text) {
+        HttpsURLConnection connection = null;
+        try {
+            String endpoint = BuildConfig.WAVE_FEEDBACK_RELAY_URL;
+            URL url = new URL(endpoint);
+            if (!"https".equals(url.getProtocol())
+                || !"/feedback".equals(url.getPath())
+                || url.getUserInfo() != null
+                || url.getQuery() != null
+                || url.getRef() != null) {
+                return failure("setup", 0, 0, false);
+            }
+
+            connection = (HttpsURLConnection) url.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            connection.setReadTimeout(READ_TIMEOUT_MS);
+            connection.setDoOutput(true);
+            connection.setInstanceFollowRedirects(false);
+            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            JSONObject payload = new JSONObject();
+            payload.put("topic", topic);
+            payload.put("text", text);
+            byte[] body = payload.toString().getBytes(StandardCharsets.UTF_8);
+            connection.setFixedLengthStreamingMode(body.length);
+            try (OutputStream output = connection.getOutputStream()) {
+                output.write(body);
+            }
+
+            int status = connection.getResponseCode();
+            if (status >= 300 && status < 400) return failure("rejected", status, 0, false);
+            String response = readLimited(
+                status >= 200 && status < 300
+                    ? connection.getInputStream()
+                    : connection.getErrorStream()
+            );
+            JSONObject result = new JSONObject(response);
+            JSONObject delivered = result.optJSONObject("result");
+            int messageId = delivered == null ? 0 : delivered.optInt("message_id", 0);
+            if (status == 200 && result.optBoolean("ok", false) && messageId > 0) {
+                return success(messageId);
+            }
+            String kind = result.optString("kind", "rejected");
+            int retryAfter = Math.min(3600, Math.max(0, result.optInt("retryAfter", 0)));
+            boolean uncertain = result.optBoolean("uncertain", false);
+            if (status >= 500 && !result.has("uncertain")) uncertain = true;
+            return failure(kind, status, retryAfter, uncertain);
+
+        } catch (UnknownHostException error) {
+            return failure("offline", 0, 0, false);
+        } catch (SocketTimeoutException error) {
+            return failure("timeout", 0, 0, true);
+        } catch (Exception error) {
+            return failure("network", 0, 0, true);
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
     private JSObject deliverDirect(
         String topic,
         String text
@@ -262,13 +324,14 @@ public final class TelegramFeedbackPlugin extends Plugin {
             return;
         }
 
-        if (
+        final String relayUrl = BuildConfig.WAVE_FEEDBACK_RELAY_URL;
+        // The credential-bearing legacy route remains only for debug builds
+        // that have no configured relay; do not disable working user feedback.
+        if (relayUrl.isEmpty() && (
             BOT_TOKEN.isEmpty() ||
             BOT_TOKEN.equals("ВСТАВЬ_РЕАЛЬНЫЙ_ТОКЕН")
-        ) {
-            call.resolve(
-                failure("setup", 0, 0, false)
-            );
+        )) {
+            call.resolve(failure("setup", 0, 0, false));
             return;
         }
 
@@ -278,7 +341,9 @@ public final class TelegramFeedbackPlugin extends Plugin {
         // Не блокировать главный поток Android.
         new Thread(
             () -> call.resolve(
-                deliverDirect(cleanTopic, cleanText)
+                relayUrl.isEmpty()
+                    ? deliverDirect(cleanTopic, cleanText)
+                    : deliverViaRelay(cleanTopic, cleanText)
             ),
             "wave-feedback-http"
         ).start();
