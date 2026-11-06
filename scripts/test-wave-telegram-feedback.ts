@@ -167,10 +167,10 @@ assert.ok(
   "Telegram token is missing or has an invalid format"
 );
 
-// Проверка отсутствия старой отправки через relay
-assert.ok(
-  !java.includes("deliverViaRelay(")
-);
+// When an HTTPS Worker URL is configured, use it instead of a direct
+// Telegram request. No automatic legacy fallback on uncertain delivery.
+assert.ok(java.includes('private JSObject deliverViaRelay(String topic, String text)'));
+assert.ok(java.includes('BuildConfig.WAVE_FEEDBACK_RELAY_URL'));
 
 // Проверка формы в настройках
 assert.ok(
