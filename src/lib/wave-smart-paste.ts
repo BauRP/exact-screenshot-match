@@ -162,6 +162,8 @@ export function structuredPlainClipboardHtml(input:string):string{
  if(typeof input!=="string"||input.length>20_000)return "";
  const lines=input.replace(/\r\n?/g,"\n").trim().split("\n");
  if(lines.length<2||lines.length>100||lines.some(line=>!line.trim()))return "";
+ // Tabs have ambiguous visual widths; never flatten them into plain list items.
+ if(lines.some(line=>/^\t/.test(line)))return "";
  // A two-space indentation step represents an actual nested list. Do not
  // quietly turn it into a flat list or strip the indentation on failure.
  if(lines.some(line=>/^ {2,}\S/.test(line)))return nestedPlainClipboardHtml(lines);
