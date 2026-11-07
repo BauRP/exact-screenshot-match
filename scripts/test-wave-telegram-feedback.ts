@@ -94,6 +94,11 @@ assert.match(
   /могло прийти/i
 );
 
+assert.match(
+  feedbackFailureMessage({ok: false, kind: "busy"}),
+  /уже отправляется/i
+);
+
 // Проверка Android-кода
 const java = readFileSync(
   "android-overlay/app/src/main/java/app/lovable/supernotes/TelegramFeedbackPlugin.java",
@@ -131,6 +136,10 @@ const markers = [
   "UnknownHostException",
   "SocketTimeoutException",
   "new Thread(",
+  "new AtomicBoolean(false)",
+  "sending.compareAndSet(false, true)",
+  "sending.set(false)",
+  'failure("busy", 0, 0, false)',
   "deliverDirect(",
   "api.telegram.org/bot",
   'payload.put("chat_id", GROUP_ID)',

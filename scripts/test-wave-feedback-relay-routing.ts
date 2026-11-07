@@ -28,6 +28,9 @@ const relayMethod = java.slice(java.indexOf('private JSObject deliverViaRelay(')
 assert.ok(relayMethod.includes('deliveredChat.optLong("id", 0) == GROUP_ID'),"Relay must verify destination group");
 assert.ok(relayMethod.includes('return failure("unconfirmed", status, 0, true)'),"Invalid HTTP 200 is uncertain");
 assert.ok(worker.includes('env.TELEGRAM_BOT_TOKEN'),"Worker must own Telegram credential");
+assert.ok(java.includes("sending.compareAndSet(false, true)"),"Native duplicate-send guard required");
+assert.ok(java.includes('failure("busy", 0, 0, false)'),"Concurrent sends must be rejected");
+assert.ok(java.includes("sending.set(false)"),"Native duplicate-send guard must be released");
 assert.ok(worker.includes('env.FEEDBACK_LIMITER'),"Worker must limit untrusted requests");
 assert.ok(!worker.includes('Access-Control-Allow-Origin'),"Keep worker native-only by default");
 console.log("Configured HTTPS relay is preferred; direct debug feedback is not retried after relay failure");

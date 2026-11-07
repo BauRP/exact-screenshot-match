@@ -22,6 +22,7 @@ export function feedbackFailureMessage(result: FeedbackResult): string {
   }
   switch (result.kind) {
     case "setup": return "В этой версии приложения отправка в Telegram не настроена.";
+    case "busy": return "Пожелание уже отправляется. Дождитесь завершения, чтобы не создать дубликат.";
     case "offline": return "Нет интернета. Сообщение сохранено как черновик.";
     case "rate_limit": return result.retryAfter
       ? `Telegram временно ограничил отправку. Попробуйте через ${result.retryAfter} секунд.`

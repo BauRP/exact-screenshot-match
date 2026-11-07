@@ -15,6 +15,7 @@ import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -30,6 +31,9 @@ public final class TelegramFeedbackPlugin extends Plugin {
     private static final int MAX_TEXT = 3000;
     private static final int CONNECT_TIMEOUT_MS = 8000;
     private static final int READ_TIMEOUT_MS = 12000;
+
+    // Prevent overlapping native sends even if the JavaScript button guard is bypassed.
+    private final AtomicBoolean sending = new AtomicBoolean(false);
 
     private JSObject failure(
         String kind,
@@ -348,14 +352,35 @@ public final class TelegramFeedbackPlugin extends Plugin {
         final String cleanTopic = topic.trim();
         final String cleanText = text.trim();
 
-        // Не блокировать главный поток Android.
-        new Thread(
-            () -> call.resolve(
-                relayUrl.isEmpty()
-                    ? deliverDirect(cleanTopic, cleanText)
-                    : deliverViaRelay(cleanTopic, cleanText)
-            ),
-            "wave-feedback-http"
-        ).start();
+        // Guard at the native boundary as well as in the React form.
+        if (!sending.compareAndSet(false, true)) {
+            call.resolve(failure("busy", 0, 0, false));
+            return;
+        }
+
+        // Never hold the UI thread while talking to Telegram.
+        try {
+            new Thread(
+                () -> {
+                    JSObject result;
+                    try {
+                        result = relayUrl.isEmpty()
+                            ? deliverDirect(cleanTopic, cleanText)
+                            : deliverViaRelay(cleanTopic, cleanText);
+                    } catch (RuntimeException error) {
+                        result = failure("network", 0, 0, true);
+                    } finally {
+                        // Every network outcome, including timeouts, releases the guard.
+                        sending.set(false);
+                    }
+                    call.resolve(result);
+                },
+                "wave-feedback-http"
+            ).start();
+        } catch (RuntimeException error) {
+            // A failed thread start must not lock feedback until app restart.
+            sending.set(false);
+            call.resolve(failure("network", 0, 0, false));
+        }
     }
 }
