@@ -85,7 +85,7 @@ jobs:
       - name: Verify optional HTTPS relay routing and no-duplicate fallback
         run: bun scripts/test-wave-feedback-relay-routing.ts
 
-      - name: Verify credential-free Telegram relay contract
+      - name: Verify Telegram feedback relay behavior (does not scan APK for credentials)
         run: node scripts/test-wave-feedback-relay.mjs
 
       - name: Verify yellow new-note defaults and Save button
@@ -518,15 +518,15 @@ jobs:
           echo "Source commit: \`$GITHUB_SHA\`" >> "$GITHUB_STEP_SUMMARY"
           echo "SHA-256: \`$(cut -d' ' -f1 output/SuperNotes-debug.apk.sha256)\`" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload token-free APK artifact
+      - name: Upload debug APK (legacy Telegram secret risk until migration)
         uses: actions/upload-artifact@v4
         with:
-          name: Wave-Notes-APK-no-Telegram-credentials
+          name: Wave-Notes-debug-APK
           path: output/SuperNotes-debug.apk
           retention-days: 1
           if-no-files-found: error
 
-      # Ordinary builds never contain Telegram credentials and may be public.
+      # WARNING: legacy direct Telegram source still embeds a credential. Debug APK must NOT be treated as secret-free.
 
       # The app is published as ONE replaceable GitHub Release asset instead.
       - name: Publish APK with a download link
