@@ -38,6 +38,10 @@ assert.deepEqual(parseInk(JSON.stringify([{...oval,points:oval.points.slice(0,-1
 
 const canvas=readFileSync("src/components/editor/WaveInkCanvas.tsx","utf8");
 assert.ok(canvas.includes('aria-label="Размер ластика"'));
+assert.ok(canvas.includes("onPointerCancel={cancel}"),"Cancelled ink must not commit an incomplete stroke");
+assert.ok(canvas.includes("onLostPointerCapture={cancel}"),"Lost capture must release an interrupted gesture");
+assert.ok(canvas.includes("replace(before.strokes)"),"Cancel must restore the exact previous strokes");
+assert.ok(canvas.includes("past.current=before.past;future.current=before.future"),"Cancel must preserve Undo/Redo history");
 assert.ok(canvas.includes('inkStrokeAt(current.current,point,eraserRadius)'));
 assert.ok(canvas.includes('inkStrokeIndicesAlong(current.current,previous,point,eraserRadius)'));
 assert.ok(canvas.includes('[8,16,28,40]'));

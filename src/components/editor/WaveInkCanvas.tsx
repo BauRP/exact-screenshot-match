@@ -13,6 +13,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
  const [historyVersion,setHistoryVersion]=useState(0);
  const gesture=useRef<number|null>(null);
  const gestureChanged=useRef(false);
+ const gestureBefore=useRef<{strokes:InkStroke[];past:InkStroke[][];future:InkStroke[][]}|null>(null);
  const lastEraserPoint=useRef<InkPoint|null>(null);
  const shapeStart=useRef<InkPoint|null>(null);
  const mode=useRef<"pen"|"marker"|"line"|"rectangle"|"ellipse"|"eraser">("pen");
@@ -64,6 +65,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
   if(!editable||!active||gesture.current!==null||(current.current.length>=120&&tool!=="eraser"))return;
   if(e.pointerType==="mouse"&&e.button!==0)return;
   e.preventDefault();gesture.current=e.pointerId;gestureChanged.current=false;mode.current=tool;
+  gestureBefore.current={strokes:current.current,past:past.current,future:future.current};
   e.currentTarget.setPointerCapture(e.pointerId);
   const point=position(e);
   lastEraserPoint.current=point;
@@ -106,9 +108,26 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
  const stop=(e:ReactPointerEvent<SVGSVGElement>)=>{
   if(gesture.current!==e.pointerId)return;
   e.preventDefault();gesture.current=null;lastEraserPoint.current=null;shapeStart.current=null;
+  gestureBefore.current=null;
   if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);
   if(gestureChanged.current)emit(current.current);
   gestureChanged.current=false;
+ };
+ // Android may cancel pointer capture on an incoming call, navigation gesture
+ // or lost focus. A canceled gesture must not be saved as a completed stroke.
+ const cancel=(e:ReactPointerEvent<SVGSVGElement>)=>{
+  if(gesture.current!==e.pointerId)return;
+  e.preventDefault();
+  gesture.current=null;lastEraserPoint.current=null;shapeStart.current=null;
+  const before=gestureBefore.current;
+  gestureBefore.current=null;
+  if(before&&gestureChanged.current){
+   replace(before.strokes);
+   past.current=before.past;future.current=before.future;
+   setHistoryVersion(v=>v+1);
+  }
+  gestureChanged.current=false;
+  if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);
  };
  const clear=()=>{
    if(gesture.current!==null||current.current.length===0)return;
@@ -135,7 +154,8 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
  return <div className="relative h-full w-full">
    <svg role="img" aria-label="Рисунок" viewBox="0 0 1000 1000" preserveAspectRatio="none"
      className={`absolute inset-0 h-full w-full ${editable&&active?"touch-none cursor-crosshair":"pointer-events-none"}`}
-     onPointerDown={start} onPointerMove={move} onPointerUp={stop} onPointerCancel={stop}>
+     onPointerDown={start} onPointerMove={move} onPointerUp={stop}
+     onPointerCancel={cancel} onLostPointerCapture={cancel}>
      {strokes.map((stroke,i)=>stroke.points.length===1?
        <circle key={i} cx={stroke.points[0][0]} cy={stroke.points[0][1]} r={stroke.width/2} fill={stroke.color} opacity={stroke.tool==="marker"?.4:1}/>:
        <polyline key={i} points={stroke.points.map(p=>p.join(",")).join(" ")} fill="none" stroke={stroke.color}

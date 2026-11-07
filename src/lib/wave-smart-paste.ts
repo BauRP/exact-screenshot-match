@@ -99,6 +99,62 @@ export function safeBrowserClipboardHtml(html:string):string{
 }
 
 
+
+/** Structured clipboard indentation is meaningful: never flatten nested list
+ * items into separate top-level items or renumber explicitly numbered rows.
+ * Only explicit two-space steps are accepted; ambiguous indentation falls back
+ * to the user's original plain text without silently changing its meaning. */
+function nestedPlainClipboardHtml(lines:readonly string[]):string {
+ type Item={depth:number;kind:"ul"|"ol";number:number;text:string};
+ const items:Item[]=[];
+ const marker=/^( *)([-*•–]|\d{1,5}[.)]) +(.+)$/;
+ for(const line of lines){
+  const match=marker.exec(line);
+  if(!match||match[1].length%2!==0||match[1].length>8||
+     /^[-*•–] +\[[ xX]\] +/.test(line.trimStart()))return "";
+  const depth=match[1].length/2;
+  const kind=/^\d/.test(match[2])?"ol":"ul";
+  const number=kind==="ol"?Number(match[2].slice(0,-1)):0;
+  if(kind==="ol"&&(number<1||number>99999))return "";
+  items.push({depth,kind,number,text:match[3].trim()});
+ }
+ if(items[0]?.depth!==0||!items.some(item=>item.depth>0))return "";
+ const escape=(s:string)=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;")
+  .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+ const stack:{kind:"ul"|"ol";next:number}[]=[];
+ let html="";
+ for(const item of items){
+  if(item.depth>stack.length||item.depth>4)return "";
+  while(stack.length>item.depth+1){
+   const frame=stack.pop()!;
+   html+="</li></"+frame.kind+">";
+  }
+  if(stack.length===item.depth+1&&stack[stack.length-1].kind!==item.kind){
+   const frame=stack.pop()!;
+   html+="</li></"+frame.kind+">";
+  }else if(stack.length===item.depth+1){
+   html+="</li>";
+  }
+  if(stack.length===item.depth){
+   // A nested list belongs inside the immediately preceding list item.
+   if(item.depth>0&&items.indexOf(item)===0)return "";
+   html+="<"+item.kind+(item.kind==="ol"&&item.number!==1?' start="'+item.number+'"':"")+">";
+   stack.push({kind:item.kind,next:item.number});
+  }
+  const frame=stack[stack.length-1];
+  if(frame.kind==="ol"){
+   if(item.number!==frame.next)return "";
+   frame.next++;
+  }
+  html+="<li><p"+clipboardRtlAttribute(item.text)+">"+escape(item.text)+"</p>";
+ }
+ while(stack.length){
+  const frame=stack.pop()!;
+  html+="</li></"+frame.kind+">";
+ }
+ return html;
+}
+
 /** Convert a clearly formatted multi-line clipboard list into editable
  * TipTap list blocks. Ordinary text (including a single dash or numbered
  * paragraph) remains untouched. No HTML from the clipboard is interpreted. */
@@ -106,6 +162,9 @@ export function structuredPlainClipboardHtml(input:string):string{
  if(typeof input!=="string"||input.length>20_000)return "";
  const lines=input.replace(/\r\n?/g,"\n").trim().split("\n");
  if(lines.length<2||lines.length>100||lines.some(line=>!line.trim()))return "";
+ // A two-space indentation step represents an actual nested list. Do not
+ // quietly turn it into a flat list or strip the indentation on failure.
+ if(lines.some(line=>/^ {2,}\S/.test(line)))return nestedPlainClipboardHtml(lines);
  const checkbox=/^\s{0,3}[-*•–]\s+\[([ xX])\]\s+(.+)$/;
  const checkboxItems=lines.map(line=>checkbox.exec(line));
  const bullet=/^\s{0,3}[-*•–]\s+(.+)$/;
