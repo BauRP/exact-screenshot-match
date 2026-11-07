@@ -54,4 +54,34 @@ assert.equal(edits,3,"Rejected actions must not dispatch");
 const source=readFileSync("src/routes/editor.$id.tsx","utf8");
 assert.ok(source.includes('moveWaveBlocksToAdjacentPage(editor,"previous")'));
 assert.ok(source.includes('moveWaveBlocksToAdjacentPage(editor,"next")'));
+// Moving a block from inside a folded section transfers the entire section,
+// including nested media references, instead of quietly refusing the action.
+let nested=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
+ p("start"),
+ schema.nodes.waveFold.create(null,[p("inside fold"),schema.nodes.waveImage.create({imageId:"inside-photo"})]),
+ divider(),p("next page")
+])});
+let foldEdits=0;
+const nestedEditor={isEditable:true,isDestroyed:false,get state(){return nested;},
+ view:{dispatch(tr:any){foldEdits++;nested=nested.apply(tr);}}} as any;
+const locateInside=()=>{
+ let found:number|undefined;
+ nested.doc.descendants((node,at)=>{
+  if(node.type.name==="paragraph"&&node.textContent==="inside fold")found=at+2;
+ });
+ assert.notEqual(found,undefined);
+ return found!;
+};
+nested=nested.apply(nested.tr.setSelection(TextSelection.create(nested.doc,locateInside())));
+assert.equal(moveWaveBlocksToAdjacentPage(nestedEditor,"next"),true);
+assert.equal(nested.doc.child(1).type.name,"wavePageBreak");
+assert.equal(nested.doc.child(2).type.name,"waveFold");
+assert.equal(nested.doc.child(2).child(1).attrs.imageId,"inside-photo");
+assert.equal(nested.doc.child(2).child(0).firstChild?.marks[0].type.name,"strong");
+nested=nested.apply(nested.tr.setSelection(TextSelection.create(nested.doc,locateInside())));
+assert.equal(moveWaveBlocksToAdjacentPage(nestedEditor,"previous"),true);
+assert.equal(nested.doc.child(1).type.name,"waveFold");
+assert.equal(nested.doc.child(1).child(1).attrs.imageId,"inside-photo");
+assert.equal(nested.doc.check(),undefined);
+assert.equal(foldEdits,2);
 console.log("Cross-page blocks preserve media, formatting, page boundaries and atomic edits");

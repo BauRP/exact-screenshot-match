@@ -1,6 +1,6 @@
 import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
-import {EditorState,TextSelection} from "@tiptap/pm/state";
+import {EditorState,TextSelection,NodeSelection} from "@tiptap/pm/state";
 import {duplicateCurrentPage,moveCurrentPage,topLevelPageRanges,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,isEmptyPageBody,splitPageAtCaret} from "../src/lib/wave-page-actions";
 const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},wavePageBreak:{group:"block",atom:true,attrs:{label:{default:""}}},waveFold:{group:"block",content:"block+"},text:{group:"inline"}},marks:{}});
 const p=(s:string)=>schema.nodes.paragraph.create(null,schema.text(s));
@@ -77,6 +77,22 @@ const emptyPage=topLevelPageRanges(single.doc)[1];
 single=single.apply(single.tr.setSelection(TextSelection.create(single.doc,emptyPage.bodyStart+1)));
 assert.equal(removeEmptyCurrentPage(controlSingle),true);
 assert.equal(single.doc.textContent,"keep");
+// Imported or edited documents can contain two consecutive page dividers.
+// A marker-only empty page must be removable without affecting the next page.
+let onlyMarker=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
+ p("first"),page("marker-only"),page("last"),p("keep last")
+])});
+let markerEdits=0;
+const onlyMarkerEditor={isEditable:true,isDestroyed:false,get state(){return onlyMarker;},
+ view:{dispatch(tr:any){markerEdits++;onlyMarker=onlyMarker.apply(tr);}}} as any;
+const markerAt=topLevelPageRanges(onlyMarker.doc)[1].start;
+onlyMarker=onlyMarker.apply(onlyMarker.tr.setSelection(NodeSelection.create(onlyMarker.doc,markerAt)));
+assert.equal(removeEmptyCurrentPage(onlyMarkerEditor),true);
+assert.equal(topLevelPageRanges(onlyMarker.doc).length,2);
+assert.equal(onlyMarker.doc.textContent,"firstkeep last");
+assert.equal(onlyMarker.doc.child(1).attrs.label,"last","The next page label must survive");
+assert.equal(onlyMarker.doc.check(),undefined);
+assert.equal(markerEdits,1,"Exactly one undoable edit for deleting a marker-only page");
 
 const strongSchema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},
  wavePageBreak:{group:"block",atom:true,attrs:{label:{default:""}}},

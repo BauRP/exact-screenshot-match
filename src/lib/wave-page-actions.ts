@@ -186,7 +186,9 @@ export function removeEmptyCurrentPage(editor:Editor):boolean{
  const index=currentPageIndex(pages,selection.from);
  if(index<=0)return false;
  const page=pages[index];
- if(page.end<=page.bodyStart)return false;
+ // A divider followed immediately by another divider is also an empty page.
+ // Its body is Fragment.empty, so it is safe to delete that divider alone.
+ if(page.end<page.bodyStart)return false;
  const nodes=doc.content.cut(page.bodyStart,page.end);
  if(!isEmptyPageBody(nodes))return false;
  editor.view.dispatch(editor.state.tr.delete(page.start,page.end).scrollIntoView());

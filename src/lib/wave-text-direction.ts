@@ -17,7 +17,10 @@ export const WaveTextDirection=Extension.create({
 // Numbers and punctuation are neutral, even Arabic-Indic digits. Otherwise
 // “١٢٣ Hello” would incorrectly turn an English paragraph RTL.
 const STRONG_LETTER=/\p{L}/u;
-const RTL_LETTER=/[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/u;
+// Include supplementary-plane RTL letters: Adlam, Hanifi Rohingya, Yezidi,
+ // Old South Arabian and Arabic mathematical alphabetics. Do not classify
+ // numerals or combining marks as a paragraph's first strong letter.
+const RTL_LETTER=/[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF\u{10A00}-\u{10A7F}\u{10A80}-\u{10A9F}\u{10AC0}-\u{10AFF}\u{10B00}-\u{10B7F}\u{10D00}-\u{10D3F}\u{10E80}-\u{10EBF}\u{1E900}-\u{1E95F}\u{1EE00}-\u{1EEFF}]/u;
 export function directionForText(text:string):"ltr"|"rtl"{
  for(const character of text){
   if(!STRONG_LETTER.test(character))continue;

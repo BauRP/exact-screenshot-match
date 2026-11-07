@@ -260,9 +260,18 @@ export function moveWaveBlocksToAdjacentPage(editor:Editor,direction:"previous"|
  if(group&&group.depth===0&&group.end-group.start>1){
   from=group.from;to=group.to;
  }else{
-  const pos=selectedWaveBlockPos(editor);
+  let pos=selectedWaveBlockPos(editor);
   if(pos===undefined)return false;
-  const resolved=doc.resolve(pos);
+  let resolved=doc.resolve(pos);
+  if(resolved.depth!==0){
+   // A caret inside a folded section must transfer the whole top-level
+   // section, never just one nested paragraph or its media. A selection
+   // crossing top-level siblings remains ineligible for this fallback.
+   const {$from,$to}=state.selection;
+   if($from.depth<1||$to.depth<1||$from.node(1)!==$to.node(1))return false;
+   pos=$from.before(1);
+   resolved=doc.resolve(pos);
+  }
   if(resolved.depth!==0||resolved.index()>=doc.childCount)return false;
   from=pos;to=pos+doc.child(resolved.index()).nodeSize;
  }

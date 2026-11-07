@@ -15,6 +15,11 @@ assert.equal(directionForText("١٢٣ مرحبا Hello"),"rtl");
 assert.equal(directionForText("🇰🇿 123 שלום"),"rtl","Emoji and digits are neutral");
 assert.equal(directionForText("    日本語 ثم العربية"),"ltr","First CJK letter is LTR");
 assert.equal(directionForText("... ٩٨٧ سلام"),"rtl");
+assert.equal(directionForText("123 "+String.fromCodePoint(0x1E922)+" hello"),"rtl","Adlam supplementary-plane letters are RTL");
+assert.equal(directionForText("... "+String.fromCodePoint(0x10D01)+" English"),"rtl","Hanifi Rohingya letters are RTL");
+assert.equal(directionForText("123 "+String.fromCodePoint(0x10E81)), "rtl","Yezidi is RTL");
+assert.equal(directionForText("English "+String.fromCodePoint(0x1E922)),"ltr","First-strong LTR still wins");
+assert.equal(directionForText("١٢٣ "+String.fromCodePoint(0x1E922)),"rtl","Digits remain neutral before Adlam");
 
 const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
 assert.ok(editor.includes('setWaveTextDirection(editor,"auto")'));
