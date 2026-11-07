@@ -93,6 +93,9 @@ public final class TelegramFeedbackPlugin extends Plugin {
             URL url = new URL(endpoint);
             if (!"https".equals(url.getProtocol())
                 || !"/feedback".equals(url.getPath())
+                || url.getHost() == null
+                || url.getHost().isEmpty()
+                || (url.getPort() != -1 && url.getPort() != 443)
                 || url.getUserInfo() != null
                 || url.getQuery() != null
                 || url.getRef() != null) {
@@ -124,9 +127,16 @@ public final class TelegramFeedbackPlugin extends Plugin {
             );
             JSONObject result = new JSONObject(response);
             JSONObject delivered = result.optJSONObject("result");
+            JSONObject deliveredChat = delivered == null ? null : delivered.optJSONObject("chat");
             int messageId = delivered == null ? 0 : delivered.optInt("message_id", 0);
-            if (status == 200 && result.optBoolean("ok", false) && messageId > 0) {
-                return success(messageId);
+            if (status == 200) {
+                // A message ID alone does not prove delivery to our intended group.
+                // A malformed 200 response is uncertain: never encourage automatic retry.
+                if (result.optBoolean("ok", false) && messageId > 0
+                    && deliveredChat != null && deliveredChat.optLong("id", 0) == GROUP_ID) {
+                    return success(messageId);
+                }
+                return failure("unconfirmed", status, 0, true);
             }
             String kind = result.optString("kind", "rejected");
             int retryAfter = Math.min(3600, Math.max(0, result.optInt("retryAfter", 0)));

@@ -57,5 +57,13 @@ try {
   assert.equal(response.status,502); assert.equal((await response.json()).uncertain,true);
   response = await relay.fetch(new Request("https://example.workers.dev/health"),env);
   assert.equal(response.status,200); assert.equal((await response.json()).ready,true);
+  response = await relay.fetch(new Request("https://example.workers.dev/health"),
+    {...env,TELEGRAM_BOT_TOKEN:""});
+  assert.equal(response.status,503); assert.equal((await response.json()).ready,false);
+  response = await relay.fetch(new Request("https://example.workers.dev/unknown"),env);
+  assert.equal(response.status,404);
+  response = await relay.fetch(new Request("https://example.workers.dev/feedback"),env);
+  assert.equal(response.status,405);
+  assert.equal(calls,4); // invalid and health/method requests never reached Telegram
   console.log("Feedback HTTPS relay: validation, rate limiting, private bot key and delivery confirmation checked");
 } finally {globalThis.fetch = previousFetch;}

@@ -19,8 +19,14 @@ for(const marker of [
  'payload.put("topic", topic)',
  'payload.put("text", text)',
  '"https".equals(url.getProtocol())',
- 'result.optBoolean("ok", false) && messageId > 0'
+ 'deliveredChat.optLong("id", 0) == GROUP_ID',
+ 'return failure("unconfirmed", status, 0, true)',
+ 'url.getHost().isEmpty()',
+ 'url.getPort() != 443'
 ])assert.ok(java.includes(marker),marker);
+const relayMethod = java.slice(java.indexOf('private JSObject deliverViaRelay('),java.indexOf('private JSObject deliverDirect('));
+assert.ok(relayMethod.includes('deliveredChat.optLong("id", 0) == GROUP_ID'),"Relay must verify destination group");
+assert.ok(relayMethod.includes('return failure("unconfirmed", status, 0, true)'),"Invalid HTTP 200 is uncertain");
 assert.ok(worker.includes('env.TELEGRAM_BOT_TOKEN'),"Worker must own Telegram credential");
 assert.ok(worker.includes('env.FEEDBACK_LIMITER'),"Worker must limit untrusted requests");
 assert.ok(!worker.includes('Access-Control-Allow-Origin'),"Keep worker native-only by default");

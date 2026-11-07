@@ -213,8 +213,12 @@ for(const marker of [
  'relayUrl.isEmpty()',
  '? deliverDirect(cleanTopic, cleanText)',
  ': deliverViaRelay(cleanTopic, cleanText)',
- 'result.optBoolean("ok", false) && messageId > 0'
+ 'deliveredChat.optLong("id", 0) == GROUP_ID',
+ 'return failure("unconfirmed", status, 0, true)'
 ])assert.ok(java.includes(marker),"Missing relay safety contract: "+marker);
+const relayMethod = java.slice(java.indexOf("private JSObject deliverViaRelay("), java.indexOf("private JSObject deliverDirect("));
+assert.ok(relayMethod.includes('deliveredChat.optLong("id", 0) == GROUP_ID'), "Relay must verify Telegram destination group");
+assert.ok(relayMethod.includes('return failure("unconfirmed", status, 0, true)'), "Ambiguous HTTP 200 must preserve draft");
 const relayBranch=java.substring(java.indexOf('final String relayUrl ='),java.indexOf('"wave-feedback-http"'));
 assert.ok(relayBranch.includes('relayUrl.isEmpty()'));
 assert.ok(!relayBranch.includes('deliverDirect(cleanTopic, cleanText)\n                    : deliverDirect'),"No direct fallback on relay errors");
