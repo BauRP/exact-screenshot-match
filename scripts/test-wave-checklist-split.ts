@@ -2,7 +2,10 @@ import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection} from "@tiptap/pm/state";
 import {continueSelectedChecklistItem} from "../src/lib/wave-checklist-actions";
-const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"inline*"},waveChecklistItem:{group:"block",content:"inline*",attrs:{shape:{default:"square"},done:{default:false}}},text:{group:"inline"}},marks:{strong:{}}});
+const schema=new Schema({nodes:{doc:{content:"block+"},
+ paragraph:{group:"block",content:"inline*",attrs:{textDirection:{default:"ltr"},textAlign:{default:"left"}}},
+ waveChecklistItem:{group:"block",content:"inline*",attrs:{shape:{default:"square"},done:{default:false},textDirection:{default:"ltr"},textAlign:{default:"left"}}},
+ text:{group:"inline"}},marks:{strong:{}}});
 const item=schema.nodes.waveChecklistItem.create({shape:"circle",done:true},[schema.text("left"),schema.text("right",[schema.marks.strong.create()])]);
 let state=EditorState.create({schema,doc:schema.nodes.doc.create(null,[item])});
 const editor={isEditable:true,isDestroyed:false,get state(){return state;},view:{dispatch(tr:any){state=state.apply(tr)}}} as any;
@@ -18,7 +21,7 @@ assert.equal(state.doc.child(1).firstChild?.marks[0].type.name,"strong");
 // extra task. Existing surrounding task content and its saved flags survive.
 let emptyState=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
  schema.nodes.waveChecklistItem.create({shape:"diamond",done:true},schema.text("keep")),
- schema.nodes.waveChecklistItem.create({shape:"circle",done:false}),
+ schema.nodes.waveChecklistItem.create({shape:"circle",done:false,textDirection:"rtl",textAlign:"right"}),
  schema.nodes.waveChecklistItem.create({shape:"check",done:true},schema.text("after"))
 ])});
 let edits=0;
@@ -29,6 +32,10 @@ emptyState=emptyState.apply(emptyState.tr.setSelection(TextSelection.create(empt
 assert.equal(continueSelectedChecklistItem(emptyEditor),true);
 assert.equal(edits,1,"Exiting an empty task is one undoable edit");
 assert.equal(emptyState.doc.child(1).type.name,"paragraph");
+assert.equal(emptyState.doc.child(1).attrs.textDirection,"rtl","Exiting a checklist must retain RTL");
+assert.equal(emptyState.doc.child(1).attrs.textAlign,"right","Exiting a checklist must retain text alignment");
+assert.equal("shape" in emptyState.doc.child(1).attrs,false,"Task shape must not leak into paragraph");
+assert.equal("done" in emptyState.doc.child(1).attrs,false,"Task completion flag must not leak into paragraph");
 assert.equal(emptyState.doc.child(0).attrs.done,true);
 assert.equal(emptyState.doc.child(2).textContent,"after");
 assert.equal(emptyState.doc.child(2).attrs.shape,"check");

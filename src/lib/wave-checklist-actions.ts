@@ -102,7 +102,14 @@ export function continueSelectedChecklistItem(editor:Editor):boolean{
  if(!parent.textContent.trim()){
   const paragraph=state.schema.nodes.paragraph;
   if(!paragraph)return false;
-  tr.setNodeMarkup($pos.before(),paragraph);
+  // Preserve attributes shared with paragraphs, including RTL and alignment.
+  // Checklist-only marker and completion flags are never carried over.
+  const sharedAttrs:Record<string,unknown>={};
+  for(const key of Object.keys(paragraph.attrs)){
+   if(Object.prototype.hasOwnProperty.call(parent.attrs,key))
+    sharedAttrs[key]=parent.attrs[key];
+  }
+  tr.setNodeMarkup($pos.before(),paragraph,sharedAttrs);
   editor.view.dispatch(tr.scrollIntoView());
   return true;
  }

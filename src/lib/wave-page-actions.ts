@@ -102,7 +102,9 @@ export function splitPageAtCaret(editor:Editor):boolean{
  const {state,view}=editor,{doc,schema,selection}=state;
  if(!selection.empty)return false;
  const $pos=selection.$from;
- if($pos.depth!==1||!$pos.parent.isTextblock)return false;
+ // Page splitting is for normal paragraphs only. Never turn one checked task
+ // into two separate checked tasks or split a heading by accident.
+ if($pos.depth!==1||$pos.parent.type.name!=="paragraph")return false;
  const paragraph=$pos.parent;
  const offset=$pos.parentOffset;
  // Splitting at a boundary creates an unexpected blank page. Use the

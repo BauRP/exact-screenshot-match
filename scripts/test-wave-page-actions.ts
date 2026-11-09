@@ -123,3 +123,22 @@ const nestedEditor={isEditable:true,isDestroyed:false,get state(){return nestSta
  view:{dispatch(tr:any){nestState=nestState.apply(tr);}}} as any;
 assert.equal(splitPageAtCaret(nestedEditor),false,"Nested sections must remain intact");
 assert.equal(nestState.doc.check(),undefined);
+// A page split inside a checked task must not create duplicate completed tasks.
+const taskSchema=new Schema({nodes:{doc:{content:"block+"},
+ paragraph:{group:"block",content:"text*"},wavePageBreak:{group:"block",atom:true},
+ waveChecklistItem:{group:"block",content:"text*",attrs:{done:{default:false},shape:{default:"square"},textDirection:{default:"ltr"}}},
+ text:{group:"inline"}},marks:{strong:{}}});
+const savedTask=taskSchema.nodes.waveChecklistItem.create({done:true,shape:"diamond",textDirection:"rtl"},
+ taskSchema.text("שלום",[taskSchema.marks.strong.create()]));
+let taskState=EditorState.create({schema:taskSchema,doc:taskSchema.nodes.doc.create(null,[savedTask])});
+let taskEdits=0;
+const taskEditor={isEditable:true,isDestroyed:false,get state(){return taskState;},
+ view:{dispatch(tr:any){taskEdits++;taskState=taskState.apply(tr);}}} as any;
+taskState=taskState.apply(taskState.tr.setSelection(TextSelection.create(taskState.doc,3)));
+assert.equal(splitPageAtCaret(taskEditor),false);
+assert.equal(taskEdits,0);
+assert.equal(taskState.doc.childCount,1);
+assert.equal(taskState.doc.child(0).attrs.done,true);
+assert.equal(taskState.doc.child(0).attrs.textDirection,"rtl");
+assert.equal(taskState.doc.child(0).firstChild?.marks[0].type.name,"strong");
+assert.equal(taskState.doc.check(),undefined);

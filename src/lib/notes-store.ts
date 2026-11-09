@@ -548,8 +548,11 @@ export function saveDraftAfterExternalChange(originalId:string,draft:Partial<Not
   kind:"note",
   folderId:draft.folderId??original?.folderId??"all",
   pinned:false,
-  reminderAt:validReminderTime(draft.reminderAt),
-  reminderRepeat:validReminderRepeat(draft.reminderRepeat),
+  // Partial recovery drafts usually contain only title/body. Preserve
+  // reminder and color unless explicitly changed or cleared in the draft.
+  reminderAt:validReminderTime("reminderAt" in draft?draft.reminderAt:original?.reminderAt),
+  reminderRepeat:validReminderRepeat("reminderRepeat" in draft?draft.reminderRepeat:original?.reminderRepeat),
+  cardColor:"cardColor" in draft?draft.cardColor:original?.cardColor,
   style:draft.style??original?.style,
  };
  while(fresh.notes.some(n=>n.id===saved.id))saved.id=createId();
