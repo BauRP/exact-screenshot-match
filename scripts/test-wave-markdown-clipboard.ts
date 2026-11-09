@@ -49,6 +49,6 @@ assert.ok(structuredMarkdownClipboardHtml("# Right-to-left\n- Header\n  - שלו
 for(const unsafe of [
  "# Plan\n  - orphan\n- root",
  "# Plan\n- root\n    - skipped depth",
- "# Plan\n1. first\n  3. out of sequence",
+ "# Plan\n1. first\n  3. child\n  5. out of sequence",
  "# Plan\n- root\n  - [x] nested checklist"
 ])assert.equal(structuredMarkdownClipboardHtml(unsafe),"","Unsafe Markdown nesting must never be flattened");
