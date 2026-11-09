@@ -105,7 +105,7 @@ export function continueSelectedChecklistItem(editor:Editor):boolean{
   // Preserve attributes shared with paragraphs, including RTL and alignment.
   // Checklist-only marker and completion flags are never carried over.
   const sharedAttrs:Record<string,unknown>={};
-  for(const key of Object.keys(paragraph.attrs)){
+  for(const key of Object.keys(paragraph.spec.attrs??{})){
    if(Object.prototype.hasOwnProperty.call(parent.attrs,key))
     sharedAttrs[key]=parent.attrs[key];
   }
