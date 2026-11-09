@@ -20,6 +20,12 @@ assert.equal(directionForText("... "+String.fromCodePoint(0x10D01)+" English"),"
 assert.equal(directionForText("123 "+String.fromCodePoint(0x10E81)), "rtl","Yezidi is RTL");
 assert.equal(directionForText("English "+String.fromCodePoint(0x1E922)),"ltr","First-strong LTR still wins");
 assert.equal(directionForText("١٢٣ "+String.fromCodePoint(0x1E922)),"rtl","Digits remain neutral before Adlam");
+// Supplementary-plane historical right-to-left alphabets: each sample is an
+// actual RTL Unicode LETTER (not an adjacent digit or combining mark).
+for(const cp of [0x10C80,0x10F00,0x10F30,0x10F70,0x10FE0]){
+ assert.equal(directionForText("123 "+String.fromCodePoint(cp)+" English"),"rtl",`RTL script U+${cp.toString(16)}`);
+ assert.equal(directionForText("English "+String.fromCodePoint(cp)),"ltr","First LTR letter must still win");
+}
 
 const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
 assert.ok(editor.includes('setWaveTextDirection(editor,"auto")'));

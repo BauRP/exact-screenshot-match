@@ -38,3 +38,17 @@ assert.ok(rtl.includes('<h1 dir="rtl">'));
 assert.ok(rtl.includes('<li><p dir="rtl">'));
 assert.ok(rtl.includes('data-shape="square" dir="rtl"'));
 assert.ok(structuredMarkdownClipboardHtml("> مرحبا\n## عنوان").includes('<blockquote><p dir="rtl">'));
+// Combining headings and rich Markdown with a nested list must not flatten
+// the child rows or strip bold/italic/link markup.
+const multi=structuredMarkdownClipboardHtml("# Plan\n- **Parent**\n  - *Child* and [link](https://example.org/)\n- After");
+assert.ok(multi.startsWith("<h1>Plan</h1><ul><li><p><strong>Parent</strong></p><ul>"),multi);
+assert.ok(multi.includes('<li><p><em>Child</em> and <a href="https://example.org/">link</a></p></li>'));
+assert.ok(multi.endsWith("</ul></li><li><p>After</p></li></ul>"));
+assert.ok(structuredMarkdownClipboardHtml("## Checklist\n4. Main\n  2. Child\n  3. Child two\n5. Next").includes('<ol start="4"><li><p>Main</p><ol start="2">'));
+assert.ok(structuredMarkdownClipboardHtml("# Right-to-left\n- Header\n  - שלום").includes('<p dir="rtl">שלום</p>'));
+for(const unsafe of [
+ "# Plan\n  - orphan\n- root",
+ "# Plan\n- root\n    - skipped depth",
+ "# Plan\n1. first\n  3. out of sequence",
+ "# Plan\n- root\n  - [x] nested checklist"
+])assert.equal(structuredMarkdownClipboardHtml(unsafe),"","Unsafe Markdown nesting must never be flattened");

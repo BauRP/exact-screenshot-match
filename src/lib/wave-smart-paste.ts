@@ -104,7 +104,7 @@ export function safeBrowserClipboardHtml(html:string):string{
  * items into separate top-level items or renumber explicitly numbered rows.
  * Only explicit two-space steps are accepted; ambiguous indentation falls back
  * to the user's original plain text without silently changing its meaning. */
-function nestedPlainClipboardHtml(lines:readonly string[]):string {
+function nestedPlainClipboardHtml(lines:readonly string[],renderInline?:(text:string)=>string):string {
  type Item={depth:number;kind:"ul"|"ol";number:number;text:string};
  const items:Item[]=[];
  const marker=/^( *)([-*•–]|\d{1,5}[.)]) +(.+)$/;
@@ -146,7 +146,7 @@ function nestedPlainClipboardHtml(lines:readonly string[]):string {
    if(item.number!==frame.next)return "";
    frame.next++;
   }
-  html+="<li><p"+clipboardRtlAttribute(item.text)+">"+escape(item.text)+"</p>";
+  html+="<li><p"+clipboardRtlAttribute(item.text)+">"+(renderInline?renderInline(item.text):escape(item.text))+"</p>";
  }
  while(stack.length){
   const frame=stack.pop()!;
@@ -268,6 +268,19 @@ export function structuredMarkdownClipboardHtml(input:string):string{
   if(h){close();html+="<h"+h[1].length+clipboardRtlAttribute(h[2])+">"+safeMarkdownInline(h[2])+"</h"+h[1].length+">";meaningful++;continue;}
   if(q){close();html+="<blockquote><p"+clipboardRtlAttribute(q[1])+">"+safeMarkdownInline(q[1])+"</p></blockquote>";meaningful++;continue;}
   if(trimmed==="---"||trimmed==="***"){close();html+="<hr>";meaningful++;continue;}
+  // A Markdown heading followed by an indented list must retain the list
+  // hierarchy. The earlier line-by-line parser flattened nested children.
+  // Never silently flatten malformed nesting: leave the original paste intact.
+  if(u||o){
+   const rows:string[]=[];
+   const listRow=/^ *(?:[-*•–]|\d{1,5}[.)]) +.+$/;
+   for(let j=i;j<lines.length&&listRow.test(lines[j]);j++)rows.push(lines[j]);
+   if(rows.some(row=>/^ {2,}\S/.test(row))){
+    const nested=nestedPlainClipboardHtml(rows,safeMarkdownInline);
+    if(!nested)return "";
+    close();html+=nested;meaningful+=rows.length;i+=rows.length-1;continue;
+   }
+  }
   if(u){
    if(listType!=="ul"){close();html+="<ul>";listType="ul";}
    html+="<li><p"+clipboardRtlAttribute(u[1])+">"+safeMarkdownInline(u[1])+"</p></li>";meaningful++;continue;
