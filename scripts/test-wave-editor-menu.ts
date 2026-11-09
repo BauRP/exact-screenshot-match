@@ -13,6 +13,8 @@ for(const item of ["Маркированный список","Нумерован
 }
 const checklist=readFileSync("src/lib/wave-checklist.ts","utf8");
 assert.ok(checklist.includes("addKeyboardShortcuts()"));
-assert.ok(checklist.includes("setNode(\"paragraph\")"));
+assert.ok(checklist.includes("return continueSelectedChecklistItem(this.editor);"));
+const actions=readFileSync("src/lib/wave-checklist-actions.ts","utf8");
+assert.ok(actions.includes("tr.setNodeMarkup($pos.before(),paragraph)"),"An empty task becomes a normal paragraph");
 assert.ok(checklist.includes("setTextSelection(at+1)"));
 console.log("Compact selected actions and Android list continuation wiring verified");
