@@ -15,6 +15,6 @@ const checklist=readFileSync("src/lib/wave-checklist.ts","utf8");
 assert.ok(checklist.includes("addKeyboardShortcuts()"));
 assert.ok(checklist.includes("return continueSelectedChecklistItem(this.editor);"));
 const actions=readFileSync("src/lib/wave-checklist-actions.ts","utf8");
-assert.ok(actions.includes("tr.setNodeMarkup($pos.before(),paragraph)"),"An empty task becomes a normal paragraph");
+assert.ok(actions.includes("tr.setNodeMarkup($pos.before(),paragraph,sharedAttrs)"),"An empty task becomes a normal paragraph without losing RTL or alignment");
 assert.ok(checklist.includes("setTextSelection(at+1)"));
 console.log("Compact selected actions and Android list continuation wiring verified");
