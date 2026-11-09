@@ -160,10 +160,14 @@ function nestedPlainClipboardHtml(lines:readonly string[]):string {
  * paragraph) remains untouched. No HTML from the clipboard is interpreted. */
 export function structuredPlainClipboardHtml(input:string):string{
  if(typeof input!=="string"||input.length>20_000)return "";
- const lines=input.replace(/\r\n?/g,"\n").trim().split("\n");
+ const lines=input.replace(/\r\n?/g,"\n").split("\n");
+ // Ignore surrounding empty lines without trimming the indentation of the
+ // first real list item. trim() silently promoted a nested first row to root.
+ while(lines.length&&!lines[0].trim())lines.shift();
+ while(lines.length&&!lines[lines.length-1].trim())lines.pop();
  if(lines.length<2||lines.length>100||lines.some(line=>!line.trim()))return "";
- // Tabs have ambiguous visual widths; never flatten them into plain list items.
- if(lines.some(line=>/^\t/.test(line)))return "";
+ // Tabs before a marker have ambiguous visual widths, even after spaces.
+ if(lines.some(line=>/^[ \t]*\t/.test(line)))return "";
  // A two-space indentation step represents an actual nested list. Do not
  // quietly turn it into a flat list or strip the indentation on failure.
  if(lines.some(line=>/^ {2,}\S/.test(line)))return nestedPlainClipboardHtml(lines);

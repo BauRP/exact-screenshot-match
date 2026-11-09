@@ -14,4 +14,25 @@ assert.equal(state.doc.child(1).textContent,"right");
 assert.equal(state.doc.child(1).attrs.done,false);
 assert.equal(state.doc.child(1).attrs.shape,"circle");
 assert.equal(state.doc.child(1).firstChild?.marks[0].type.name,"strong");
-console.log("Checklist caret split preserves both halves, formatting, marker and unchecked continuation");
+// Enter on an empty completed task exits the checklist, with no synthetic
+// extra task. Existing surrounding task content and its saved flags survive.
+let emptyState=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
+ schema.nodes.waveChecklistItem.create({shape:"diamond",done:true},schema.text("keep")),
+ schema.nodes.waveChecklistItem.create({shape:"circle",done:false}),
+ schema.nodes.waveChecklistItem.create({shape:"check",done:true},schema.text("after"))
+])});
+let edits=0;
+const emptyEditor={isEditable:true,isDestroyed:false,get state(){return emptyState;},
+ view:{dispatch(tr:any){edits++;emptyState=emptyState.apply(tr);}}} as any;
+const emptyCaret=emptyState.doc.child(0).nodeSize+1;
+emptyState=emptyState.apply(emptyState.tr.setSelection(TextSelection.create(emptyState.doc,emptyCaret)));
+assert.equal(continueSelectedChecklistItem(emptyEditor),true);
+assert.equal(edits,1,"Exiting an empty task is one undoable edit");
+assert.equal(emptyState.doc.child(1).type.name,"paragraph");
+assert.equal(emptyState.doc.child(0).attrs.done,true);
+assert.equal(emptyState.doc.child(2).textContent,"after");
+assert.equal(emptyState.doc.child(2).attrs.shape,"check");
+assert.equal(continueSelectedChecklistItem(emptyEditor),false,"Cannot add tasks from a paragraph");
+const ui=await import("node:fs").then(m=>m.readFileSync("src/lib/wave-checklist.ts","utf8"));
+assert.ok(ui.includes('return continueSelectedChecklistItem(this.editor);'));
+console.log("Checklist caret split and empty-row Enter preserve text, formatting, and undo semantics");

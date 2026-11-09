@@ -24,6 +24,12 @@ assert.equal(structuredPlainClipboardHtml("- Topic\n  1. First\n  2. Second\n- E
   "<ul><li><p>Topic</p><ol><li><p>First</p></li><li><p>Second</p></li></ol></li><li><p>End</p></li></ul>");
 assert.ok(structuredPlainClipboardHtml("- Parent\n  - שלום\n- Last").includes('dir="rtl"'));
 assert.ok(structuredPlainClipboardHtml("- Parent\n  - <script> &").includes("&lt;script&gt; &amp;"));
+// Outer newlines are allowed, but the first actual item's indentation is not
+// allowed to disappear: promoting an orphan child silently changes the note.
+assert.equal(structuredPlainClipboardHtml("  - orphan\n  - second"),"");
+assert.equal(structuredPlainClipboardHtml("\n  - orphan\n- root\n"),"");
+assert.equal(structuredPlainClipboardHtml("\n- root\n  - nested\n"),"<ul><li><p>root</p><ul><li><p>nested</p></li></ul></li></ul>");
+assert.equal(structuredPlainClipboardHtml("- root\n  \t- tabbed"),"");
 for(const unsafe of [
  "- root\n    - skipped depth",
  "- root\n   - odd spaces",

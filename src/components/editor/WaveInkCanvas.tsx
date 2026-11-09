@@ -107,6 +107,9 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
  };
  const stop=(e:ReactPointerEvent<SVGSVGElement>)=>{
   if(gesture.current!==e.pointerId)return;
+  // Android can deliver the final coordinate only on pointerup (especially
+  // for quick strokes and eraser swipes). Apply that segment before saving.
+  move(e);
   e.preventDefault();gesture.current=null;lastEraserPoint.current=null;shapeStart.current=null;
   gestureBefore.current=null;
   if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);

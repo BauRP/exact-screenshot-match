@@ -25,10 +25,10 @@ export const WaveChecklistItem=Node.create({
    },Enter:()=>{
     const {$from}=this.editor.state.selection;
     if($from.parent.type.name!=="waveChecklistItem")return false;
-    if(!$from.parent.textContent.trim()){
-      return this.editor.commands.setNode("paragraph");
-    }
-    return continueSelectedChecklistItem(this.editor);
+    // Use the same single-transaction command for the keyboard and the
+   // touch toolbar. It rejects selections crossing different task rows and
+   // converts a truly empty task into a paragraph without rebuilding HTML.
+   return continueSelectedChecklistItem(this.editor);
   }};
  },
  group:"block",

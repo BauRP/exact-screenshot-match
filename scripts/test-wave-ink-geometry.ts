@@ -41,6 +41,8 @@ assert.ok(canvas.includes('aria-label="Размер ластика"'));
 assert.ok(canvas.includes("onPointerCancel={cancel}"),"Cancelled ink must not commit an incomplete stroke");
 assert.ok(canvas.includes("onLostPointerCapture={cancel}"),"Lost capture must release an interrupted gesture");
 assert.ok(canvas.includes("replace(before.strokes)"),"Cancel must restore the exact previous strokes");
+assert.ok(canvas.includes("  move(e);\n  e.preventDefault();gesture.current=null;"),
+ "Pointer-up must incorporate the final finger location before the ink is saved");
 assert.ok(canvas.includes("past.current=before.past;future.current=before.future"),"Cancel must preserve Undo/Redo history");
 assert.ok(canvas.includes('inkStrokeAt(current.current,point,eraserRadius)'));
 assert.ok(canvas.includes('inkStrokeIndicesAlong(current.current,previous,point,eraserRadius)'));
