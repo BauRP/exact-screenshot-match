@@ -21,6 +21,6 @@ assert.equal(noteCurrentPage(doc,dividerPos+1),2);
 assert.equal(currentPageBreakPos(doc,dividerPos),dividerPos);
 assert.deepEqual(renameCurrentPage(doc,dividerPos,"Переименована"),{pos:dividerPos,label:"Переименована"});
 assert.equal(currentPageBreakPos(doc,0),undefined);
-assert.equal(noteCurrentPage(nested,2),1,"Nested page breaks must not create phantom pages");
+assert.equal(noteCurrentPage(schema.nodes.doc.create(null,[title,nested]),2),1,"Nested page breaks must not create phantom pages");
 assert.ok(readFileSync("src/lib/wave-text-direction.ts","utf8").includes('"waveChecklistItem"'));
 console.log("Tape-safe outline, nested page boundary and checklist RTL passed");
