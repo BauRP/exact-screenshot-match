@@ -553,7 +553,9 @@ export function saveDraftAfterExternalChange(originalId:string,draft:Partial<Not
   reminderAt:validReminderTime("reminderAt" in draft?draft.reminderAt:original?.reminderAt),
   reminderRepeat:validReminderRepeat("reminderRepeat" in draft?draft.reminderRepeat:original?.reminderRepeat),
   cardColor:"cardColor" in draft?draft.cardColor:original?.cardColor,
-  style:draft.style??original?.style,
+  // Recover partial paper settings without losing untouched background, ruler or font.
+  // This matches the merge semantics already used by updateNote.
+  style:draft.style?{...original?.style,...draft.style}:original?.style,
  };
  while(fresh.notes.some(n=>n.id===saved.id))saved.id=createId();
  const next=[saved,...fresh.notes];

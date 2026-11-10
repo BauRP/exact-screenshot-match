@@ -25,7 +25,8 @@ await initializeNotesDatabase();
 assert.equal(getNote("persisted-one")?.body,initial[0].body);
 const reminder=Date.now()+86400000;
 const note=createNote({id:"extra-one",title:"Вторая",body:"<p>Контент</p>",
- cardColor:"#aabbcc",reminderAt:reminder,reminderRepeat:"daily"});
+ cardColor:"#aabbcc",reminderAt:reminder,reminderRepeat:"daily",
+ style:{fontFamily:"serif",fontSize:17,background:"#ffed99",color:"#181818",paperRule:"lined"}});
 assert.ok(note.id);
 assert.equal(JSON.parse(storage.get("sn.notes.v1")||"[]").length,2);
 setView("table");assert.equal(storage.get("sn.view.v1"),"table");
@@ -50,6 +51,24 @@ assert.equal(recovered.folderId,"work");
 assert.equal(recovered.body,"<p>Незавершённый текст</p>");
 assert.equal(getNote("persisted-one")?.body,"<p>Edited externally</p>","External change must remain intact");
 assert.equal(getNote("extra-one")?.body,"<p>Контент</p>","Original note must remain intact");
+// The unsaved draft changed ONLY font size, not the existing paper settings.
+const styled=saveDraftAfterExternalChange("extra-one",{
+ title:"Частичное оформление",body:"<p>Восстановлено</p>",style:{fontSize:23}
+});
+assert.equal(styled.style?.fontSize,23);
+assert.equal(styled.style?.fontFamily,"serif");
+assert.equal(styled.style?.background,"#ffed99");
+assert.equal(styled.style?.color,"#181818");
+assert.equal(styled.style?.paperRule,"lined");
+assert.equal(getNote("extra-one")?.style?.fontSize,17,"Original note unchanged");
+assert.equal(getNote(styled.id)?.style?.background,"#ffed99","Style was durably saved");
+// Clearing a specific colour must not reset the other saved paper settings.
+const styleCleared=saveDraftAfterExternalChange("extra-one",{
+ title:"Частичная очистка",body:"<p>Восстановлено</p>",style:{color:undefined}
+});
+assert.equal(styleCleared.style?.color,undefined);
+assert.equal(styleCleared.style?.fontFamily,"serif");
+assert.equal(styleCleared.style?.paperRule,"lined");
 const cleared=saveDraftAfterExternalChange("extra-one",{
  title:"Очистка",body:"<p>Новый текст</p>",cardColor:undefined,reminderAt:undefined,reminderRepeat:undefined
 });

@@ -1,6 +1,7 @@
 import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection,NodeSelection} from "@tiptap/pm/state";
+import {noteCurrentPage} from "../src/lib/note-outline";
 import {duplicateCurrentPage,moveCurrentPage,topLevelPageRanges,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,isEmptyPageBody,splitPageAtCaret} from "../src/lib/wave-page-actions";
 const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},wavePageBreak:{group:"block",atom:true,attrs:{label:{default:""}}},waveFold:{group:"block",content:"block+"},text:{group:"inline"}},marks:{}});
 const p=(s:string)=>schema.nodes.paragraph.create(null,schema.text(s));
@@ -87,6 +88,8 @@ const onlyMarkerEditor={isEditable:true,isDestroyed:false,get state(){return onl
  view:{dispatch(tr:any){markerEdits++;onlyMarker=onlyMarker.apply(tr);}}} as any;
 const markerAt=topLevelPageRanges(onlyMarker.doc)[1].start;
 onlyMarker=onlyMarker.apply(onlyMarker.tr.setSelection(NodeSelection.create(onlyMarker.doc,markerAt)));
+assert.equal(noteCurrentPage(onlyMarker.doc,onlyMarker.selection.from),2,
+ "Navigation and page removal must agree on a selected divider");
 assert.equal(removeEmptyCurrentPage(onlyMarkerEditor),true);
 assert.equal(topLevelPageRanges(onlyMarker.doc).length,2);
 assert.equal(onlyMarker.doc.textContent,"firstkeep last");

@@ -56,7 +56,11 @@ export function notePagePositions(doc:PMNode):number[]{
 export function noteCurrentPage(doc:PMNode,selectionPos:number):number{
  const pages=notePagePositions(doc);
  let page=1;
- for(let i=1;i<pages.length;i++)if(selectionPos>=pages[i])page=i+1;
+ for(let i=1;i<pages.length;i++){
+  // A selected page-break node belongs to the page it introduces.
+  // The old after-break boundary disagreed with the page-editing actions.
+  if(selectionPos>=pages[i]-1)page=i+1;
+ }
  return page;
 }
 
