@@ -47,8 +47,18 @@ assert.ok(multi.endsWith("</ul></li><li><p>After</p></li></ul>"));
 assert.ok(structuredMarkdownClipboardHtml("## Checklist\n4. Main\n  2. Child\n  3. Child two\n5. Next").includes('<ol start="4"><li><p>Main</p><ol start="2">'));
 assert.ok(structuredMarkdownClipboardHtml("# Right-to-left\n- Header\n  - שלום").includes('<p dir="rtl">שלום</p>'));
 for(const unsafe of [
+ "# Plan\n- Parent\n\n  - Child",
+ "# Plan\n- Parent\n  - [x] Nested completed task",
+ "# Plan\n- [x] Parent\n  - Child",
+ "# Plan\n- Root\n\t- Tabbed child",
  "# Plan\n  - orphan\n- root",
  "# Plan\n- root\n    - skipped depth",
  "# Plan\n1. first\n  3. child\n  5. out of sequence",
  "# Plan\n- root\n  - [x] nested checklist"
 ])assert.equal(structuredMarkdownClipboardHtml(unsafe),"","Unsafe Markdown nesting must never be flattened");
+assert.ok(structuredMarkdownClipboardHtml("# Project\n- Parent\n  - Child\n- Next").includes("<ul><li><p>Child</p></li></ul>"),
+ "Valid contiguous nested lists must remain real nested lists");
+assert.ok(structuredMarkdownClipboardHtml("# Checklist\n- [x] Done\n- [ ] Pending").includes('data-done="true"'),
+ "Regular checklists must remain supported");
+assert.ok(structuredMarkdownClipboardHtml("# Code\n\x60\x60\x60\n  - literal code\n\x60\x60\x60").includes("  - literal code"),
+ "A code fence must not be interpreted as a nested list");

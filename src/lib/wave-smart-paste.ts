@@ -258,6 +258,11 @@ export function structuredMarkdownClipboardHtml(input:string):string{
    html+="<pre><code>"+safe(code.join("\n"))+"</code></pre>";meaningful++;continue;
   }
   if(!trimmed){close();continue;}
+  // Indented rows belong to a validated contiguous parent list. When an
+  // empty line or an unsupported checklist separates them, do not silently
+  // promote child rows to root-level items. Leave plain paste untouched.
+  if(/^ {2,}(?:[-*•–]|\d{1,5}[.)])\s+/.test(line)||
+     /^[ \t]*\t(?:[-*•–]|\d{1,5}[.)])\s+/.test(line))return "";
   const h=heading.exec(line),q=quote.exec(line),check=checkbox.exec(line),u=unordered.exec(line),o=ordered.exec(line);
   if(check){
    close();

@@ -1,6 +1,6 @@
 import {strict as assert} from "node:assert";
 import {readFileSync} from "node:fs";
-import {directionForText,setWaveTextDirection} from "../src/lib/wave-text-direction";
+import {directionForText,setWaveTextDirection,visibleTextForDirection} from "../src/lib/wave-text-direction";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection} from "@tiptap/pm/state";
 assert.equal(directionForText("  مرحبا بالعالم"),"rtl");
@@ -42,7 +42,7 @@ const schema=new Schema({nodes:{
  heading:{group:"block",content:"inline*",attrs:{textDirection:{default:"ltr"},level:{default:2}}},
  waveChecklistItem:{group:"block",content:"inline*",attrs:{textDirection:{default:"ltr"},done:{default:false}}},
  text:{group:"inline"}
-},marks:{strong:{}}});
+},marks:{strong:{},waveTape:{}}});
 const mark=schema.marks.strong.create();
 const make=(type:"paragraph"|"heading"|"waveChecklistItem",content:string)=>
  schema.nodes[type].create(null,schema.text(content,[mark]));
@@ -68,3 +68,29 @@ assert.equal(setWaveTextDirection(mock,"ltr","document"),2,"Whole note transform
 assert.equal(state.doc.textContent,originalText,"Text stays unchanged");
 assert.equal(state.doc.child(0).firstChild?.marks[0].type.name,"strong","Marks are preserved");
 assert.equal(dispatched,3,"Only three actual changes were dispatched");
+// A concealed Tape answer should NOT determine the visible paragraph direction.
+const tape=schema.marks.waveTape.create();
+const hiddenHebrew=schema.nodes.paragraph.create({textDirection:"rtl"},[
+ schema.text("שלום",[tape]),schema.text(" Visible English",[mark])]);
+const hiddenEnglish=schema.nodes.paragraph.create(null,[
+ schema.text("English",[tape]),schema.text(" مرحبا",[mark])]);
+const hiddenOnly=schema.nodes.paragraph.create({textDirection:"ltr"},schema.text("שלום",[tape]));
+let privacyState=EditorState.create({schema,doc:schema.nodes.doc.create(null,[hiddenHebrew,hiddenEnglish,hiddenOnly])});
+let privacyEdits=0;
+const privacyEditor={isEditable:true,isDestroyed:false,get state(){return privacyState;},
+ view:{dispatch(tr:any){privacyEdits++;privacyState=privacyState.apply(tr);}}} as any;
+assert.equal(visibleTextForDirection(hiddenHebrew)," Visible English");
+assert.equal(visibleTextForDirection(hiddenEnglish)," مرحبا");
+assert.equal(visibleTextForDirection(hiddenOnly),"");
+const originalHiddenText=privacyState.doc.textContent;
+assert.equal(setWaveTextDirection(privacyEditor,"auto","document"),2,
+ "Only the visible letters may choose the automatic direction");
+assert.equal(privacyEdits,1,"One change to the document remains one undoable transaction");
+assert.equal(privacyState.doc.child(0).attrs.textDirection,"ltr");
+assert.equal(privacyState.doc.child(1).attrs.textDirection,"rtl");
+assert.equal(privacyState.doc.child(2).attrs.textDirection,"ltr");
+assert.equal(privacyState.doc.textContent,originalHiddenText,"Text is never deleted");
+assert.equal(privacyState.doc.child(0).firstChild?.marks[0].type.name,"waveTape",
+ "The secret answer remains concealed after changing direction");
+assert.equal(privacyState.doc.child(1).firstChild?.marks[0].type.name,"waveTape");
+assert.equal(setWaveTextDirection(privacyEditor,"auto","document"),0,"No-op cannot create another undo item");

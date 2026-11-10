@@ -36,6 +36,17 @@ export function directionForText(text:string):"ltr"|"rtl"{
  * and task rows, even inside nested sections. Never edit the text itself or
  * discard bold/italic marks, attachment IDs, and saved page dividers. */
 import type {Editor} from "@tiptap/react";
+import type {Node as PMNode} from "@tiptap/pm/model";
+/** Decide automatic text direction from VISIBLE content only. Secret Tape
+ * answers stay saved and concealed, but cannot change a heading's direction. */
+export function visibleTextForDirection(node:PMNode):string{
+ let text="";
+ node.descendants(child=>{
+  if(child.isText&&!child.marks.some(mark=>mark.type.name==="waveTape"))
+   text+=child.text??"";
+ });
+ return text;
+}
 export type WaveDirectionMode="ltr"|"rtl"|"auto";
 export type WaveDirectionScope="selection"|"document";
 export function setWaveTextDirection(editor:Editor,mode:WaveDirectionMode,scope:WaveDirectionScope="selection"):number{
@@ -48,7 +59,7 @@ export function setWaveTextDirection(editor:Editor,mode:WaveDirectionMode,scope:
   const end=pos+node.nodeSize;
   const selected=from===to?pos<from&&from<end:pos<to&&end>from;
   if(scope==="selection"&&!selected)return;
-  const next=mode==="auto"?directionForText(node.textContent):mode;
+  const next=mode==="auto"?directionForText(visibleTextForDirection(node)):mode;
   if(node.attrs.textDirection!==next)
    changes.push({pos,attrs:{...node.attrs,textDirection:next}});
  });
