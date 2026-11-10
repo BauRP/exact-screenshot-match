@@ -13,7 +13,7 @@ assert.ok(canvas.includes("past.current=before.past;future.current=before.future
 for(const x of ["data-wave-drawing","insertWaveDrawing","WaveInkCanvas","updateAttributes({strokes:encoded})","moveWaveBlock"])assert.ok(drawing.includes(x),x);
 for(const x of ["Рисовать поверх","data-ink","onChange={ink=>updateAttributes({ink})}","moveWaveBlock"])assert.ok(image.includes(x),x);
 for(const x of ["WaveDrawing,","Добавить рисунок","insertWaveDrawing().run()"])assert.ok(editor.includes(x),x);
-assert.ok(mover.includes('import { Fragment, type Node as PMNode } from "@tiptap/pm/model"'));
+assert.ok(mover.includes('type Node as PMNode')&&mover.includes('type ResolvedPos'),"Block movement must inspect ProseMirror node boundaries");
 assert.ok(mover.includes("state.tr.replaceWith(from, to, replacement)"));
 console.log("Vector drawing, annotations and complete block moves connected");
 
