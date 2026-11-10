@@ -113,6 +113,16 @@ export function continueSelectedChecklistItem(editor:Editor):boolean{
   editor.view.dispatch(tr.scrollIntoView());
   return true;
  }
+ // At the first character of a completed task, insert a NEW unchecked row
+ // before the original. Do not silently move completed text to unchecked.
+ if(state.selection.empty&&$pos.parentOffset===0){
+  const before=$pos.before(),$at=tr.doc.resolve(before);
+  if(!$at.parent.canReplaceWith($at.index(),$at.index(),parent.type))return false;
+  tr.insert(before,parent.type.create({...parent.attrs,done:false}));
+  tr.setSelection(TextSelection.create(tr.doc,before+1));
+  editor.view.dispatch(tr.scrollIntoView());
+  return true;
+ }
  const spec={type:parent.type,attrs:{...parent.attrs,done:false}};
  if(!canSplit(tr.doc,pos,1,[spec]))return false;
  tr.split(pos,1,[spec]);

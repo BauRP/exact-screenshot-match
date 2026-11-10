@@ -1,12 +1,13 @@
 import {useEffect,useRef,useState} from "react";
 import type {PointerEvent as ReactPointerEvent} from "react";
-import {ellipseInkPoints,inkStrokeAt,inkStrokeIndicesAlong,parseInk,serializeInk,type InkPoint,type InkStroke} from "@/lib/wave-ink";
+import {appendInkPoint,ellipseInkPoints,inkStrokeAt,inkStrokeIndicesAlong,parseInk,serializeInk,type InkPoint,type InkStroke} from "@/lib/wave-ink";
 
 /** Per-drawing undo/redo also works for ink layered over a photograph. */
 export function WaveInkCanvas({value,onChange,editable,active=false}:{
  value:string;onChange:(value:string)=>void;editable:boolean;active?:boolean;
 }){
  const [strokes,setStrokes]=useState<InkStroke[]>(()=>parseInk(value));
+ const [saveError,setSaveError]=useState(false);
  const current=useRef(strokes);
  const past=useRef<InkStroke[][]>([]);
  const future=useRef<InkStroke[][]>([]);
@@ -41,8 +42,10 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
      const encoded=serializeInk(list);
      lastEmitted.current=encoded;
      onChange(encoded);
+     setSaveError(false);
    }catch(error){
      console.error("Ink save failed",error);
+     setSaveError(true);
      // Restore the last serialized state rather than displaying unsaved ink.
      replace(parseInk(value));
      past.current=[];future.current=[];setHistoryVersion(v=>v+1);
@@ -99,10 +102,9 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
      replace([...previous.slice(0,-1),{...last,points:[[x,y],[rx,y],[rx,ry],[x,ry],[x,y]]}]);
      return;
    }
-   if(last.points.length>=500)return;
    const prior=last.points[last.points.length-1];
    if(Math.hypot(point[0]-prior[0],point[1]-prior[1])<2)return;
-   replace([...previous.slice(0,-1),{...last,points:[...last.points,point]}]);
+   replace([...previous.slice(0,-1),{...last,points:appendInkPoint(last.points,point)}]);
   }
  };
  const stop=(e:ReactPointerEvent<SVGSVGElement>)=>{
@@ -155,6 +157,9 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
    replace(next);setHistoryVersion(v=>v+1);emit(next);
  };
  return <div className="relative h-full w-full">
+   {saveError&&<div role="alert" className="absolute left-2 right-2 top-2 z-10 rounded-lg bg-destructive px-3 py-2 text-xs text-destructive-foreground">
+     Рисунок слишком большой. Последний штрих не сохранён.
+   </div>}
    <svg role="img" aria-label="Рисунок" viewBox="0 0 1000 1000" preserveAspectRatio="none"
      className={`absolute inset-0 h-full w-full ${editable&&active?"touch-none cursor-crosshair":"pointer-events-none"}`}
      onPointerDown={start} onPointerMove={move} onPointerUp={stop}

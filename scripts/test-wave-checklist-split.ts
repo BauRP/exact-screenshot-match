@@ -17,6 +17,28 @@ assert.equal(state.doc.child(1).textContent,"right");
 assert.equal(state.doc.child(1).attrs.done,false);
 assert.equal(state.doc.child(1).attrs.shape,"circle");
 assert.equal(state.doc.child(1).firstChild?.marks[0].type.name,"strong");
+// Enter at the start of a completed task creates an empty task before it.
+// The completed original keeps its exact text, marks and saved status.
+let beginning=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
+ schema.nodes.waveChecklistItem.create({shape:"diamond",done:true,textDirection:"rtl"},schema.text("Finished",[schema.marks.strong.create()])),
+ schema.nodes.waveChecklistItem.create({shape:"square",done:false},schema.text("After"))
+])});
+let beginningEdits=0;
+const beginningEditor={isEditable:true,isDestroyed:false,get state(){return beginning;},
+ view:{dispatch(tr:any){beginningEdits++;beginning=beginning.apply(tr);}}} as any;
+beginning=beginning.apply(beginning.tr.setSelection(TextSelection.create(beginning.doc,1)));
+assert.equal(continueSelectedChecklistItem(beginningEditor),true);
+assert.equal(beginningEdits,1);
+assert.equal(beginning.doc.childCount,3);
+assert.equal(beginning.doc.child(0).textContent,"");
+assert.equal(beginning.doc.child(0).attrs.done,false);
+assert.equal(beginning.doc.child(0).attrs.shape,"diamond");
+assert.equal(beginning.doc.child(1).textContent,"Finished");
+assert.equal(beginning.doc.child(1).attrs.done,true);
+assert.equal(beginning.doc.child(1).firstChild?.marks[0].type.name,"strong");
+assert.equal(beginning.doc.child(2).textContent,"After");
+assert.equal(beginning.selection.$from.parent.attrs.done,false);
+assert.equal(beginning.doc.check(),undefined);
 // Enter on an empty completed task exits the checklist, with no synthetic
 // extra task. Existing surrounding task content and its saved flags survive.
 let emptyState=EditorState.create({schema,doc:schema.nodes.doc.create(null,[

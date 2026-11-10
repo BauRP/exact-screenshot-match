@@ -1,6 +1,16 @@
 /** Offline vector ink with bounded markup, no server, base64 or binary files. */
 export type InkPoint=[number,number];
 export type InkStroke={tool:"pen"|"marker"|"line"|"rectangle"|"ellipse";color:string;width:number;points:InkPoint[]};
+/** Long freehand strokes must not silently stop at the 500-point storage
+ * limit. Sample older points while preserving both ends and each new point. */
+export function appendInkPoint(points:readonly InkPoint[],point:InkPoint):InkPoint[]{
+ if(points.length<500)return [...points,point];
+ const compact:InkPoint[]=[];
+ for(let i=0;i<points.length;i++){
+  if(i===0||i===points.length-1||i%2===0)compact.push(points[i]);
+ }
+ return [...compact,point];
+}
 /** 32-segment closed vector ellipse: compatible with ink eraser, undo and export. */
 export function ellipseInkPoints(from:InkPoint,to:InkPoint):InkPoint[]{
  const cx=(from[0]+to[0])/2,cy=(from[1]+to[1])/2;

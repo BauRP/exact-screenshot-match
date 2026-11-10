@@ -1,11 +1,14 @@
 import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection} from "@tiptap/pm/state";
-import {moveWaveBlocksToAdjacentPage} from "../src/lib/wave-block-motion";
+import {moveWaveBlocksToAdjacentPage,moveSelectedWaveBlock,duplicateSelectedWaveBlock,selectedWaveBlockPos,selectedWaveSiblingRange} from "../src/lib/wave-block-motion";
 import {readFileSync} from "node:fs";
 const schema=new Schema({nodes:{
  doc:{content:"block+"},
  paragraph:{group:"block",content:"inline*"},
+ table:{group:"block",content:"tableRow+"},
+ tableRow:{content:"tableCell+"},
+ tableCell:{content:"paragraph+"},
  wavePageBreak:{group:"block",atom:true},
  waveImage:{group:"block",atom:true,attrs:{imageId:{default:""}}},
  waveFold:{group:"block",content:"block+"},
@@ -84,4 +87,26 @@ assert.equal(nested.doc.child(1).type.name,"waveFold");
 assert.equal(nested.doc.child(1).child(1).attrs.imageId,"inside-photo");
 assert.equal(nested.doc.check(),undefined);
 assert.equal(foldEdits,2);
-console.log("Cross-page blocks preserve media, formatting, page boundaries and atomic edits");
+// Entering a cell is not permission to silently move/duplicate its table.
+const table=schema.nodes.table.create(null,[
+ schema.nodes.tableRow.create(null,[schema.nodes.tableCell.create(null,[p("cell-text")])])
+]);
+let tableState=EditorState.create({schema,doc:schema.nodes.doc.create(null,[p("before"),table,p("after")])});
+let tableEdits=0;
+const tableEditor={isEditable:true,isDestroyed:false,get state(){return tableState;},
+ view:{dispatch(tr:any){tableEdits++;tableState=tableState.apply(tr);}}} as any;
+let cellPos:number|undefined;
+tableState.doc.descendants((node,at)=>{if(node.type.name==="paragraph"&&node.textContent==="cell-text")cellPos=at+1;});
+assert.notEqual(cellPos,undefined);
+tableState=tableState.apply(tableState.tr.setSelection(TextSelection.create(tableState.doc,cellPos!)));
+assert.equal(selectedWaveBlockPos(tableEditor),undefined);
+assert.equal(moveSelectedWaveBlock(tableEditor,"up"),false);
+assert.equal(duplicateSelectedWaveBlock(tableEditor),false);
+tableState=tableState.apply(tableState.tr.setSelection(TextSelection.create(tableState.doc,cellPos!,cellPos!+3)));
+assert.equal(selectedWaveSiblingRange(tableEditor),undefined);
+assert.equal(moveSelectedWaveBlock(tableEditor,"down"),false);
+assert.equal(tableEdits,0);
+assert.equal(tableState.doc.child(1).type.name,"table");
+assert.equal(tableState.doc.child(1).child(0).child(0).textContent,"cell-text");
+assert.equal(tableState.doc.check(),undefined);
+console.log("Cross-page blocks preserve media and disallow implicit table movement");

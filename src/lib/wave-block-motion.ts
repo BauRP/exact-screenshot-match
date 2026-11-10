@@ -1,4 +1,4 @@
-import { Fragment, type Node as PMNode } from "@tiptap/pm/model";
+import { Fragment, type Node as PMNode, type ResolvedPos } from "@tiptap/pm/model";
 import {topLevelPageRanges} from "./wave-page-actions";
 import type { Editor } from "@tiptap/react";
 
@@ -61,8 +61,18 @@ export function moveWaveBlock(
 
 /** Find the editable block containing the caret without crossing a table or
  * unrelated nested container. Only document and WaveFold are reorderable. */
+/** A caret inside a table, list or callout is not an implicit command to
+ * move or duplicate its whole enclosing block. WaveFold is the only safe
+ * intermediate container for direct sibling block operations. */
+function insideUnsupportedContainer($pos:ResolvedPos):boolean{
+ for(let depth=1;depth<$pos.depth;depth++){
+  if($pos.node(depth).type.name!=="waveFold")return true;
+ }
+ return false;
+}
 export function selectedWaveBlockPos(editor:Editor):number|undefined {
  const {$from}=editor.state.selection;
+ if(insideUnsupportedContainer($from))return undefined;
  for(let depth=$from.depth;depth>=0;depth--){
   const parent=$from.node(depth);
   if(parent.type.name!=="doc"&&parent.type.name!=="waveFold")continue;
@@ -79,6 +89,7 @@ export function selectedWaveSiblingRange(editor:Editor):{from:number;to:number;s
  const {selection}=editor.state;
  if(selection.empty)return undefined;
  const {$from,$to}=selection;
+ if(insideUnsupportedContainer($from)||insideUnsupportedContainer($to))return undefined;
  for(let depth=Math.min($from.depth,$to.depth);depth>=0;depth--){
   if($from.node(depth)!==$to.node(depth))continue;
   const parent=$from.node(depth);
