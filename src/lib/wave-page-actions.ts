@@ -1,6 +1,6 @@
 import {Fragment,type Node as PMNode} from "@tiptap/pm/model";
 import type {Editor} from "@tiptap/react";
-import {TextSelection} from "@tiptap/pm/state";
+import {TextSelection,type Selection} from "@tiptap/pm/state";
 
 /** A page consists of its divider and all following top-level blocks up to
  * the next divider. Nested dividers are intentionally not rearranged:
@@ -21,6 +21,14 @@ function currentPageIndex(pages:PageRange[],pos:number):number{
  for(let i=1;i<pages.length;i++)if(pos>=pages[i].start)index=i;
  return index;
 }
+/** A page command must not guess its target from a selection crossing pages.
+ * The right edge is exclusive: selecting text up to a divider is still only
+ * a selection of the preceding page. */
+function singleSelectedPageIndex(pages:PageRange[],selection:Selection):number|undefined{
+ const first=currentPageIndex(pages,selection.from);
+ const end=selection.empty?selection.to:Math.max(selection.from,selection.to-1);
+ return currentPageIndex(pages,end)===first?first:undefined;
+}
 /** Duplicate the whole logical page as ONE undoable ProseMirror transaction.
  * No attachment IDs are regenerated: both copies are in the SAME saved note
  * and retain a valid reference to the same locally stored binary files. */
@@ -29,7 +37,9 @@ export function duplicateCurrentPage(editor:Editor):boolean{
  const {doc,schema,selection}=editor.state;
  const pages=topLevelPageRanges(doc),divider=schema.nodes.wavePageBreak;
  if(!pages.length||!divider)return false;
- const i=currentPageIndex(pages,selection.from),page=pages[i];
+ const i=singleSelectedPageIndex(pages,selection);
+ if(i===undefined)return false;
+ const page=pages[i];
  const body=doc.content.cut(page.bodyStart,page.end);
  const original=i>0?doc.nodeAt(page.start):undefined;
  const oldLabel=String(original?.attrs.label||"Страница "+(i+1));
@@ -49,7 +59,8 @@ export function moveCurrentPage(editor:Editor,direction:"up"|"down"):boolean{
  const {doc,selection}=editor.state;
  const pages=topLevelPageRanges(doc);
  if(pages.length<3)return false;
- const index=currentPageIndex(pages,selection.from);
+ const index=singleSelectedPageIndex(pages,selection);
+ if(index===undefined)return false;
  const other=index+(direction==="up"?-1:1);
  if(index<1||other<1||other>=pages.length)return false;
  const left=pages[Math.min(index,other)],right=pages[Math.max(index,other)];
@@ -68,7 +79,9 @@ export function insertBlankPageAfter(editor:Editor):boolean{
  const {doc,schema,selection}=editor.state;
  const pages=topLevelPageRanges(doc),divider=schema.nodes.wavePageBreak,paragraph=schema.nodes.paragraph;
  if(!pages.length||!divider||!paragraph)return false;
- const index=currentPageIndex(pages,selection.from),at=pages[index].end;
+ const index=singleSelectedPageIndex(pages,selection);
+ if(index===undefined)return false;
+ const at=pages[index].end;
  const content=Fragment.fromArray([divider.create(),paragraph.create()]);
  const resolved=doc.resolve(at);
  if(resolved.parent!==doc||!doc.canReplace(resolved.index(),resolved.index(),content))return false;
@@ -84,7 +97,9 @@ export function insertBlankPageBefore(editor:Editor):boolean{
  const {doc,schema,selection}=editor.state;
  const pages=topLevelPageRanges(doc),divider=schema.nodes.wavePageBreak,paragraph=schema.nodes.paragraph;
  if(!divider||!paragraph||!pages.length)return false;
- const index=currentPageIndex(pages,selection.from),at=pages[index].start;
+ const index=singleSelectedPageIndex(pages,selection);
+ if(index===undefined)return false;
+ const at=pages[index].start;
  const content=Fragment.fromArray(index===0?
    [paragraph.create(),divider.create()]:[divider.create(),paragraph.create()]);
  const $at=doc.resolve(at);
@@ -134,8 +149,8 @@ export function splitPageAtCaret(editor:Editor):boolean{
 export function mergeCurrentPageWithNext(editor:Editor):boolean{
  if(!editor.isEditable||editor.isDestroyed)return false;
  const {doc,selection}=editor.state,pages=topLevelPageRanges(doc);
- const index=currentPageIndex(pages,selection.from);
- if(index>=pages.length-1)return false;
+ const index=singleSelectedPageIndex(pages,selection);
+ if(index===undefined||index>=pages.length-1)return false;
  const nextDivider=pages[index+1].start,node=doc.nodeAt(nextDivider);
  if(node?.type.name!=="wavePageBreak")return false;
  const tr=editor.state.tr.delete(nextDivider,nextDivider+node.nodeSize);
@@ -185,8 +200,8 @@ export function removeEmptyCurrentPage(editor:Editor):boolean{
  if(!editor.isEditable||editor.isDestroyed)return false;
  const {doc,selection}=editor.state,pages=topLevelPageRanges(doc);
  if(pages.length<=1)return false;
- const index=currentPageIndex(pages,selection.from);
- if(index<=0)return false;
+ const index=singleSelectedPageIndex(pages,selection);
+ if(index===undefined||index<=0)return false;
  const page=pages[index];
  // A divider followed immediately by another divider is also an empty page.
  // Its body is Fragment.empty, so it is safe to delete that divider alone.

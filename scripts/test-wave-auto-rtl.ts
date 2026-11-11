@@ -94,3 +94,20 @@ assert.equal(privacyState.doc.child(0).firstChild?.marks[0].type.name,"waveTape"
  "The secret answer remains concealed after changing direction");
 assert.equal(privacyState.doc.child(1).firstChild?.marks[0].type.name,"waveTape");
 assert.equal(setWaveTextDirection(privacyEditor,"auto","document"),0,"No-op cannot create another undo item");
+// A fully concealed or blank RTL paragraph keeps its manual direction.
+// No strong visible letter exists to justify switching to LTR.
+const invisibleRtl=schema.nodes.paragraph.create({textDirection:"rtl"},schema.text("مرحبا",[tape]));
+const emptyRtl=schema.nodes.paragraph.create({textDirection:"rtl"});
+let noVisibleState=EditorState.create({schema,doc:schema.nodes.doc.create(null,[invisibleRtl,emptyRtl])});
+let noVisibleEdits=0;
+const noVisibleEditor={isEditable:true,isDestroyed:false,get state(){return noVisibleState;},
+ view:{dispatch(tr:any){noVisibleEdits++;noVisibleState=noVisibleState.apply(tr);}}} as any;
+assert.equal(setWaveTextDirection(noVisibleEditor,"auto","document"),0);
+assert.equal(noVisibleEdits,0,"Empty / fully hidden blocks do not add undo items");
+assert.equal(noVisibleState.doc.child(0).attrs.textDirection,"rtl");
+assert.equal(noVisibleState.doc.child(1).attrs.textDirection,"rtl");
+assert.equal(noVisibleState.doc.child(0).firstChild?.marks[0].type.name,"waveTape");
+assert.equal(setWaveTextDirection(noVisibleEditor,"ltr","document"),2,
+ "Explicit manual direction still works on hidden and empty paragraphs");
+assert.equal(noVisibleEdits,1);
+assert.equal(noVisibleState.doc.child(0).attrs.textDirection,"ltr");

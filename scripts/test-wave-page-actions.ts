@@ -145,3 +145,35 @@ assert.equal(taskState.doc.child(0).attrs.done,true);
 assert.equal(taskState.doc.child(0).attrs.textDirection,"rtl");
 assert.equal(taskState.doc.child(0).firstChild?.marks[0].type.name,"strong");
 assert.equal(taskState.doc.check(),undefined);
+// A multi-page selection is not a single active page. Never apply a page
+// action merely to the first selected page while the rest is selected too.
+let crossState=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
+ p("first page"),page("second"),p("second page"),page("third"),p("third page")
+])});
+let crossDispatches=0;
+const crossEditor={isEditable:true,isDestroyed:false,get state(){return crossState;},
+ view:{dispatch(tr:any){crossDispatches++;crossState=crossState.apply(tr);}}} as any;
+const crossPages=topLevelPageRanges(crossState.doc);
+crossState=crossState.apply(crossState.tr.setSelection(TextSelection.create(
+ crossState.doc,crossPages[1].bodyStart+1,crossPages[2].bodyStart+2
+)));
+const beforeCross=JSON.stringify(crossState.doc.toJSON());
+for(const action of [
+ ()=>duplicateCurrentPage(crossEditor),
+ ()=>moveCurrentPage(crossEditor,"down"),
+ ()=>insertBlankPageAfter(crossEditor),
+ ()=>insertBlankPageBefore(crossEditor),
+ ()=>mergeCurrentPageWithNext(crossEditor),
+ ()=>removeEmptyCurrentPage(crossEditor)
+])assert.equal(action(),false,"A cross-page selection cannot edit one guessed page");
+assert.equal(crossDispatches,0);
+assert.equal(JSON.stringify(crossState.doc.toJSON()),beforeCross);
+assert.deepEqual(topLevelPageRanges(crossState.doc).map(x=>x.start),crossPages.map(x=>x.start));
+// A text range entirely within page 2 remains eligible for normal actions.
+crossState=crossState.apply(crossState.tr.setSelection(TextSelection.create(
+ crossState.doc,crossPages[1].bodyStart+1,crossPages[1].end
+)));
+assert.equal(duplicateCurrentPage(crossEditor),true);
+assert.equal(crossDispatches,1);
+assert.equal(topLevelPageRanges(crossState.doc).length,4);
+assert.equal(crossState.doc.check(),undefined);

@@ -59,7 +59,11 @@ export function setWaveTextDirection(editor:Editor,mode:WaveDirectionMode,scope:
   const end=pos+node.nodeSize;
   const selected=from===to?pos<from&&from<end:pos<to&&end>from;
   if(scope==="selection"&&!selected)return;
-  const next=mode==="auto"?directionForText(visibleTextForDirection(node)):mode;
+  const visible=mode==="auto"?visibleTextForDirection(node):"";
+  // No visible strong letter means no safe automatic direction: retain
+  // manual RTL for fully hidden Tape or entirely empty paragraphs.
+  if(mode==="auto"&&!STRONG_LETTER.test(visible))return;
+  const next=mode==="auto"?directionForText(visible):mode;
   if(node.attrs.textDirection!==next)
    changes.push({pos,attrs:{...node.attrs,textDirection:next}});
  });
