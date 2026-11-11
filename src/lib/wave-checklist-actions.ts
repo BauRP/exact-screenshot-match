@@ -170,16 +170,25 @@ export function setSelectedSectionTasksDone(editor:Editor,done:boolean):number{
 
 /** The active logical page is bounded by top-level page breaks only.
  * Checklists inside a nested section belong to their containing page. */
-function selectedPageTaskRange(editor:Editor):{from:number;to:number}{
+function selectedPageTaskRange(editor:Editor):{from:number;to:number}|undefined{
  const pages=topLevelPageRanges(editor.state.doc);
- const pos=editor.state.selection.from;
- let index=0;
- for(let i=1;i<pages.length;i++)if(pos>=pages[i].start)index=i;
- return {from:pages[index].bodyStart,to:pages[index].end};
+ const {from,to,empty}=editor.state.selection;
+ // A bulk action must not change the first page when the user's selection
+ // extends into another page. The right boundary is exclusive.
+ const end=empty?to:Math.max(from,to-1);
+ let first=0,last=0;
+ for(let i=1;i<pages.length;i++){
+  if(from>=pages[i].start)first=i;
+  if(end>=pages[i].start)last=i;
+ }
+ if(first!==last)return undefined;
+ return {from:pages[first].bodyStart,to:pages[first].end};
 }
 export function currentPageTaskCounts(editor:Editor):ChecklistCounts{
  if(editor.isDestroyed)return {total:0,done:0,pending:0};
- const {from,to}=selectedPageTaskRange(editor);
+ const range=selectedPageTaskRange(editor);
+ if(!range)return {total:0,done:0,pending:0};
+ const {from,to}=range;
  let total=0,done=0;
  editor.state.doc.nodesBetween(from,to,node=>{
   if(node.type.name==="waveChecklistItem"){
@@ -193,7 +202,9 @@ export function currentPageTaskCounts(editor:Editor):ChecklistCounts{
  * without touching other pages or rebuilding nested sections. */
 export function setCurrentPageTasksDone(editor:Editor,done:boolean):number{
  if(!editor.isEditable||editor.isDestroyed)return 0;
- const {from,to}=selectedPageTaskRange(editor);
+ const range=selectedPageTaskRange(editor);
+ if(!range)return 0;
+ const {from,to}=range;
  const updates:{pos:number;attrs:Record<string,unknown>}[]=[];
  editor.state.doc.nodesBetween(from,to,(node,pos)=>{
   if(node.type.name==="waveChecklistItem"&&node.attrs.done!==done)

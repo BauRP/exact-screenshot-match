@@ -71,8 +71,14 @@ function insideUnsupportedContainer($pos:ResolvedPos):boolean{
  return false;
 }
 export function selectedWaveBlockPos(editor:Editor):number|undefined {
- const {$from}=editor.state.selection;
+ const {selection}=editor.state,{$from}=selection;
  if(insideUnsupportedContainer($from))return undefined;
+ // If the other end of a text selection is in a table, another section, or
+ // another page, it cannot be treated as a single block at the starting caret.
+ if(!selection.empty){
+  const range=selectedWaveSiblingRange(editor);
+  if(!range||range.end-range.start!==1)return undefined;
+ }
  for(let depth=$from.depth;depth>=0;depth--){
   const parent=$from.node(depth);
   if(parent.type.name!=="doc"&&parent.type.name!=="waveFold")continue;
@@ -181,6 +187,8 @@ export function nestSelectedWaveBlock(editor:Editor):boolean{
  if(index<1||index>=parent.childCount||
     waveChildOffset(parent,index)!==$pos.parentOffset)return false;
  const previous=parent.child(index-1),moving=parent.child(index);
+ // A top-level page boundary may never disappear inside a folded section.
+ if(moving.type.name==="wavePageBreak")return false;
  if(previous.type.name!=="waveFold")return false;
  // Do not make a deeply nested structure unusable on a small phone.
  let nestedDepth=0;
@@ -214,6 +222,8 @@ export function duplicateSelectedWaveBlock(editor:Editor):boolean{
  const {doc}=editor.state,$pos=doc.resolve(pos),parent=$pos.parent,index=$pos.index();
  if(index>=parent.childCount||waveChildOffset(parent,index)!==$pos.parentOffset)return false;
  const node=parent.child(index);
+ // A page divider is a document boundary, not an ordinary duplicable block.
+ if(node.type.name==="wavePageBreak")return false;
  if(!parent.canReplace(index+1,index+1,Fragment.from(node)))return false;
  editor.view.dispatch(editor.state.tr.insert(pos+node.nodeSize,node).scrollIntoView());
  return true;

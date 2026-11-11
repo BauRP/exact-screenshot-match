@@ -1,7 +1,7 @@
 import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
-import {EditorState,TextSelection} from "@tiptap/pm/state";
-import {moveWaveBlocksToAdjacentPage,moveSelectedWaveBlock,duplicateSelectedWaveBlock,selectedWaveBlockPos,selectedWaveSiblingRange} from "../src/lib/wave-block-motion";
+import {EditorState,TextSelection,NodeSelection} from "@tiptap/pm/state";
+import {moveWaveBlocksToAdjacentPage,moveSelectedWaveBlock,duplicateSelectedWaveBlock,nestSelectedWaveBlock,selectedWaveBlockPos,selectedWaveSiblingRange} from "../src/lib/wave-block-motion";
 import {readFileSync} from "node:fs";
 const schema=new Schema({nodes:{
  doc:{content:"block+"},
@@ -109,4 +109,30 @@ assert.equal(tableEdits,0);
 assert.equal(tableState.doc.child(1).type.name,"table");
 assert.equal(tableState.doc.child(1).child(0).child(0).textContent,"cell-text");
 assert.equal(tableState.doc.check(),undefined);
-console.log("Cross-page blocks preserve media and disallow implicit table movement");
+// An uneven selection from a top-level paragraph into a table is never
+// permission to move/duplicate only its first paragraph.
+tableState=tableState.apply(tableState.tr.setSelection(TextSelection.create(tableState.doc,1,cellPos!+2)));
+const beforeMixed=JSON.stringify(tableState.doc.toJSON());
+assert.equal(selectedWaveBlockPos(tableEditor),undefined);
+assert.equal(moveSelectedWaveBlock(tableEditor,"down"),false);
+assert.equal(duplicateSelectedWaveBlock(tableEditor),false);
+assert.equal(moveWaveBlocksToAdjacentPage(tableEditor,"next"),false);
+assert.equal(tableEdits,0);
+assert.equal(JSON.stringify(tableState.doc.toJSON()),beforeMixed);
+// Explicitly selected page dividers are never ordinary blocks, even if
+// this schema would permit a divider to be placed inside a folded section.
+let dividerState=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
+ schema.nodes.waveFold.create(null,[p("fold")]),divider(),p("next page")
+])});
+let dividerEdits=0;
+const dividerEditor={isEditable:true,isDestroyed:false,get state(){return dividerState;},
+ view:{dispatch(tr:any){dividerEdits++;dividerState=dividerState.apply(tr);}}} as any;
+const markerPos=dividerState.doc.child(0).nodeSize;
+dividerState=dividerState.apply(dividerState.tr.setSelection(NodeSelection.create(dividerState.doc,markerPos)));
+assert.equal(duplicateSelectedWaveBlock(dividerEditor),false);
+assert.equal(nestSelectedWaveBlock(dividerEditor),false);
+assert.equal(moveSelectedWaveBlock(dividerEditor,"up"),false);
+assert.equal(dividerEdits,0);
+assert.equal(dividerState.doc.child(1).type.name,"wavePageBreak");
+assert.equal(dividerState.doc.check(),undefined);
+console.log("Nested and multi-block selections never mutate unrelated blocks or page boundaries");
