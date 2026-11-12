@@ -1,0 +1,83 @@
+# Optional Codemagic fallback. GitHub Actions is the primary APK builder.
+# Configure github_release/GITHUB_TOKEN only if enabling this workflow.
+workflows:
+  wave-notes-android-apk:
+    name: Wave Notes - Android APK
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      node: 22
+      java: 21
+      groups:
+        - github_release
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: chatgpt/super-notes-stability-20261025
+          include: true
+          source: true
+      cancel_previous_builds: true
+    scripts:
+      - name: Install Bun and dependencies
+        script: |
+          set -euo pipefail
+          npm install --global bun
+          bun --version
+          bun install
+      - name: Build offline web assets
+        script: |
+          set -euo pipefail
+          bun run build
+          test -s dist/client/index.html
+          test -d dist/client/assets
+          test -s dist/client/assets/wave-notes-legacy.css
+      - name: Install Android SDK 36
+        script: |
+          set -euo pipefail
+          sdkmanager "platforms;android-36" "build-tools;36.0.0"
+      - name: Bundle offline OCR language assets
+        script: bash scripts/prepare-ocr-models.sh
+      - name: Generate Capacitor Android project
+        script: |
+          set -euo pipefail
+          npx cap add android
+          npx cap sync android
+      - name: Apply repository native Android overlay
+        script: |
+          set -euo pipefail
+          cp -R android-overlay/app/src/main/res/. android/app/src/main/res/
+          mkdir -p android/app/src/main/assets
+          cp -R android-overlay/app/src/main/assets/. android/app/src/main/assets/
+          cp -R android-overlay/app/src/main/java/. android/app/src/main/java/
+          cp android-overlay/app/build.gradle android/app/build.gradle
+          cp android-overlay/app/proguard-rules.pro android/app/proguard-rules.pro
+          cp android-overlay/app/src/main/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          cp android-overlay/variables.gradle android/variables.gradle
+          # Wave Notes contains native AdMob with consent and explicit labels.
+          grep -q 'com.google.android.gms.ads.APPLICATION_ID' android/app/src/main/AndroidManifest.xml
+          grep -q 'ca-app-pub-9902253594429663~4405601673' android/app/src/main/res/values/admob.xml
+          test -s android/app/src/main/assets/tessdata/rus.traineddata
+          test -s android/app/src/main/assets/tessdata/kaz.traineddata
+          # Capacitor creates this value file; our overlay already declares the same color.
+          if test -f android/app/src/main/res/values/ic_launcher_background.xml &&
+             grep -q 'name="ic_launcher_background"' android/app/src/main/res/values/colors.xml; then
+            rm android/app/src/main/res/values/ic_launcher_background.xml
+          fi
+          printf 'sdk.dir=%s\n' "$ANDROID_SDK_ROOT" > android/local.properties
+      - name: Assemble installable debug APK
+        script: |
+          set -euo pipefail
+          chmod +x android/gradlew
+          cd android
+          ./gradlew assembleDebug --no-daemon --stacktrace
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          cd ..
+          mkdir -p artifacts
+          cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/SuperNotes-debug.apk
+      - name: Publish APK to GitHub Releases
+        script: |
+          set -euo pipefail
+          python3 scripts/publish-apk-github.py
+    artifacts:
+      - artifacts/SuperNotes-debug.apk

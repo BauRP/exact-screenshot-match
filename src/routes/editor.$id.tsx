@@ -1,9 +1,16 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import { saveAudioFile, deleteAudioFile, audioIdsInHtml } from "@/lib/audio-files";
 import { ColorGrid, PALETTE } from "@/components/ColorGrid";
+import {NEW_NOTE_INK,editorBackground,editorInk} from "@/lib/note-appearance";
+import { noteCaretColor } from "@/lib/note-caret-color";
+import {parseReminderInput,toReminderInput,reminderPresetTime,type ReminderRepeat} from "@/lib/note-reminders";
+import { nativeAudioAvailable, startNativeAudio, stopNativeAudio, cancelNativeAudio } from "@/lib/native-audio";
+import {requestNativeReminderPermission} from "@/lib/native-reminders";
 import {
   ArrowLeft,
-  Check,
+  LoaderCircle,
   Type,
   Palette,
   CaseUpper,
@@ -17,6 +24,22 @@ import {
   Redo2,
   Mic,
   Square,
+  Search,
+  X,
+  ChevronUp,
+  ChevronDown,
+  ListChecks,
+  WandSparkles,
+  Grid3X3,
+  Blocks,
+  Quote,
+  BookOpen,
+  EyeOff,
+  CalendarDays,
+  ImagePlus,
+  Camera,
+  PenTool,
+  ListTree,
 } from "lucide-react";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -30,10 +53,13 @@ import {
   getNote,
   nextDefaultNoteTitle,
   updateNote,
+  saveDraftAfterExternalChange,
   useHydrated,
   useNotes,
 } from "@/lib/notes-store";
 import { Button } from "@/components/ui/button";
+import {Dialog,DialogContent,DialogFooter,DialogHeader,DialogTitle} from "@/components/ui/dialog";
+import {Input} from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -41,7 +67,21 @@ import {
 } from "@/components/ui/popover";
 import { AutoLinkExtras } from "@/lib/editor-extensions";
 import { AudioNote } from "@/components/editor/AudioNode";
+import { WaveImage } from "@/components/editor/WaveImage";
+import { WaveDrawing } from "@/components/editor/WaveDrawing";
+import {WavePageBreak} from "@/lib/wave-page-break";
+import {WaveTextDirection,setWaveTextDirection} from "@/lib/wave-text-direction";
+import {collectNoteOutline,filterNoteOutline,type OutlineFilter,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
+import {moveSelectedWaveBlock,moveWaveBlocksToAdjacentPage,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
+import {duplicateCurrentPage,moveCurrentPage,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,splitPageAtCaret} from "@/lib/wave-page-actions";
+import {revealOutlinePosition} from "@/lib/wave-outline-navigation";
+import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
+import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
+import {safeBrowserClipboardHtml,structuredPlainClipboardHtml,structuredMarkdownClipboardHtml} from "@/lib/wave-smart-paste";
+import {DOMParser as PMDOMParser} from "@tiptap/pm/model";
 import { useFolders, type Folder } from "@/lib/folders-store";
+import {folderNavigationRows} from "@/lib/folder-navigation";
+import {matchingSlashCommands,nextSlashIndex} from "@/lib/wave-slash-commands";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,6 +89,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useT } from "@/lib/i18n";
+import { APP_FONTS, fontNameFromCss } from "@/lib/app-fonts";
+import { InNoteSearch, noteSearchKey, findWords } from "@/lib/in-note-search";
+import {replaceOneInNote,replaceAllInNote} from "@/lib/wave-find-replace";
+import { readEditorPreferences,EDITOR_PREFS_CHANGED,type EditorTool } from "@/lib/editor-preferences";
+import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
+import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
+import {setSelectedChecklistShape,setSelectedTasksDone,continueSelectedChecklistItem,convertSelectedChecklistBlocks,selectedSectionTaskCounts,setSelectedSectionTasksDone,currentPageTaskCounts,setCurrentPageTasksDone} from "@/lib/wave-checklist-actions";
+import {setAllFoldSections,setFoldSectionsToDepth,countFoldSections} from "@/lib/wave-section-batch";
+import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
+import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
+import {openExternalUrl,isSafeExternalUrl} from "@/lib/external-links";
 
 export const Route = createFileRoute("/editor/$id")({
   head: () => ({ meta: [
@@ -61,32 +112,12 @@ export const Route = createFileRoute("/editor/$id")({
   ] }),
   validateSearch: (search: Record<string, unknown>) => ({
     folder: typeof search.folder === "string" ? search.folder : undefined,
+    ...(search.template === "checklist" ? {template:"checklist" as const} : {}),
   }),
   component: EditorPage,
 });
 
-const FONTS = [
-  { label: "Roboto", value: '"Roboto", sans-serif' },
-  { label: "Inter", value: '"Inter", sans-serif' },
-  { label: "Montserrat", value: '"Montserrat", sans-serif' },
-  { label: "Open Sans", value: '"Open Sans", sans-serif' },
-  { label: "Ubuntu", value: '"Ubuntu", sans-serif' },
-  { label: "PT Sans", value: '"PT Sans", sans-serif' },
-  { label: "Playfair Display", value: '"Playfair Display", serif' },
-  { label: "Merriweather", value: '"Merriweather", serif' },
-  { label: "Lora", value: '"Lora", serif' },
-  { label: "Nunito", value: '"Nunito", sans-serif' },
-  { label: "Raleway", value: '"Raleway", sans-serif' },
-  { label: "Fira Sans", value: '"Fira Sans", sans-serif' },
-  { label: "Rubik", value: '"Rubik", sans-serif' },
-  { label: "Work Sans", value: '"Work Sans", sans-serif' },
-  { label: "Manrope", value: '"Manrope", sans-serif' },
-  { label: "Caveat", value: '"Caveat", cursive' },
-  { label: "Comfortaa", value: '"Comfortaa", cursive' },
-  { label: "Oswald", value: '"Oswald", sans-serif' },
-  { label: "Source Sans 3", value: '"Source Sans 3", sans-serif' },
-  { label: "Noto Sans", value: '"Noto Sans", sans-serif' },
-];
+const FONTS = APP_FONTS.map(font => ({label:font.name,value:font.css}));
 
 const SIZES = [8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32, 36, 40, 44, 48];
 
@@ -101,7 +132,8 @@ function EditorPage() {
   // Recompute when notes list changes (e.g. after title/body edits from elsewhere)
   // "new" is a draft that exists only in memory until the checkmark is tapped.
   const isNew = id === "new";
-  const { folder: folderParam } = Route.useSearch();
+  const { folder: folderParam, template } = Route.useSearch();
+  const appliedTemplate=useRef(false);
   const note = useMemo(
     () => (isNew ? undefined : (notes.find((n) => n.id === id) ?? getNote(id))),
     [id, isNew, hydrated, notes],
@@ -109,20 +141,64 @@ function EditorPage() {
 
   const [title, setTitle] = useState(note?.title ?? "");
   const [pinned, setPinnedLocal] = useState(!!note?.pinned);
+  const [reminderAt,setReminderAt]=useState<string>(()=>toReminderInput(note?.reminderAt));
+  const [reminderRepeat,setReminderRepeat]=useState<ReminderRepeat|"none">(note?.reminderRepeat??"none");
   const [folderId, setFolderId] = useState<string>(
     note?.folderId ?? folderParam ?? "all",
   );
+  const [editorFolderQuery,setEditorFolderQuery]=useState("");
   const [recording, setRecording] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const nativeRecordingRef = useRef(false);
+  const [startingAudio,setStartingAudio]=useState(false);
+  const startingAudioRef=useRef(false);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  // Recording is not committed to the note until the binary is safely stored.
+  const recordingWriteRef = useRef<Promise<void> | null>(null);
+  const settleRecordingRef = useRef<{ resolve: () => void; reject: (reason?: unknown) => void } | null>(null);
+  const createdAudioIdsRef=useRef(new Set<string>());
+  const createdImageIdsRef=useRef(new Set<string>());
+  const pendingImagesRef=useRef(new Set<Promise<void>>());
+  const enqueueImageRef=useRef<((load:()=>Promise<Blob>)=>void)|null>(null);
+  const imageSessionRef=useRef(true);
+  const committedNoteRef=useRef(false);
+  const cleanupNewAudio=async(keep: string[] = [])=>{
+    const retained=new Set(keep);
+    const removed=[...createdAudioIdsRef.current].filter(id=>!retained.has(id));
+    await Promise.allSettled(removed.map(id=>deleteAudioFile(id)));
+    createdAudioIdsRef.current=new Set([...createdAudioIdsRef.current].filter(id=>retained.has(id)));
+  };
+  const savingRef = useRef(false);
+  const [saving,setSaving] = useState(false);
+  const [externalConflict,setExternalConflict]=useState(false);
+  const [findOpen,setFindOpen]=useState(false);
+  const [outlineOpen,setOutlineOpen]=useState(false);
+  const [outlineQuery,setOutlineQuery]=useState("");
+  const [outlineFilter,setOutlineFilter]=useState<OutlineFilter>("all");
+  const [findQuery,setFindQuery]=useState("");
+  const [findReplacement,setFindReplacement]=useState("");
+  const [findActive,setFindActive]=useState(0);
+  const [checkShape,setCheckShape]=useState<CheckShape>("square");
+  const [prefs,setPrefs]=useState(()=>readEditorPreferences());
+  useEffect(()=>{
+    const refresh=()=>setPrefs(readEditorPreferences());
+    window.addEventListener(EDITOR_PREFS_CHANGED,refresh);
+    window.addEventListener("storage",refresh);
+    return ()=>{window.removeEventListener(EDITOR_PREFS_CHANGED,refresh);window.removeEventListener("storage",refresh);};
+  },[]);
+  const toolVisible=(tool:EditorTool)=>!prefs.hiddenToolbar.includes(tool);
+  const [slashText,setSlashText]=useState<string|null>(null);
+  const [slashActive,setSlashActive]=useState(0);
+  const [pageRename,setPageRename]=useState<{pos:number;label:string}|null>(null);
+  useEffect(()=>{setSlashActive(0);},[slashText]);
 
   const [currentFontFamily, setCurrentFontFamily] = useState(FONTS[0].value);
   const [currentFontSize, setCurrentFontSize] = useState<number>(18);
-  const [currentColor, setCurrentColor] = useState<string>("#FFFFFF");
-  const [canvasBg, setCanvasBg] = useState<string>(
-    note?.style?.background ?? "#000000",
-  );
+  const [currentColor, setCurrentColor] = useState<string>(editorInk(isNew,note?.style?.color));
+  const [canvasBg, setCanvasBg] = useState<string>(editorBackground(isNew,note?.style?.background));
+  const [paperMood,setPaperMood]=useState<PaperMood>(note?.style?.paperMood??"solid");
+  const [paperRule,setPaperRule]=useState<PaperRule>(note?.style?.paperRule??"plain");
 
   // Sync local state once the note hydrates from storage.
   const syncedRef = useRef(false);
@@ -131,8 +207,13 @@ function EditorPage() {
     syncedRef.current = true;
     setTitle(note.title);
     setPinnedLocal(!!note.pinned);
+    setReminderAt(toReminderInput(note.reminderAt));
+    setReminderRepeat(note.reminderRepeat??"none");
     setFolderId(note.folderId ?? "all");
     if (note.style?.background) setCanvasBg(note.style.background);
+    if (note.style?.paperMood) setPaperMood(note.style.paperMood);
+    if (note.style?.paperRule) setPaperRule(note.style.paperRule);
+    if (note.style?.color) setCurrentColor(note.style.color);
   }, [note]);
 
   // Latest title ref so onUpdate doesn't need to be recreated per keystroke.
@@ -188,17 +269,80 @@ function EditorPage() {
       }),
       AutoLinkExtras,
       AudioNote,
+      WaveImage,
+      WaveDrawing,
+      WavePageBreak,
+      WaveTextDirection,
+      InNoteSearch,
+      WaveChecklistItem,
+      WaveCallout,
+      WaveFold,
+      WaveTape,
     ],
     content: note?.body || "<p></p>",
     editorProps: {
+      handleClick(_view,_pos,event){
+        const element=event.target instanceof Element?event.target:null;
+        const anchor=element?.closest("a[href]");
+        if(!anchor)return false;
+        const href=anchor.getAttribute("href");
+        if(!href || !isSafeExternalUrl(href))return false;
+        event.preventDefault();
+        void openExternalUrl(href).catch(error=>{
+          console.error("External browser failed",error);
+          toast.error("Не удалось открыть ссылку в браузере телефона");
+        });
+        return true;
+      },
+      handlePaste(_view,event){
+        const file=clipboardImage(event);
+        if(file){event.preventDefault();enqueueImageRef.current?.(()=>Promise.resolve(file));return true;}
+        const html=event.clipboardData?.getData("text/html")||"";
+        if(!html){
+          const plain=event.clipboardData?.getData("text/plain")||"";
+          const structured=structuredPlainClipboardHtml(plain)||structuredMarkdownClipboardHtml(plain);
+          if(!structured)return false;
+          try{
+            const container=document.createElement("div");container.innerHTML=structured;
+            const slice=PMDOMParser.fromSchema(_view.state.schema).parseSlice(container);
+            if(!slice.content.size)return false;
+            event.preventDefault();
+            _view.dispatch(_view.state.tr.replaceSelection(slice).scrollIntoView());
+            return true;
+          }catch{return false;}
+        }
+        const cleaned=safeBrowserClipboardHtml(html);
+        // If HTML is rejected or cannot be represented, allow the editor to
+        // paste text/plain normally. Never silently discard clipboard text.
+        if(!cleaned)return false;
+        try{
+          const container=document.createElement("div");container.innerHTML=cleaned;
+          const slice=PMDOMParser.fromSchema(_view.state.schema).parseSlice(container);
+          if(!slice.content.size)return false;
+          event.preventDefault();
+          _view.dispatch(_view.state.tr.replaceSelection(slice).scrollIntoView());
+          return true;
+        }catch{return false;}
+      },
+      handleDrop(_view,event){
+        const file=droppedImage(event);
+        if(!file)return false;
+        event.preventDefault();enqueueImageRef.current?.(()=>Promise.resolve(file));return true;
+      },
       attributes: {
         class:
           "sn-tiptap min-h-full w-full whitespace-pre-wrap break-words outline-none",
-        style: "color:#FFFFFF;",
+        style: "color:var(--wave-note-ink,#FFFFFF);caret-color:var(--wave-note-caret,#FFFFFF);",
+        spellcheck: prefs.spellcheck ? "true" : "false",
       },
     },
     // Draft only: nothing is written to storage until the checkmark is tapped.
-    onUpdate: () => scheduleTick(),
+    onUpdate: ({editor:currentEditor}) => {
+      scheduleTick();
+      const {$from}=currentEditor.state.selection;
+      const before=$from.parent.textBetween(0,$from.parentOffset);
+      setSlashText(/^\/[\p{L}\p{N} -]{0,22}$/u.test(before) ? before.slice(1) : null);
+    },
     onSelectionUpdate: ({ editor }) => {
       const { from, to } = editor.state.selection;
       selectionRef.current = { from, to };
@@ -215,6 +359,13 @@ function EditorPage() {
   });
 
 
+  useEffect(()=>{
+    if(!editor||!isNew||template!=="checklist"||appliedTemplate.current)return;
+    appliedTemplate.current=true;
+    editor.commands.setContent({type:"doc",content:[{type:"waveChecklistItem",
+      attrs:{shape:"square",done:false},content:[{type:"text",text:" "}]}]});
+  },[editor,isNew,template]);
+
   // Load body when the note becomes available after hydration.
   useEffect(() => {
     if (!editor || !note) return;
@@ -224,6 +375,19 @@ function EditorPage() {
       editor.commands.setContent(target, { emitUpdate: false });
     }
   }, [editor, note]);
+
+  // Update DOM spellchecking without recreating the rich text editor.
+  useEffect(()=>{
+    if(!editor||editor.isDestroyed)return;
+    const update=()=>{
+      editor.view.dom.setAttribute("spellcheck",prefs.spellcheck?"true":"false");
+      editor.view.dom.setAttribute("lang",document.documentElement.lang||"ru");
+    };
+    update();
+    const observer=new MutationObserver(update);
+    observer.observe(document.documentElement,{attributes:true,attributeFilter:["lang"]});
+    return ()=>observer.disconnect();
+  },[editor,prefs.spellcheck]);
 
   // Title, folder, star and background live in draft state only (see handleSave).
 
@@ -235,6 +399,25 @@ function EditorPage() {
         recorderRef.current?.state === "recording" && recorderRef.current.stop();
         streamRef.current?.getTracks().forEach((t) => t.stop());
       } catch {}
+      imageSessionRef.current=false;
+      if(nativeRecordingRef.current){
+        nativeRecordingRef.current=false;
+        // Discard never writes an attachment. Settle the recording promise
+        // before the abandoned draft's cleanup awaits it, otherwise that
+        // cleanup could remain pending forever after unmount.
+        settleRecordingRef.current?.resolve();
+        settleRecordingRef.current=null;
+        recordingWriteRef.current=null;
+        void cancelNativeAudio().catch(error=>console.error("Microphone discard failed",error));
+      }
+      if (!committedNoteRef.current) {
+        void Promise.allSettled([...pendingImagesRef.current]).then(()=>
+          Promise.allSettled([...createdImageIdsRef.current].map(id=>deleteImageFile(id))));
+        // Native Back or page teardown can bypass the editor's Cancel button.
+        const pending=recordingWriteRef.current;
+        void (pending ? pending.catch(()=>undefined) : Promise.resolve()).then(()=>
+          Promise.allSettled([...createdAudioIdsRef.current].map(id=>deleteAudioFile(id))));
+      }
     };
   }, []);
 
@@ -242,20 +425,151 @@ function EditorPage() {
 
   const handleFolder = (fid: string) => setFolderId(fid);
 
-  const handleCanvasBg = (c: string) => setCanvasBg(c);
+  const handleCanvasBg = (c: string) => {setCanvasBg(c);setPaperMood("solid");};
+  const hits=findOpen&&editor?findWords(editor.state.doc,findQuery,prefs.caseSensitive):[];
+  const outline=outlineOpen&&editor?filterNoteOutline(collectNoteOutline(editor.state.doc),outlineQuery,outlineFilter):[];
+  const pagePositions=editor?notePagePositions(editor.state.doc):[0];
+  const currentPage=editor?noteCurrentPage(editor.state.doc,editor.state.selection.from):1;
+  const setSearchDecoration=(query:string,active:number)=>{
+    if(editor)editor.view.dispatch(editor.state.tr.setMeta(noteSearchKey,{query,active,caseSensitive:prefs.caseSensitive}));
+  };
+  useEffect(()=>{if(editor&&findOpen)setSearchDecoration(findQuery,findActive);},[prefs.caseSensitive,editor,findOpen,findQuery,findActive]);
+  const dismissFind=()=>{setFindOpen(false);setFindQuery("");setFindActive(0);setSearchDecoration("",0);};
+  const stepFind=(step:number)=>{
+    if(!editor||!hits.length)return;
+    const at=(findActive+step+hits.length)%hits.length;
+    setFindActive(at);setSearchDecoration(findQuery,at);
+    requestAnimationFrame(()=>editor.view.dom.querySelector(".wave-find-current")?.scrollIntoView({block:"nearest"}));
+  };
+
+  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator"|"bullets"|"numbered"|"heading"|"checklist"|"page",callout:CalloutKind="important")=>{
+    if(!editor)return;
+    const {$from}=editor.state.selection;
+    const textBefore=$from.parent.textBetween(0,$from.parentOffset);
+    const slashLength=/^\/[\p{L}\p{N} -]{0,22}$/u.test(textBefore)?textBefore.length:0;
+    let chain=editor.chain().focus();
+    if(slashLength)chain=chain.deleteRange({from:$from.pos-slashLength,to:$from.pos});
+    setSlashText(null);
+    if(kind==="quote"){chain.toggleBlockquote().run();return;}
+    if(kind==="bullets"){chain.toggleBulletList().run();return;}
+    if(kind==="numbered"){chain.toggleOrderedList().run();return;}
+    if(kind==="heading"){chain.toggleHeading({level:2}).run();return;}
+    if(kind==="checklist"){chain.insertContent({type:"waveChecklistItem",attrs:{shape:checkShape,done:false},content:[{type:"text",text:" "}]}).run();return;}
+    if(kind==="tape"){
+      if(editor.state.selection.empty){toast("Сначала выделите слова, которые нужно скрыть");return;}
+      chain.setMark("waveTape").run();return;
+    }
+    if(kind==="date"){chain.insertContent(new Date().toLocaleDateString("ru-RU")).run();return;}
+    if(kind==="separator"){chain.setHorizontalRule().run();return;}
+    if(kind==="page"){chain.insertWavePageBreak().run();return;}
+    const node=kind==="fold"
+      ? {type:"waveFold",attrs:{title:"Новый раздел",collapsed:false},content:[{type:"paragraph"}]}
+      : {type:"waveCallout",attrs:{kind:callout},content:[{type:"paragraph"}]};
+    chain.insertContent(node).run();
+  };
+  const blockChoices=[
+    {id:"checklist",label:"Список дел",icon:"☐"},
+    {id:"bullets",label:"Маркированный список",icon:"•"},
+    {id:"numbered",label:"Нумерованный список",icon:"1."},
+    {id:"heading",label:"Заголовок",icon:"H"},
+    {id:"callout",label:"Важно",icon:"!"},
+    {id:"tip",label:"Совет",icon:"✦"},
+    {id:"warning",label:"Предупреждение",icon:"⚠"},
+    {id:"info",label:"Информация",icon:"i"},
+    {id:"quote",label:"Цитата",icon:"❝"},
+    {id:"fold",label:"Сворачиваемый раздел",icon:"▸"},
+    {id:"tape",label:"Скрыть выбранный ответ",icon:"▰"},
+    {id:"date",label:"Вставить дату",icon:"◷"},
+    {id:"separator",label:"Разделитель",icon:"—"},
+    {id:"page",label:"Новая страница",icon:"▤"},
+  ] as const;
+  const chooseBlock=(id:typeof blockChoices[number]["id"])=>{
+    if(id==="callout")insertWaveBlock("callout","important");
+    else if(id==="tip"||id==="warning"||id==="info")insertWaveBlock("callout",id);
+    else insertWaveBlock(id);
+  };
+  const visibleSlashChoices=slashText===null?[]:matchingSlashCommands(blockChoices,slashText);
+  
+  // Keep archive work out of the editor completely, even if a previous
+  // committed edit was waiting to be archived. A checkmark navigates away
+  // after saving; the backup runs only once the editor is closed.
+  useEffect(() => {
+    window.dispatchEvent(new Event("wave-notes-editor-opened"));
+    return () => { window.dispatchEvent(new Event("wave-notes-editor-closed")); };
+  }, []);
 
   /** Back = discard: nothing typed in this session reaches the notes list. */
-  const handleDiscard = () => navigate({ to: "/" });
+  const handleDiscard = async () => {
+    if(savingRef.current)return;
+    imageSessionRef.current=false;
+    if(nativeRecordingRef.current){
+      nativeRecordingRef.current=false;setRecording(false);
+      try{await cancelNativeAudio();}
+      catch(error){console.error("Unable to discard native audio",error);toast.error("Не удалось выключить микрофон");return;}
+      settleRecordingRef.current?.resolve();
+      settleRecordingRef.current=null;recordingWriteRef.current=null;
+    }else if(recorderRef.current?.state==="recording")stopRecording();
+    await recordingWriteRef.current?.catch(()=>undefined);
+    await Promise.allSettled([...pendingImagesRef.current]);
+    await cleanupNewAudio();
+    await Promise.allSettled([...createdImageIdsRef.current].map(id=>deleteImageFile(id)));
+    createdImageIdsRef.current.clear();
+    navigate({to:"/"});
+  };
 
-  /** Checkmark = the one and only commit point. */
-  const handleSave = () => {
+  /** Save icon commits the draft to local storage; back still discards. */
+  const saveSeparateCopy=async()=>{
+    if(isNew||!editor||savingRef.current)return;
+    savingRef.current=true;setSaving(true);
+    try{
+      if(startingAudioRef.current)throw Error("Подождите, пока микрофон включится");
+      if(recorderRef.current?.state==="recording"||nativeRecordingRef.current)stopRecording();
+      if(recordingWriteRef.current)await recordingWriteRef.current;
+      await Promise.allSettled([...pendingImagesRef.current]);
+      const body=editor.getHTML();
+      const copy=saveDraftAfterExternalChange(id,{
+        title:title.trim()||note?.title||"Заметка",body,
+        folderId,pinned:false,style:{background:canvasBg,paperMood,paperRule},
+        reminderAt:reminderAt?parseReminderInput(reminderAt):undefined,
+        reminderRepeat:reminderRepeat==="none"?undefined:reminderRepeat,
+      });
+      committedNoteRef.current=true;
+      toast.success("Черновик сохранён отдельной заметкой");
+      navigate({to:"/"});
+    }catch(error){toast.error(error instanceof Error?error.message:"Не удалось сохранить копию");}
+    finally{savingRef.current=false;setSaving(false);}
+  };
+  const handleSave = async () => {
+    if (savingRef.current) return;
+    setExternalConflict(false);
+    savingRef.current = true;
+    setSaving(true);
+    try {
+    // Stop MediaRecorder and wait for its final ondataavailable/onstop events.
+    // Without this, a fast checkmark saves HTML before the audio node exists.
+    if (startingAudioRef.current) throw new Error("Подождите, пока микрофон включится.");
+    if (recorderRef.current?.state === "recording" || nativeRecordingRef.current) stopRecording();
+    if (recordingWriteRef.current) await recordingWriteRef.current;
+    // Never commit note markup before pending camera/gallery/clipboard writes settle.
+    await Promise.allSettled([...pendingImagesRef.current]);
     const body = editor?.getHTML() ?? "";
     const plain = (editor?.getText() ?? "").trim();
+    const hasImages=imageIdsInHtml(body).length>0;
+    const hasDrawing=body.includes("data-wave-drawing");
     const typedTitle = title.trim();
+    const reminderValue=reminderAt?parseReminderInput(reminderAt):undefined;
+    if(reminderAt&&reminderValue===undefined)throw new Error("Укажите правильную дату и время напоминания");
+    if(reminderValue!==undefined){
+      const granted=await requestNativeReminderPermission();
+      if(!granted)toast.warning("Уведомления Android отключены. Напоминание сохранится внутри приложения.");
+    }
 
     if (isNew) {
       // A note that was opened and left blank is cancelled entirely.
-      if (!typedTitle && !plain) {
+      if (!typedTitle && !plain && !hasImages && !hasDrawing) {
+        await cleanupNewAudio();
+        await Promise.allSettled([...createdImageIdsRef.current].map(id=>deleteImageFile(id)));
+        createdImageIdsRef.current.clear();
         navigate({ to: "/" });
         return;
       }
@@ -264,7 +578,10 @@ function EditorPage() {
         body,
         folderId,
         pinned,
-        style: { background: canvasBg },
+        reminderAt:reminderValue,
+        reminderRepeat:reminderRepeat==="none"?undefined:reminderRepeat,
+        // Preserve dark default ink when the new yellow note is reopened.
+        style: { background: canvasBg, color: NEW_NOTE_INK, paperMood, paperRule },
       });
     } else if (note) {
       updateNote(id, {
@@ -272,11 +589,27 @@ function EditorPage() {
         body,
         folderId,
         pinned,
-        style: { background: canvasBg },
+        reminderAt:reminderValue,
+        reminderRepeat:reminderRepeat==="none"?undefined:reminderRepeat,
+        style: { background: canvasBg, paperMood, paperRule },
       });
     }
 
+    committedNoteRef.current=true;
+    await cleanupNewAudio(audioIdsInHtml(body));
+    const keepImages=new Set(imageIdsInHtml(body));
+    await Promise.allSettled([...createdImageIdsRef.current].filter(id=>!keepImages.has(id)).map(id=>deleteImageFile(id)));
+    createdImageIdsRef.current.clear();
+    toast.success(t("saved"),{duration:1600});
     navigate({ to: "/" });
+    } catch (error) {
+      console.error("Unable to save note", error);
+      if(error instanceof Error && error.message.includes("another window or after a restore"))setExternalConflict(true);
+      alert(error instanceof Error ? error.message : "Не удалось сохранить заметку. Текст остаётся в редакторе.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   };
 
   /**
@@ -318,47 +651,104 @@ function EditorPage() {
     return f.name;
   };
 
-  const startRecording = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      alert("Микрофон недоступен в этом браузере");
-      return;
+  const enqueueImage=(load:()=>Promise<Blob>)=>{
+    if(!editor||savingRef.current||!imageSessionRef.current)return;
+    const job=(async()=>{
+      let imageId:string|null=null;
+      try{
+        const valid=await verifiedNoteImage(await load());
+        if(!imageSessionRef.current||editor.isDestroyed)return;
+        imageId=await saveImageFile(valid);
+        createdImageIdsRef.current.add(imageId);
+        if(!imageSessionRef.current||editor.isDestroyed||!editor.chain().focus().insertWaveImage(imageId).run()){
+          throw Error("Не удалось вставить фотографию");
+        }
+      }catch(error){
+        if(imageId){await deleteImageFile(imageId).catch(console.error);createdImageIdsRef.current.delete(imageId);}
+        if(imageSessionRef.current)toast.error(error instanceof Error?error.message:"Не удалось добавить изображение");
+      }
+    })();
+    pendingImagesRef.current.add(job);
+    void job.finally(()=>pendingImagesRef.current.delete(job));
+  };
+  const addImage=()=>{
+    if(!editor||savingRef.current)return;
+    const picker=document.createElement("input");
+    picker.type="file";picker.accept="image/jpeg,image/png,image/webp";picker.style.display="none";
+    picker.addEventListener("change",()=>{
+      const file=picker.files?.[0];picker.remove();
+      if(file)enqueueImage(()=>Promise.resolve(file));
+    },{once:true});
+    document.body.append(picker);picker.click();
+  };
+  enqueueImageRef.current=enqueueImage;
+  const addCameraImage=()=>enqueueImage(takeNotePhoto);
+  const attachAudio = async (blob: Blob) => {
+    if (!blob.size) throw new Error("Пустая аудиозапись");
+    // A recording can finish after its editor was closed by Android Back.
+    // Never store a binary for an abandoned draft.
+    if(!imageSessionRef.current||!editor||editor.isDestroyed)
+      throw new Error("Редактор закрыт, запись не сохранена");
+    const audioId=await saveAudioFile(blob);
+    if(!imageSessionRef.current||editor.isDestroyed){
+      await deleteAudioFile(audioId);
+      throw new Error("Редактор закрыт, запись не сохранена");
     }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      const rec = new MediaRecorder(stream);
-      chunksRef.current = [];
-      rec.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      rec.onstop = async () => {
-        const blob = new Blob(chunksRef.current, {
-          type: rec.mimeType || "audio/webm",
-        });
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const dataUrl = reader.result as string;
-          editor?.chain().focus().insertAudioNote(dataUrl).run();
-        };
-        reader.readAsDataURL(blob);
-        streamRef.current?.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-      };
-      rec.start();
-      recorderRef.current = rec;
-      setRecording(true);
-    } catch (err) {
-      console.error(err);
-      alert("Не удалось получить доступ к микрофону");
+    createdAudioIdsRef.current.add(audioId);
+    try{
+      if(!editor.chain().focus().insertAudioNote(`audiodb:${audioId}`).run())
+        throw new Error("Не удалось вставить аудио в заметку");
+    }catch(error){
+      createdAudioIdsRef.current.delete(audioId);
+      await deleteAudioFile(audioId).catch(cleanup=>console.error("Audio rollback failed",cleanup));
+      throw error;
     }
   };
-
-  const stopRecording = () => {
+  const startRecording = async () => {
+    if (recording || startingAudioRef.current || recordingWriteRef.current) return;
+    if (nativeAudioAvailable()) {
+      startingAudioRef.current=true;setStartingAudio(true);
+      try {
+        await startNativeAudio();
+        if(!imageSessionRef.current){await cancelNativeAudio();return;}
+        recordingWriteRef.current=new Promise<void>((resolve,reject)=>{settleRecordingRef.current={resolve,reject};});
+        void recordingWriteRef.current.catch(()=>undefined);
+        nativeRecordingRef.current=true;setRecording(true);
+      } catch(err) {
+        console.error("Native microphone start",err);
+        if(imageSessionRef.current)alert(err instanceof Error?err.message:"Нет доступа к микрофону");
+      } finally {startingAudioRef.current=false;setStartingAudio(false);}
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder==="undefined") {alert("Микрофон недоступен");return;}
     try {
-      recorderRef.current?.stop();
-    } catch {}
-    recorderRef.current = null;
-    setRecording(false);
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      if(!imageSessionRef.current){stream.getTracks().forEach(track=>track.stop());return;}
+      streamRef.current=stream;
+      const rec=new MediaRecorder(stream);
+      recordingWriteRef.current=new Promise<void>((resolve,reject)=>{settleRecordingRef.current={resolve,reject};});
+      void recordingWriteRef.current.catch(()=>undefined);
+      chunksRef.current=[];
+      rec.ondataavailable=ev=>{if(ev.data.size)chunksRef.current.push(ev.data);};
+      rec.onstop=async()=>{
+        try {await attachAudio(new Blob(chunksRef.current,{type:rec.mimeType||"audio/webm"}));settleRecordingRef.current?.resolve();}
+        catch(err){settleRecordingRef.current?.reject(err);if(imageSessionRef.current)alert("Не удалось сохранить аудио");}
+        finally{recordingWriteRef.current=null;settleRecordingRef.current=null;stream.getTracks().forEach(t=>t.stop());streamRef.current=null;}
+      };
+      rec.onerror=()=>{settleRecordingRef.current?.reject(new Error("Ошибка аудиозаписи"));recordingWriteRef.current=null;settleRecordingRef.current=null;stream.getTracks().forEach(t=>t.stop());setRecording(false);};
+      rec.start();recorderRef.current=rec;setRecording(true);
+    }catch(err){console.error(err);alert("Не удалось получить доступ к микрофону");}
+  };
+  const stopRecording=()=>{
+    if(nativeRecordingRef.current){
+      nativeRecordingRef.current=false;setRecording(false);
+      void stopNativeAudio().then(attachAudio).then(()=>settleRecordingRef.current?.resolve())
+        .catch(err=>{settleRecordingRef.current?.reject(err);if(imageSessionRef.current)alert(err instanceof Error?err.message:"Не удалось сохранить запись");})
+        .finally(()=>{recordingWriteRef.current=null;settleRecordingRef.current=null;});
+      return;
+    }
+    try {if(recorderRef.current?.state==="recording")recorderRef.current.stop();}catch(err){settleRecordingRef.current?.reject(err);recordingWriteRef.current=null;}
+    recorderRef.current=null;setRecording(false);
   };
 
   if (!hydrated) {
@@ -401,7 +791,7 @@ function EditorPage() {
             placeholder={t("new_note")}
             className="min-w-0 flex-1 bg-transparent px-2 py-2 font-display text-base font-semibold outline-none placeholder:text-muted-foreground"
           />
-            <DropdownMenu>
+            <DropdownMenu onOpenChange={open=>{if(!open)setEditorFolderQuery("");}}>
               <DropdownMenuTrigger asChild>
                 <button
                   className="flex h-7 max-w-[6.5rem] shrink-0 items-center rounded-full border border-border bg-secondary/50 px-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary"
@@ -410,29 +800,102 @@ function EditorPage() {
                   <span className="truncate">{localizedFolderName(folders.find((f) => f.id === folderId) ?? folders[0])}</span>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" sideOffset={6} className="w-48 rounded-2xl">
-                {folders.map((f) => (
+              <DropdownMenuContent align="end" sideOffset={6}
+                className="max-h-[min(24rem,70dvh)] w-64 overflow-y-auto rounded-2xl">
+                <div className="sticky top-0 z-10 bg-popover p-2">
+                  <Input aria-label="Поиск папки в редакторе" placeholder="Найти папку…"
+                    maxLength={80} value={editorFolderQuery}
+                    onKeyDown={event=>event.stopPropagation()}
+                    onChange={event=>setEditorFolderQuery(event.target.value)}/>
+                </div>
+                {folderNavigationRows(folders,new Set(),editorFolderQuery).map(({folder:f,path,depth}) => (
                   <DropdownMenuItem
                     key={f.id}
-                    onClick={() => handleFolder(f.id)}
-                    className={`gap-2 py-2 text-xs font-semibold uppercase tracking-wider ${
+                    onClick={() => {handleFolder(f.id);setEditorFolderQuery("");}}
+                    title={path}
+                    className={`gap-2 py-2 text-xs font-semibold ${
                       folderId === f.id ? "text-primary" : ""
                     }`}
                   >
-                    {localizedFolderName(f)}
+                    <span className="min-w-0 truncate" style={{paddingLeft:depth*7}}>
+                      {f.id==="all"?localizedFolderName(f):path}
+                    </span>
                     {folderId === f.id && (
-                      <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
+                      <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
                     )}
                   </DropdownMenuItem>
                 ))}
+                {editorFolderQuery.trim()&&
+                  folderNavigationRows(folders,new Set(),editorFolderQuery).length===1&&
+                  <p className="px-3 py-2 text-xs text-muted-foreground">Другие папки не найдены</p>}
               </DropdownMenuContent>
             </DropdownMenu>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" aria-label="Напоминание" className="grid h-9 w-9 shrink-0 place-items-center rounded-full hover:bg-secondary">
+                <CalendarDays className="h-4 w-4"/>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" sideOffset={8} className="w-64 rounded-xl p-3">
+              <p className="mb-2 text-sm font-semibold">Напоминание к заметке</p>
+              <input type="datetime-local" aria-label="Дата и время напоминания" value={reminderAt}
+                onChange={event=>setReminderAt(event.target.value)}
+                className="w-full rounded-lg border border-border bg-background p-2 text-sm"/>
+              <div className="mt-2 flex gap-1">
+                {([["hour","Через час"],["tomorrow","Завтра"],["week","Через неделю"]] as const).map(([preset,label])=>
+                  <button type="button" key={preset} onClick={()=>setReminderAt(toReminderInput(reminderPresetTime(preset)))}
+                    className="min-h-9 rounded-md border border-border px-2 text-[11px]">{label}</button>)}
+              </div>
+              <label className="mt-2 block text-xs">Повторять
+                <select aria-label="Повторение напоминания" value={reminderRepeat}
+                  onChange={e=>setReminderRepeat(e.target.value as ReminderRepeat|"none")}
+                  className="mt-1 w-full rounded-lg border border-border bg-background p-2 text-xs">
+                  <option value="none">Не повторять</option><option value="daily">Каждый день</option>
+                  <option value="weekly">Каждую неделю</option>
+                </select>
+              </label>
+              <button type="button" onClick={()=>setReminderAt("")}
+                className="mt-2 rounded-lg border border-border px-3 py-2 text-xs">Убрать напоминание</button>
+              <p className="mt-2 text-xs text-muted-foreground">После сохранения Android сможет показывать уведомления, если разрешить их в системе. Время может немного сдвигаться из-за энергосбережения.</p>
+            </PopoverContent>
+          </Popover>
+          {externalConflict&&!isNew&&<button type="button" onClick={saveSeparateCopy}
+            disabled={saving} aria-label="Сохранить черновик отдельной копией"
+            className="rounded-lg border border-amber-500 px-2 py-1 text-xs">
+            Сохранить копию
+          </button>}
           <button
+            type="button"
             onClick={handleSave}
-            className="ml-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-sm hover:opacity-90"
-            aria-label={t("done")}
+            disabled={saving}
+            aria-label={t("save")}
+            title={t("save")}
+            aria-busy={saving}
+            className="group ml-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-wait"
           >
-            <Check className="h-4 w-4" strokeWidth={2.5} />
+            <span className="grid h-[38px] w-[38px] place-items-center rounded-full border border-border bg-secondary/50 text-white shadow-sm transition-colors duration-150 group-hover:bg-secondary group-active:bg-secondary/80 group-disabled:opacity-70 motion-reduce:transition-none">
+              {saving ? (
+                <LoaderCircle aria-hidden="true" className="h-[22px] w-[22px] animate-spin" strokeWidth={2.1} />
+              ) : (
+                // Balanced white outline: no stretched filled pictogram.
+                <svg
+                  aria-hidden="true"
+                  className="block h-[22px] w-[22px] shrink-0 text-white"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.95}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  preserveAspectRatio="xMidYMid meet"
+                >
+                  <path d="M5.5 3.5H16L20.5 8v11c0 1-.8 1.8-1.8 1.8H5.3c-1 0-1.8-.8-1.8-1.8V5.5c0-1.1.9-2 2-2Z" />
+                  <path d="M7.2 3.5v6.4h9.2V4" />
+                  <path d="M7.3 20.8v-7.2h9.4v7.2" />
+                  <path d="M9.4 16.7h5.2" strokeWidth={1.6} />
+                </svg>
+              )}
+            </span>
           </button>
         </div>
       </header>
@@ -458,16 +921,30 @@ function EditorPage() {
           >
             <Redo2 className="h-4 w-4" />
           </button>
-          <button
+                    {toolVisible("audio")&&<button style={{order:10+prefs.toolbarOrder.indexOf("audio")}}
             onClick={recording ? stopRecording : startRecording}
+            disabled={startingAudio}
             className={`grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary ${
               recording ? "bg-destructive text-destructive-foreground animate-pulse" : ""
             }`}
             aria-label={t("audio")}
           >
             {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-          </button>
-          <button
+          </button>}
+          {toolVisible("drawing")&&<button style={{order:10+prefs.toolbarOrder.indexOf("drawing")}} type="button" onClick={()=>editor?.chain().focus().insertWaveDrawing().run()}
+            aria-label="Добавить рисунок" className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
+            <PenTool className="h-4 w-4"/>
+          </button>}
+          {toolVisible("camera")&&<button style={{order:10+prefs.toolbarOrder.indexOf("camera")}} type="button" onClick={addCameraImage} aria-label="Сфотографировать для заметки"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
+            <Camera className="h-4 w-4"/>
+          </button>}
+          {toolVisible("gallery")&&<button style={{order:10+prefs.toolbarOrder.indexOf("gallery")}} type="button" onClick={addImage} aria-label="Добавить фотографию из галереи"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
+            <ImagePlus className="h-4 w-4"/>
+          </button>}
+          {toolVisible("pin")&&<button
+            style={{order:10+prefs.toolbarOrder.indexOf("pin")}}
             onClick={handlePin}
             className={`grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary ${
               pinned ? "text-primary" : "text-muted-foreground"
@@ -475,11 +952,204 @@ function EditorPage() {
             aria-label={t("star")}
           >
             <Star className="h-4 w-4" fill={pinned ? "currentColor" : "none"} />
-          </button>
+          </button>}
 
-          <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
-          {editor && (
-            <>
+          {toolVisible("outline")&&<button style={{order:10+prefs.toolbarOrder.indexOf("outline")}} type="button" aria-label="Оглавление заметки" aria-expanded={outlineOpen}
+            onClick={()=>setOutlineOpen(open=>!open)}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+            <ListTree className="h-4 w-4"/>
+          </button>}
+          {toolVisible("search")&&<button style={{order:10+prefs.toolbarOrder.indexOf("search")}} type="button" onClick={()=>findOpen?dismissFind():setFindOpen(true)}
+            aria-label="Найти в заметке" aria-expanded={findOpen}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+            <Search className="h-4 w-4"/>
+          </button>}
+          {toolVisible("checklist")&&<Popover>
+            <PopoverTrigger asChild>
+              <button style={{order:10+prefs.toolbarOrder.indexOf("checklist")}} type="button" aria-label="Добавить список дел" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+                <ListChecks className="h-4 w-4"/>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" sideOffset={8} className="w-52 rounded-xl p-2">
+              {editor&&checklistCounts(editor).total>0&&<div className="mb-2 rounded-lg border border-border p-2">
+                <p className="mb-1 text-xs text-muted-foreground">Задачи: {checklistCounts(editor).done}/{checklistCounts(editor).total}</p>
+                <div className="flex gap-1">
+                  <button type="button" onClick={()=>setAllChecklistItems(editor,true)} className="rounded-md bg-secondary px-2 py-2 text-xs">Выполнить все</button>
+                  <button type="button" onClick={()=>setAllChecklistItems(editor,false)} className="rounded-md bg-secondary px-2 py-2 text-xs">Сбросить все</button>
+                </div>
+              </div>}
+              {editor&&currentPageTaskCounts(editor).total>0&&pagePositions.length>1&&<div className="mb-2 rounded-lg border border-border p-2">
+                <p className="mb-1 text-xs text-muted-foreground">Текущая страница: {currentPageTaskCounts(editor).done}/{currentPageTaskCounts(editor).total}</p>
+                <div className="flex gap-1">
+                  <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>setCurrentPageTasksDone(editor,true)}
+                    className="rounded-md bg-secondary px-2 py-2 text-xs">Выполнить страницу</button>
+                  <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>setCurrentPageTasksDone(editor,false)}
+                    className="rounded-md bg-secondary px-2 py-2 text-xs">Сбросить страницу</button>
+                </div>
+              </div>}
+              {editor&&selectedSectionTaskCounts(editor)&&<div className="mb-2 rounded-lg border border-border p-2">
+                <p className="mb-1 text-xs text-muted-foreground">Задачи текущего раздела: {selectedSectionTaskCounts(editor)?.done}/{selectedSectionTaskCounts(editor)?.total}</p>
+                <div className="flex gap-1">
+                  <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>setSelectedSectionTasksDone(editor,true)}
+                    className="rounded-md bg-secondary px-2 py-2 text-xs">Выполнить раздел</button>
+                  <button type="button" onMouseDown={e=>e.preventDefault()} onClick={()=>setSelectedSectionTasksDone(editor,false)}
+                    className="rounded-md bg-secondary px-2 py-2 text-xs">Сбросить раздел</button>
+                </div>
+              </div>}
+              <div className="mb-2 rounded-lg border border-border p-2">
+                <p className="mb-1 text-xs font-semibold">Выделенные задачи</p>
+                <div className="flex gap-1">
+                  <button type="button" onMouseDown={event=>event.preventDefault()}
+                    aria-label="Отметить выделенные задачи выполненными"
+                    onClick={()=>{if(!editor)return;
+                      const changed=setSelectedTasksDone(editor,true);
+                      if(changed)toast.success("Выполнено выбранных задач: "+changed);
+                      else toast("Выделите незавершённые пункты списка дел");
+                    }} className="rounded-md bg-secondary px-2 py-2 text-xs">Выполнить выбор</button>
+                  <button type="button" onMouseDown={event=>event.preventDefault()}
+                    aria-label="Сбросить выполнение выделенных задач"
+                    onClick={()=>{if(!editor)return;
+                      const changed=setSelectedTasksDone(editor,false);
+                      if(changed)toast.success("Сброшено выбранных задач: "+changed);
+                      else toast("Выделите выполненные пункты списка дел");
+                    }} className="rounded-md bg-secondary px-2 py-2 text-xs">Сбросить выбор</button>
+                </div>
+              </div>
+              <p className="px-2 pb-1 text-xs font-semibold">Форма отметок</p>
+              {([{shape:"square",label:"Квадрат",symbol:"□"},{shape:"circle",label:"Круг",symbol:"○"},
+                {shape:"diamond",label:"Ромб",symbol:"◇"},{shape:"check",label:"Галочка",symbol:"✓"}] as const).map(choice=>(
+                <button type="button" key={choice.shape} onMouseDown={event=>event.preventDefault()}
+                  onClick={()=>{
+                    setCheckShape(choice.shape);
+                    if(!editor)return;
+                    editor.chain().focus().insertContent({type:"waveChecklistItem",
+                      attrs:{shape:choice.shape,done:false},content:[{type:"text",text:" "}]}).run();
+                  }}
+                  className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-2 text-left text-sm hover:bg-secondary ${checkShape===choice.shape?"text-primary":""}`}>
+                  <span className="w-5 text-center text-lg">{choice.symbol}</span>{choice.label}
+                </button>
+              ))}
+              <button type="button" onMouseDown={e=>e.preventDefault()}
+                aria-label="Продолжить текущий пункт списка" className="w-full rounded-md bg-secondary px-2 py-2 text-xs"
+                onClick={()=>{if(!editor||!continueSelectedChecklistItem(editor))toast("Установите курсор внутри задачи");}}>
+                Следующий пункт от курсора
+              </button>
+              <div className="mt-2 grid grid-cols-1 gap-1 border-t border-border pt-2">
+                <p className="px-2 text-xs font-semibold">Преобразование без потери текста</p>
+                <button type="button" onMouseDown={event=>event.preventDefault()}
+                  aria-label="Превратить выделенные абзацы в задачи"
+                  className="w-full rounded-md bg-secondary px-2 py-2 text-left text-xs"
+                  onClick={()=>{if(!editor)return;
+                    const count=convertSelectedChecklistBlocks(editor,"tasks",checkShape);
+                    if(count)toast.success("Преобразовано в задачи: "+count);
+                    else toast("Выделите обычные абзацы без картинок и разделителей страниц");
+                  }}>Выделенные абзацы → задачи</button>
+                <button type="button" onMouseDown={event=>event.preventDefault()}
+                  aria-label="Превратить выбранные задачи в абзацы"
+                  className="w-full rounded-md bg-secondary px-2 py-2 text-left text-xs"
+                  onClick={()=>{if(!editor)return;
+                    const count=convertSelectedChecklistBlocks(editor,"paragraphs");
+                    if(count)toast.success("Преобразовано в абзацы: "+count);
+                    else toast("Выделите пункты списка дел");
+                  }}>Выбранные задачи → абзацы</button>
+              </div>
+              <div className="mt-2 border-t border-border pt-2">
+                <label htmlFor="wave-current-check-shape" className="block px-2 pb-1 text-xs font-semibold">Изменить форму выделенных отметок</label>
+                <select id="wave-current-check-shape" aria-label="Изменить форму выбранной отметки"
+                  defaultValue="" className="w-full rounded-md border border-border bg-background px-2 py-2 text-xs"
+                  onChange={event=>{
+                    if(!editor||!setSelectedChecklistShape(editor,event.target.value as CheckShape))
+                      toast("Поместите курсор внутрь пункта списка");
+                    event.target.value="";
+                  }}>
+                  <option value="" disabled>Форма текущего пункта</option>
+                  <option value="square">Квадрат</option>
+                  <option value="circle">Круг</option>
+                  <option value="diamond">Ромб</option>
+                  <option value="check">Галочка</option>
+                </select>
+              </div>
+            </PopoverContent>
+          </Popover>}
+          {toolVisible("paperMood")&&<Popover>
+            <PopoverTrigger asChild>
+              <button style={{order:10+prefs.toolbarOrder.indexOf("paperMood")}} type="button" aria-label="Оформление листа" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+                <WandSparkles className="h-4 w-4"/>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-56 rounded-xl p-2">
+              <p className="px-2 py-1 text-xs font-semibold">Спокойное оформление</p>
+              {PAPER_MOODS.map(mood=><button type="button" key={mood.id}
+                onClick={()=>{setPaperMood(mood.id);if(mood.id!=="solid")setCanvasBg(mood.background);}}
+                className={`flex min-h-11 w-full items-center gap-2 rounded-lg px-2 text-left text-sm hover:bg-secondary ${paperMood===mood.id?"text-primary":""}`}>
+                <span className="h-6 w-6 shrink-0 rounded-md border border-border" style={{background:mood.background,backgroundImage:mood.gradient||undefined}}/>
+                {mood.name}
+              </button>)}
+            </PopoverContent>
+          </Popover>}
+          {toolVisible("paperRule")&&<Popover>
+            <PopoverTrigger asChild>
+              <button style={{order:10+prefs.toolbarOrder.indexOf("paperRule")}} type="button" aria-label="Разметка бумаги" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+                <Grid3X3 className="h-4 w-4"/>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-48 rounded-xl p-2">
+              <p className="px-2 py-1 text-xs font-semibold">Разметка листа</p>
+              {PAPER_RULES.map(rule=><button type="button" key={rule.id} onClick={()=>setPaperRule(rule.id)}
+                className={`flex min-h-11 w-full items-center rounded-lg px-2 text-left text-sm hover:bg-secondary ${paperRule===rule.id?"text-primary":""}`}>
+                {rule.name}
+              </button>)}
+            </PopoverContent>
+          </Popover>}
+          {toolVisible("insert")&&<Popover>
+            <PopoverTrigger asChild>
+              <button style={{order:10+prefs.toolbarOrder.indexOf("insert")}} type="button" aria-label="Вставить блок" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary">
+                <Blocks className="h-4 w-4"/>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" sideOffset={8} onOpenAutoFocus={e=>e.preventDefault()}
+              className="max-h-[min(23rem,65dvh)] w-56 overflow-y-auto rounded-xl p-2">
+              <p className="px-2 pb-1 text-xs font-semibold">Вставить в заметку</p>
+              {blockChoices.map(item=><button type="button" key={item.id}
+                onPointerDown={e=>e.preventDefault()} onMouseDown={e=>e.preventDefault()}
+                onClick={()=>chooseBlock(item.id)}
+                className="flex min-h-10 w-full items-center gap-2 rounded-lg px-2 text-left text-sm hover:bg-secondary">
+                <span className="w-5 text-center">{item.icon}</span>{item.label}
+              </button>)}
+            </PopoverContent>
+          </Popover>}
+          {toolVisible("direction")&&<>
+          <button style={{order:10+prefs.toolbarOrder.indexOf("direction")}} type="button" aria-label="Направление текста справа налево"
+            title="Изменить направление текущего абзаца или выделенных абзацев"
+            onMouseDown={event=>event.preventDefault()}
+            onClick={()=>{if(!editor)return;
+              const next=editor.state.selection.$from.parent.attrs.textDirection==="rtl"?"ltr":"rtl";
+              if(!setWaveTextDirection(editor,next))toast("Выделите текстовый блок");
+            }}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full hover:bg-secondary">
+            <span aria-hidden="true" className="text-xs font-bold">RTL</span>
+          </button>
+          <button style={{order:10+prefs.toolbarOrder.indexOf("direction")}} type="button" title="Определить направление выделенных абзацев по первой букве"
+            aria-label="Автоматическое направление текста"
+            onMouseDown={event=>event.preventDefault()}
+            className="grid h-8 shrink-0 place-items-center rounded-full px-2 text-xs font-semibold hover:bg-secondary"
+            onClick={()=>{if(!editor)return;
+              const changed=setWaveTextDirection(editor,"auto");
+              if(changed)toast.success("Направление абзацев обновлено");
+            }}>Авто RTL</button>
+          <button style={{order:10+prefs.toolbarOrder.indexOf("direction")}} type="button" title="Определить направление во всех абзацах и задачах заметки"
+            aria-label="Автоматическое направление всей заметки"
+            onMouseDown={event=>event.preventDefault()}
+            className="grid h-8 shrink-0 place-items-center rounded-full px-2 text-xs font-semibold hover:bg-secondary"
+            onClick={()=>{if(!editor)return;
+              const changed=setWaveTextDirection(editor,"auto","document");
+              if(changed)toast.success("Направление обновлено в "+changed+" блоках");
+            }}>Все RTL</button>
+          </>}
+          {editor&&toolVisible("formatting")&&(
+            <div style={{order:10+prefs.toolbarOrder.indexOf("formatting")}}
+              className="flex shrink-0 items-center gap-1" aria-label="Группа форматирования">
+              <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
               <FormatButton active={editor.isActive("bold")} onClick={() => scoped()?.toggleBold().run()} label="Bold">
                 <Bold className="h-4 w-4" />
               </FormatButton>
@@ -492,9 +1162,193 @@ function EditorPage() {
               <FormatButton active={editor.isActive("strike")} onClick={() => scoped()?.toggleStrike().run()} label="Strikethrough">
                 <Strikethrough className="h-4 w-4" />
               </FormatButton>
-            </>
+            </div>
           )}
         </div>
+        {slashText!==null && <div className="mt-2 max-h-44 overflow-y-auto rounded-xl border border-border bg-card p-1 shadow-lg"
+            role="listbox" aria-label="Быстрое меню вставки">
+            {visibleSlashChoices.length?visibleSlashChoices.map((item,index)=><button type="button" key={item.id}
+              role="option" aria-selected={slashActive===index}
+              onMouseDown={event=>event.preventDefault()} onClick={()=>chooseBlock(item.id)}
+              className={"flex min-h-9 w-full items-center gap-2 rounded-lg px-3 text-left text-xs hover:bg-secondary "+
+                (slashActive===index?"bg-secondary font-semibold":"")}>
+              <span className="w-5 text-center">{item.icon}</span>{item.label}
+            </button>):<p className="px-3 py-2 text-xs text-muted-foreground">Команда не найдена</p>}
+            <p className="px-3 py-1 text-[10px] text-muted-foreground">↑ ↓ выбор · Enter вставить · Esc закрыть</p>
+          </div>}
+        {editor&&toolVisible("pageActions")&&<div className="mt-2 flex flex-wrap items-center gap-1 rounded-lg border border-border px-2 py-1" aria-label="Страницы и перемещение блоков">
+          <span className="mr-1 text-xs text-muted-foreground">Страница {currentPage}/{pagePositions.length}</span>
+          <button type="button" aria-label="Предыдущая страница" disabled={currentPage<=1}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>editor.chain().focus().setTextSelection(pagePositions[currentPage-2]).run()}>‹</button>
+          <button type="button" aria-label="Следующая страница" disabled={currentPage>=pagePositions.length}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>editor.chain().focus().setTextSelection(pagePositions[currentPage]).run()}>›</button>
+          <details className="w-full sm:w-auto">
+            <summary className="cursor-pointer select-none rounded-md border px-3 py-1 text-xs font-medium">Страницы · управление</summary>
+            <div className="mt-2 flex flex-wrap items-center gap-1">
+          {currentPage>1&&<button type="button" aria-label="Переименовать текущую страницу"
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{
+              const found=renameCurrentPage(editor.state.doc,editor.state.selection.from,"");
+              if(!found)return;
+              const current=String(editor.state.doc.nodeAt(found.pos)?.attrs.label||"");
+              setPageRename({pos:found.pos,label:current});
+            }}>Название страницы</button>}
+          {pagePositions.length>1&&<select aria-label="Выбрать страницу" value={String(currentPage)}
+            onChange={event=>{const index=Number(event.target.value)-1;const pos=pagePositions[index];if(pos!==undefined)editor.chain().focus().setTextSelection(Math.min(pos,editor.state.doc.content.size)).run();}}
+            className="max-w-32 rounded-md border border-border bg-background p-1 text-xs">
+            {pageDisplayNames(editor.state.doc).map((name,index)=><option key={index} value={index+1}>{name}</option>)}
+          </select>}
+          {currentPage>1&&<button type="button" aria-label="Объединить с предыдущей страницей"
+            className="rounded-md border px-2 py-1 text-xs" onClick={()=>{
+              const pos=currentPageBreakPos(editor.state.doc,editor.state.selection.from);
+              if(pos===undefined)return;
+              editor.view.dispatch(editor.state.tr.delete(pos,pos+1).scrollIntoView());
+            }}>Объединить страницы</button>}
+          <button type="button" aria-label="Добавить пустую страницу перед текущей" className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!insertBlankPageBefore(editor))toast("Не удалось добавить страницу");}}>Страница перед +</button>
+          <button type="button" aria-label="Разделить страницу в месте курсора"
+            title="Создать следующую страницу с текста после курсора"
+            className="rounded-md border px-2 py-1 text-xs"
+            onMouseDown={event=>event.preventDefault()}
+            onClick={()=>{if(!splitPageAtCaret(editor))toast("Поставьте курсор внутри обычного абзаца страницы");}}>Разделить здесь</button>
+          <button type="button" aria-label="Объединить со следующей страницей" disabled={currentPage>=pagePositions.length}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>{if(!mergeCurrentPageWithNext(editor))toast("Не удалось объединить страницы");}}>Со след. объединить</button>
+          <button type="button" aria-label="Добавить пустую страницу после текущей" className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!insertBlankPageAfter(editor))toast("Не удалось добавить страницу");}}>Страница +</button>
+          <button type="button" aria-label="Удалить пустую текущую страницу" disabled={currentPage<=1}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>{if(!removeEmptyCurrentPage(editor))toast("Удалить можно только пустую страницу");}}>Пустую −</button>
+          <button type="button" aria-label="Удалить все пустые страницы"
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{const count=removeAllEmptyPages(editor);if(count)toast.success("Удалено пустых страниц: "+count);else toast("Пустых страниц нет");}}>
+            Убрать пустые
+          </button>
+          <button type="button" aria-label="Дублировать текущую страницу" className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!duplicateCurrentPage(editor))toast("Не удалось дублировать страницу");}}>Копия страницы</button>
+          <button type="button" aria-label="Переместить страницу выше" disabled={currentPage<=2}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>moveCurrentPage(editor,"up")}>Стр. ↑</button>
+          <button type="button" aria-label="Переместить страницу ниже" disabled={currentPage<=1||currentPage>=pagePositions.length}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>moveCurrentPage(editor,"down")}>Стр. ↓</button>
+            </div>
+          </details>
+          <details className="w-full sm:w-auto">
+            <summary className="cursor-pointer select-none rounded-md border px-3 py-1 text-xs font-medium">Блоки · управление</summary>
+            <div className="mt-2 flex flex-wrap items-center gap-1">
+          <button type="button" aria-label="Поднять блок или группу" className="rounded-md border px-2 py-1 text-xs"
+            title="Переместить блок или выделенную группу вверх" onClick={()=>moveSelectedWaveBlock(editor,"up")}>↑</button>
+          <button type="button" aria-label="Опустить блок или группу" className="rounded-md border px-2 py-1 text-xs"
+            title="Переместить блок или выделенную группу вниз" onClick={()=>moveSelectedWaveBlock(editor,"down")}>↓</button>
+          <button type="button" aria-label="Увеличить отступ пункта нумерованного или маркированного списка"
+            title="Создать вложенный уровень списка, сохранив нумерацию"
+            onMouseDown={event=>event.preventDefault()}
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!editor.chain().focus().sinkListItem("listItem").run())toast("Установите курсор в пункт списка");}}>Список ↘</button>
+          <button type="button" aria-label="Уменьшить отступ пункта нумерованного или маркированного списка"
+            title="Вернуть пункт списка на внешний уровень"
+            onMouseDown={event=>event.preventDefault()}
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!editor.chain().focus().liftListItem("listItem").run())toast("Установите курсор во вложенный пункт списка");}}>Список ↗</button>
+          <button type="button" aria-label="Перенести блок на предыдущую страницу"
+            className="rounded-md border px-2 py-1 text-xs"
+            title="Перенести блок или выделенную группу на предыдущую страницу, сохранив вложения"
+            onMouseDown={event=>event.preventDefault()}
+            onClick={()=>{if(!moveWaveBlocksToAdjacentPage(editor,"previous"))toast("Выберите блок на странице после первой");}}>⇤ Стр.</button>
+          <button type="button" aria-label="Перенести блок на следующую страницу"
+            className="rounded-md border px-2 py-1 text-xs"
+            title="Перенести блок или выделенную группу на следующую страницу, сохранив вложения"
+            onMouseDown={event=>event.preventDefault()}
+            onClick={()=>{if(!moveWaveBlocksToAdjacentPage(editor,"next"))toast("Выберите блок перед следующей страницей");}}>Стр. ⇥</button>
+          <button type="button" aria-label="Вложить блок в раздел" title="Переместить блок в предыдущий раздел"
+            className="rounded-md border px-2 py-1 text-xs" onClick={()=>nestSelectedWaveBlock(editor)}>↘</button>
+          <button type="button" aria-label="Дублировать блок или группу"
+            className="rounded-md border px-2 py-1 text-xs" title="Дублировать блок или выделенную группу" onClick={()=>duplicateSelectedWaveBlock(editor)}>⧉</button>
+          <select aria-label="Изменить тип информационного блока" defaultValue=""
+            className="max-w-32 rounded-md border border-border bg-background px-1 py-1 text-xs"
+            onChange={event=>{
+              const kind=event.target.value as CalloutKind;
+              if(!setSelectedCalloutKind(editor,kind))toast("Поместите курсор внутрь информационного блока");
+              event.target.value="";
+            }}>
+            <option value="" disabled>Тип блока</option>
+            <option value="important">Важно</option>
+            <option value="tip">Совет</option>
+            <option value="warning">Предупреждение</option>
+            <option value="info">Информация</option>
+          </select>
+          <button type="button" aria-label="Переместить раздел вверх" title="Переместить весь раздел вверх" className="rounded-md border px-2 py-1 text-xs" onClick={()=>moveContainingWaveSection(editor,"up")}>Раздел ↑</button>
+          <button type="button" aria-label="Переместить раздел вниз" title="Переместить весь раздел вниз" className="rounded-md border px-2 py-1 text-xs" onClick={()=>moveContainingWaveSection(editor,"down")}>Раздел ↓</button>
+          <button type="button" aria-label="Дублировать раздел" title="Дублировать раздел со всеми блоками" className="rounded-md border px-2 py-1 text-xs" onClick={()=>duplicateContainingWaveSection(editor)}>Раздел ⧉</button>
+          <button type="button" aria-label="Вынести блок из раздела" title="Вынести блок из вложенного раздела" className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>liftWaveBlock(editor,()=>selectedWaveBlockPos(editor))}>↗</button>
+            </div>
+          </details>
+        </div>}
+        {outlineOpen&&<div className="mt-2 max-h-48 overflow-y-auto rounded-xl border border-border bg-card p-2"
+          role="navigation" aria-label="Оглавление заметки">
+          {editor&&countFoldSections(editor)>0&&<div className="mb-2 flex gap-2 px-2">
+            <button type="button" onClick={()=>setAllFoldSections(editor,false)}
+              className="rounded-md border px-2 py-1.5 text-xs">Раскрыть все</button>
+            <button type="button" onClick={()=>setAllFoldSections(editor,true)}
+              className="rounded-md border px-2 py-1.5 text-xs">Свернуть все</button>
+            <button type="button" onClick={()=>setFoldSectionsToDepth(editor,1)}
+              className="rounded-md border px-2 py-1.5 text-xs">Уровень 1</button>
+            <button type="button" onClick={()=>setFoldSectionsToDepth(editor,2)}
+              className="rounded-md border px-2 py-1.5 text-xs">Уровень 2</button>
+          </div>}
+          <div className="mb-2 flex gap-2 px-2">
+            <input type="search" aria-label="Поиск по оглавлению" placeholder="Найти раздел…"
+              value={outlineQuery} onChange={e=>setOutlineQuery(e.target.value)} maxLength={100}
+              className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs"/>
+            <select aria-label="Тип элемента оглавления" value={outlineFilter}
+              onChange={e=>setOutlineFilter(e.target.value as OutlineFilter)}
+              className="max-w-28 rounded-md border border-border bg-background px-1 text-xs">
+              <option value="all">Все</option><option value="heading">Заголовки</option>
+              <option value="fold">Разделы</option><option value="page">Страницы</option>
+            </select>
+          </div>
+          <p className="px-2 pb-1 text-xs text-muted-foreground">Заголовки и разделы</p>
+          {outline.length===0?<p className="px-2 py-3 text-xs text-muted-foreground">Добавьте заголовок или сворачиваемый раздел.</p>:
+            outline.map(item=><button key={item.pos} type="button"
+              className="block w-full truncate rounded-lg px-3 py-2 text-left text-xs hover:bg-secondary"
+              style={{paddingLeft:Math.min(item.depth,5)*8+8}}
+              onClick={()=>{
+                if(!editor)return;
+                revealOutlinePosition(editor,Math.min(editor.state.doc.content.size,item.pos+(item.type==="page"?0:1)));
+                const targetPos=Math.min(editor.state.doc.content.size,item.pos+(item.type==="page"?0:1));
+                try{const dom=editor.view.domAtPos(targetPos).node;const el=dom instanceof Element?dom:dom.parentElement;el?.scrollIntoView({block:"nearest",behavior:"smooth"});}catch{/* the editor still moved the selection */}
+              }}>
+              {item.type==="page"?"▤ ":item.type==="fold"?"▸ ":"§ "}{item.title}
+            </button>)}
+        </div>}
+        {findOpen && <div role="search" aria-label="Поиск внутри заметки"
+          className="mt-2 flex min-w-0 items-center gap-1 rounded-xl border border-border bg-secondary/50 px-2 py-1.5">
+          <Search className="h-4 w-4 shrink-0 text-muted-foreground"/>
+          <input aria-label="Искать слово" autoFocus maxLength={100} placeholder="Найти слово…"
+            value={findQuery} onChange={e=>{const q=e.target.value;setFindQuery(q);setFindActive(0);setSearchDecoration(q,0);}}
+            className="min-w-0 flex-1 bg-transparent text-sm outline-none"/>
+          <span aria-live="polite" className="shrink-0 text-[10px] text-muted-foreground">{findQuery?(hits.length?`${findActive+1}/${hits.length}`:"0/0"):"—"}</span>
+          <button type="button" disabled={!hits.length} onClick={()=>stepFind(-1)} aria-label="Предыдущее совпадение" className="grid h-8 w-8 shrink-0 place-items-center disabled:opacity-30"><ChevronUp className="h-4 w-4"/></button>
+          <button type="button" disabled={!hits.length} onClick={()=>stepFind(1)} aria-label="Следующее совпадение" className="grid h-8 w-8 shrink-0 place-items-center disabled:opacity-30"><ChevronDown className="h-4 w-4"/></button>
+          <input aria-label="Заменить на" placeholder="Заменить на…" value={findReplacement}
+            maxLength={500} onChange={e=>setFindReplacement(e.target.value)}
+            className="w-20 min-w-0 rounded-md border border-border bg-background p-1 text-xs"/>
+          <button type="button" disabled={!hits.length} onClick={()=>{
+            if(!editor)return;
+            if(replaceOneInNote(editor,findQuery,findReplacement,findActive,prefs.caseSensitive))
+              setFindActive(0);
+          }} aria-label="Заменить совпадение" className="rounded-md border border-border px-2 py-1 text-xs disabled:opacity-30">Заменить</button>
+          <button type="button" disabled={!hits.length} onClick={()=>{
+            if(!editor)return;
+            const changed=replaceAllInNote(editor,findQuery,findReplacement,prefs.caseSensitive);
+            if(changed){setFindActive(0);toast.success(`Заменено: ${changed}`);}
+          }} aria-label="Заменить все совпадения" className="rounded-md border border-border px-2 py-1 text-xs disabled:opacity-30">Все</button>
+          <button type="button" onClick={dismissFind} aria-label="Закрыть поиск" className="grid h-8 w-8 shrink-0 place-items-center"><X className="h-4 w-4"/></button>
+        </div>}
       </div>
 
       {/* ROW 3: Style bar — font / size / color / bg (always visible) */}
@@ -504,7 +1358,7 @@ function EditorPage() {
             <div className="glass grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] items-center gap-1.5 rounded-xl p-1.5">
               <ToolbarPopover
                 label={
-                  FONTS.find((f) => f.value === currentFontFamily)?.label ??
+                  (FONTS.find((f) => f.value === currentFontFamily)?.label ?? fontNameFromCss(currentFontFamily)) ??
                   "Шрифт"
                 }
                 icon={<Type className="h-4 w-4" />}
@@ -583,16 +1437,53 @@ function EditorPage() {
       )}
       </div>
 
+      <Dialog open={pageRename!==null} onOpenChange={open=>{if(!open)setPageRename(null);}}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader><DialogTitle>Название страницы</DialogTitle></DialogHeader>
+          <Input autoFocus aria-label="Название страницы" value={pageRename?.label??""} maxLength={80}
+            onChange={event=>setPageRename(current=>current?{...current,label:event.target.value}:null)}
+            onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();document.getElementById("wave-page-rename-save")?.click();}}}/>
+          <DialogFooter>
+            <Button variant="outline" onClick={()=>setPageRename(null)}>Отмена</Button>
+            <Button id="wave-page-rename-save" onClick={()=>{
+              if(!editor||!pageRename)return;
+              const node=editor.state.doc.nodeAt(pageRename.pos);
+              if(node?.type.name!=="wavePageBreak"){toast.error("Страница была изменена");setPageRename(null);return;}
+              editor.view.dispatch(editor.state.tr.setNodeMarkup(pageRename.pos,undefined,{...node.attrs,label:pageRename.label.trim()}));
+              setPageRename(null);
+            }}>Сохранить</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Editor — flexes to fill remaining height, shrinks when toolbar expands */}
       <main className="mx-auto flex w-full min-h-0 max-w-xl flex-1 flex-col px-3 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-3">
         <div
           className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border p-3 shadow-inner transition-colors [-webkit-overflow-scrolling:touch]"
-          style={{ background: canvasBg }}
+          style={{ backgroundColor: canvasBg, ...paperAppearance(paperMood,paperRule) }}
+          onKeyDownCapture={event=>{
+            if(slashText===null||event.nativeEvent.isComposing)return;
+            if(event.key==="Escape"){
+              event.preventDefault();event.stopPropagation();setSlashText(null);return;
+            }
+            if(!visibleSlashChoices.length)return;
+            if(event.key==="ArrowDown"||event.key==="ArrowUp"){
+              event.preventDefault();event.stopPropagation();
+              setSlashActive(current=>nextSlashIndex(visibleSlashChoices.length,current,event.key==="ArrowDown"?1:-1));
+            }else if(event.key==="Enter"){
+              event.preventDefault();event.stopPropagation();
+              chooseBlock(visibleSlashChoices[Math.min(slashActive,visibleSlashChoices.length-1)].id);
+            }
+          }}
         >
-          <EditorContent editor={editor} />
+          <EditorContent editor={editor} style={{
+            "--wave-note-caret": noteCaretColor(canvasBg),
+            "--wave-find-contrast": noteCaretColor(canvasBg),
+            "--wave-note-ink": editorInk(isNew,note?.style?.color),
+          } as React.CSSProperties} />
         </div>
         <p className="mt-2 shrink-0 text-center font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-          {t("save")} · {t("done")}
+          {t("save")}
         </p>
       </main>
 

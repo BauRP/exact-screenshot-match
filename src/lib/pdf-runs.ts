@@ -112,6 +112,31 @@ function pick(run: RunStyle): RunStyle {
   return out;
 }
 
+/** Replace a selection with text, preserving formatting of untouched runs. */
+export function replaceAt(
+  runs: FullRun[], start: number, end: number, text: string, style: RunStyle,
+): FullRun[] {
+  const length = runsText(runs).length;
+  const from = Math.max(0, Math.min(length, Math.min(start, end)));
+  const to = Math.max(from, Math.min(length, Math.max(start, end)));
+  const pieces = splitAt(splitAt(runs, from), to);
+  const out: FullRun[] = [];
+  let pos = 0;
+  let inserted = false;
+  for (const part of pieces) {
+    const partStart = pos;
+    pos += part.text.length;
+    if (!inserted && partStart >= from) {
+      if (text) out.push({ ...style, text });
+      inserted = true;
+    }
+    if (partStart >= from && pos <= to) continue;
+    out.push(part);
+  }
+  if (!inserted && text) out.push({ ...style, text });
+  return normalize(out);
+}
+
 export function insertAt(runs: FullRun[], offset: number, text: string, style: RunStyle): FullRun[] {
   const split = splitAt(runs, offset);
   const out: FullRun[] = [];
@@ -139,12 +164,15 @@ export function compactRuns(overlay: PdfTextOverlay, runs: FullRun[]): PdfTextRu
   });
 }
 
-export function runCss(run: RunStyle, viewScale: number): Record<string, string> {
+export type PdfSourceFace = { fontFamily?: string; cssFamily?: string; bold?: boolean; italic?: boolean };
+export function runCss(run: RunStyle, viewScale: number, source?: PdfSourceFace): Record<string, string> {
+  const usesSource = !!source?.cssFamily && source.fontFamily === run.fontFamily &&
+    !!source.bold === run.bold && !!source.italic === run.italic;
   return {
-    "font-size": `${Math.max(run.fontSize * viewScale, 6)}px`,
-    "font-family": fontCss(run.fontFamily),
-    "font-weight": run.bold ? "700" : "400",
-    "font-style": run.italic ? "italic" : "normal",
+    "font-size": `${run.fontSize * viewScale}px`,
+    "font-family": usesSource ? source!.cssFamily! : fontCss(run.fontFamily),
+    "font-weight": usesSource ? "400" : run.bold ? "700" : "400",
+    "font-style": usesSource ? "normal" : run.italic ? "italic" : "normal",
     "text-decoration": run.underline ? "underline" : "none",
     color: run.color,
   };
@@ -156,10 +184,10 @@ function escapeHtml(text: string) {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export function renderRunsInto(node: HTMLElement, runs: FullRun[], viewScale: number) {
+export function renderRunsInto(node: HTMLElement, runs: FullRun[], viewScale: number, source?: PdfSourceFace) {
   node.innerHTML = runs
     .map((run, i) => {
-      const css = Object.entries(runCss(run, viewScale))
+      const css = Object.entries(runCss(run, viewScale, source))
         .map(([k, v]) => `${k}:${v.replace(/"/g, "'")}`)
         .join(";");
       return `<span data-r="${i}" style="${css}">${escapeHtml(run.text)}</span>`;
@@ -179,7 +207,9 @@ export function readRunsFromDom(node: HTMLElement, rendered: FullRun[], fallback
       const idx = Number(host.dataset.r);
       if (rendered[idx]) lastStyle = pick(rendered[idx]);
     }
-    const text = (current.textContent ?? "").replace(/\n/g, " ");
+    // A real newline is part of the document, not a space. Mobile keyboard
+    // insertParagraph is handled explicitly, so each editable run remains text.
+    const text = current.textContent ?? "";
     if (text) out.push({ ...lastStyle, text });
     current = walker.nextNode();
   }
@@ -200,6 +230,42 @@ export function getSelectionOffsets(node: HTMLElement): { start: number; end: nu
   const a = measure(range.startContainer, range.startOffset);
   const b = measure(range.endContainer, range.endOffset);
   return { start: Math.min(a, b), end: Math.max(a, b) };
+}
+
+/** Fallback for Android WebViews without a reliable caretRangeFromPoint.
+ * Measures the rendered characters in the tapped PDF text box and picks the
+ * visually nearest insertion point, instead of jumping to the end.
+ */
+export function nearestTextOffset(node: HTMLElement, x: number, y: number): number | null {
+  const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  let current = walker.nextNode();
+  let position = 0;
+  let bestOffset: number | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  let examined = 0;
+
+  while (current && examined < 800) {
+    const length = current.textContent?.length ?? 0;
+    for (let index = 0; index < length && examined < 800; index += 1) {
+      range.setStart(current, index);
+      range.setEnd(current, index + 1);
+      const rect = range.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        const middle = (rect.left + rect.right) / 2;
+        const deltaY = y < rect.top ? rect.top - y : y > rect.bottom ? y - rect.bottom : 0;
+        const distance = Math.abs(x - middle) + deltaY * 5;
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestOffset = position + index + (x >= middle ? 1 : 0);
+        }
+      }
+      examined += 1;
+    }
+    position += length;
+    current = walker.nextNode();
+  }
+  return bestOffset;
 }
 
 export function setSelectionOffsets(node: HTMLElement, start: number, end: number) {

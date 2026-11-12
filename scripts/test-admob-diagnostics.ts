@@ -1,0 +1,22 @@
+import { strict as assert } from "node:assert";
+const settings = await Bun.file("src/routes/settings.tsx").text();
+const diagPanel = await Bun.file("src/components/AdMobDiagnosticsPanel.tsx").text();
+const diagnostics = await Bun.file("src/lib/ad-diagnostics.ts").text();
+const native = await Bun.file("src/lib/native-ads.ts").text();
+const workflow = await Bun.file(".github/workflows/android-build.yml").text();
+
+assert.match(settings, /VITE_ADMOB_DIAGNOSTICS === "true"/);
+assert.match(settings, /VITE_ADMOB_LIVE_ADS !== "true"/);
+assert.match(settings, /<AdMobDiagnosticsPanel/);
+assert.doesNotMatch(settings, /Состояние:.*загрузок:/);
+assert.match(diagPanel, /requestAdRetry\(\);\s*onGoHome\(\)/);
+assert.match(diagPanel, /Что делать:/);
+assert.match(diagPanel, /Технические сведения:/);
+assert.match(diagnostics, /let pendingRetry = false/);
+assert.match(diagnostics, /pendingRetry = true/);
+assert.match(diagnostics, /export function consumePendingAdRetry\(\)/);
+assert.match(native, /window\.addEventListener\("supernotes-admob-retry", onRetry\)/);
+assert.match(native, /if \(consumePendingAdRetry\(\)\) onRetry\(\)/);
+assert.match(native, /const onRetry = \(\) => \{\s*consumePendingAdRetry\(\)/);
+assert.match(workflow, /VITE_ADMOB_DIAGNOSTICS: "true"/);
+console.log("Developer-only AdMob diagnostics and queued settings->home retry verified.");

@@ -1,0 +1,12 @@
+import {strict as assert} from "node:assert";
+import {wordParagraph} from "../src/lib/note-export";
+import {readFileSync} from "node:fs";
+assert.ok(wordParagraph("текст",false,true).includes('<w:bidi w:val="1"/>'));
+assert.ok(wordParagraph("текст",false,true).includes('<w:jc w:val="right"/>'));
+assert.ok(!wordParagraph("text",false,false).includes("<w:bidi"));
+assert.ok(wordParagraph("heading",true,true).includes("Heading1"));
+const code=readFileSync("src/lib/note-export.ts","utf8");
+assert.ok(code.includes('Number(parent.getAttribute("start")||1)'));
+assert.ok(code.includes("Array.from(parent.children).indexOf(el)"));
+assert.ok(code.includes("wordParagraph(docxRun(listPrefix)+inlineWord(node)"));
+console.log("Offline DOCX RTL direction, headings and numbered lists passed");

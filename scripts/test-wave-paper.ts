@@ -1,0 +1,18 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+import {PAPER_MOODS,PAPER_RULES,paperAppearance,validPaperMood,validPaperRule} from "../src/lib/note-paper";
+assert.equal(PAPER_MOODS.length,5);
+assert.equal(PAPER_RULES.length,4);
+assert.ok(validPaperMood("mist"));
+assert.ok(!validPaperMood("malicious"));
+assert.ok(validPaperRule("grid"));
+assert.ok(paperAppearance("mist","lined").backgroundImage?.includes("repeating-linear-gradient"));
+assert.ok(paperAppearance("sage","grid").backgroundImage?.includes("linear-gradient"));
+assert.ok(paperAppearance("solid","plain").backgroundImage===undefined);
+const e=readFileSync("src/routes/editor.$id.tsx","utf8");
+assert.ok(e.includes('aria-label="Оформление листа"'));
+assert.ok(e.includes('aria-label="Разметка бумаги"'));
+assert.ok(e.includes('setPaperMood("solid")'));
+assert.ok(e.includes("paperAppearance(paperMood,paperRule)"));
+assert.ok(e.includes("style: { background: canvasBg, paperMood, paperRule }"));
+console.log("Separated note background and paper ruling persistence checks passed.");
