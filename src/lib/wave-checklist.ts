@@ -1,5 +1,5 @@
 import { Node, mergeAttributes } from "@tiptap/core";
-import {continueSelectedChecklistItem} from "./wave-checklist-actions";
+import {continueSelectedChecklistItem,toggleWaveChecklistAtPosition} from "./wave-checklist-actions";
 export type CheckShape="square"|"circle"|"diamond"|"check";
 const valid=(shape:string):shape is CheckShape=>["square","circle","diamond","check"].includes(shape);
 /** The checkbox is real saved document data. The DOM marker is only its UI.
@@ -10,18 +10,18 @@ export const WaveChecklistItem=Node.create({
  priority:1100,
  addKeyboardShortcuts(){
   return {"Mod-Shift-Enter":()=>{
+    if(!this.editor.isEditable||this.editor.isDestroyed||!this.editor.state.selection.empty)return false;
     const {$from}=this.editor.state.selection;
     if($from.parent.type.name!=="waveChecklistItem")return false;
     const at=$from.after();
     return this.editor.chain().focus().insertContentAt(at,{type:"waveChecklistItem",
-      attrs:{shape:$from.parent.attrs.shape,done:false},content:[]}).setTextSelection(at+1).run();
+      attrs:{...$from.parent.attrs,done:false},content:[]}).setTextSelection(at+1).run();
    },"Mod-Enter":()=>{
-    const {$from}=this.editor.state.selection;
-    if($from.parent.type.name!=="waveChecklistItem")return false;
-    const pos=$from.before();
-    const node=$from.parent;
-    this.editor.view.dispatch(this.editor.state.tr.setNodeMarkup(pos,undefined,{...node.attrs,done:!node.attrs.done}));
-    return true;
+    const {selection}=this.editor.state,{$from,$to}=selection;
+    if($from.parent.type.name!=="waveChecklistItem"||
+       $to.parent.type.name!=="waveChecklistItem"||
+       $from.before()!==$to.before())return false;
+    return toggleWaveChecklistAtPosition(this.editor,$from.before());
    },Enter:()=>{
     const {$from}=this.editor.state.selection;
     if($from.parent.type.name!=="waveChecklistItem")return false;
@@ -54,6 +54,7 @@ export const WaveChecklistItem=Node.create({
     root.dataset.done=current.attrs.done?"true":"false";
     root.dataset.shape=valid(current.attrs.shape)?current.attrs.shape:"square";
     button.setAttribute("aria-pressed",current.attrs.done?"true":"false");
+    button.setAttribute("aria-label",current.attrs.done?"Снять отметку о выполнении":"Отметить задачу выполненной");
     button.textContent=current.attrs.done?"✓":({square:"□",circle:"○",diamond:"◇",check:"✓"}[root.dataset.shape||"square"]||"□");
    };
    paint();
@@ -62,7 +63,7 @@ export const WaveChecklistItem=Node.create({
      e.preventDefault();e.stopPropagation();
      const pos=typeof getPos==="function"?getPos():undefined;
      if(typeof pos!=="number")return;
-     editor.view.dispatch(editor.view.state.tr.setNodeMarkup(pos,undefined,{...current.attrs,done:!current.attrs.done}));
+     toggleWaveChecklistAtPosition(editor,pos);
    });
    return {
     dom:root,contentDOM:content,

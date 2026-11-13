@@ -59,6 +59,21 @@ function selectedChecklistRows(editor:Editor):{pos:number;node:PMNode}[]{
 
 /** Change the saved marker of one or more selected tasks as ONE undoable edit.
  * Preserve inline formatting, direction, completion flags and task text. */
+/** A stale checkbox NodeView or a locked editor must never alter saved tasks.
+ * Always use the current ProseMirror node rather than cached DOM state. */
+export function toggleWaveChecklistAtPosition(editor:Editor,pos:number):boolean{
+ if(!editor.isEditable||editor.isDestroyed||!Number.isInteger(pos)||
+    pos<0||pos>=editor.state.doc.content.size)return false;
+ const {state,view}=editor;
+ const node=state.doc.nodeAt(pos);
+ if(node?.type.name!=="waveChecklistItem")return false;
+ const $pos=state.doc.resolve(pos);
+ if($pos.index()>=$pos.parent.childCount||
+    waveChildOffset($pos.parent,$pos.index())!==$pos.parentOffset)return false;
+ view.dispatch(state.tr.setNodeMarkup(pos,undefined,{...node.attrs,done:node.attrs.done!==true}).scrollIntoView());
+ return true;
+}
+
 export function setSelectedChecklistShape(editor:Editor,shape:CheckShape):boolean{
  if(!editor.isEditable||editor.isDestroyed||
     !["square","circle","diamond","check"].includes(shape))return false;
