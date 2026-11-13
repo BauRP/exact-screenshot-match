@@ -1,5 +1,15 @@
 # PROGRESS.md — Wave Notes / постоянный технический журнал
 
+### 2026-11-13 — №17/№18/№20: сохранность страниц и глубоких структур, успешная APK
+
+- **Код:** [0ee004b7](https://github.com/BauRP/exact-screenshot-match/commit/0ee004b78942b5319c1b4aa1dacd1aca3dad7a45). Изменены `src/lib/wave-block-motion.ts`, `src/lib/wave-blocks.ts`, `scripts/test-wave-block-actual-transactions.ts`, `scripts/test-wave-blocks.ts`. `main`, Telegram, реклама и схемы сохранённых документов не менялись.
+- **№20:** `liftWaveBlock` не поднимает маркер `wavePageBreak` из вложенного раздела, не создавая ложную страницу. `nestSelectedWaveBlock` считает вложенную глубину переносимого поддерева, а не только положение исходного блока. Функциональный тест ProseMirror проверяет отказ от шестого уровня без транзакции и возможность допустимой операции.
+- **№17:** кнопка вложенного раздела в `WaveFold` учитывает действующий лимит пяти уровней, предотвращая неограниченную вложенность через UI.
+- **№18:** изменение типа информационного блока не меняет только первый блок при выделении через две выноски или обычный текст; при одном блоке сохраняет существующую работу. Тест проверяет документ и количество транзакций.
+- **CI:** [Android APK #43378079390](https://github.com/BauRP/exact-screenshot-match/actions/runs/43378079390), кодовый SHA `0ee004b78942b5319c1b4aa1dacd1aca3dad7a45` — **completed/success**. Прошли web build, TypeScript, редакторские тесты, Gradle, проверка и публикация debug APK. Артефакт `Wave-Notes-debug-APK`, ID `14014994284` (ZIP с APK). Это автоматическая проверка, а не установка на телефон.
+- **Оценка:** №17 91→91,5% (+0,5 п.п.), №18 79→79,5% (+0,5 п.п.), №20 72→72,5% (+0,5 п.п.), остальные 33 +0; суммарно **79,77→79,81%** (+1,5/36≈+0,0417 п.п.). Детальная таблица обновлена в `docs/wave-notes-feature-progress.md`. Дальше №23, №22, №29 и №20, с приоритетом доказанных рисков сохранения данных.
+
+
 ### 2026-11-13 — №3/№7/№22/№23/№29: подтверждённая APK и прирост 36 направлений
 
 - **Кодовые изменения:** [0bfb0f82](https://github.com/BauRP/exact-screenshot-match/commit/0bfb0f825c5fabcd9de89306e187297ca9d4834c) (чек-листы), [6b87d190](https://github.com/BauRP/exact-screenshot-match/commit/6b87d190e2d2ceedd9b7869be86c60e7ddcfdd01) (рисунки и разметка), тестовые коррекции [9fa12139](https://github.com/BauRP/exact-screenshot-match/commit/9fa121397eae00f6acc524239571f152fc26682b) и [2d9029e9](https://github.com/BauRP/exact-screenshot-match/commit/2d9029e9be1a639dc3943a10eed0fc5abb3a743d). 4 исходных файла и профильные тесты; Android overlay, Telegram, реклама и main не затрагивались.
