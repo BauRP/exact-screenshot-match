@@ -57,7 +57,7 @@ assert.ok(canvas.includes("  move(e);\n  e.preventDefault();gesture.current=null
  "Pointer-up must incorporate the final finger location before the ink is saved");
 assert.ok(canvas.includes("past.current=before.past;future.current=before.future"),"Cancel must preserve Undo/Redo history");
 assert.ok(canvas.includes('inkStrokeIndicesAlong(current.current,previous??point,point,eraserRadius)'),"Tapped eraser must not leave hidden overlapping strokes");
-assert.ok(canvas.includes('inkStrokeIndicesAlong(current.current,previous,point,eraserRadius)'));
+assert.ok(canvas.includes('previous??point'),"The same eraser path handles taps and swipes");
 assert.ok(canvas.includes('[8,16,28,40]'));
 for(const color of ["#7c3aed","#0d9488","#ca8a04","#64748b","#f97316","#be185d"]){
  const colored={...line,color};
