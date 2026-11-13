@@ -116,7 +116,14 @@ export const WaveFold=Node.create({
    child.addEventListener("click",e=>{
      e.preventDefault();e.stopPropagation();
      const pos=position();
-     if(typeof pos!=="number"||!editor.isEditable)return;
+     if(typeof pos!=="number"||!editor.isEditable||editor.isDestroyed)return;
+     // Match the five-level nesting limit of the section move commands.
+     const $at=editor.state.doc.resolve(pos);
+     let ancestors=0;
+     for(let depth=1;depth<=$at.depth;depth++){
+       if($at.node(depth).type.name==="waveFold")ancestors++;
+     }
+     if(ancestors>=4)return;
      const insertAt=pos+current.nodeSize-1;
      const section={type:"waveFold",attrs:{title:"Вложенный раздел",collapsed:false},
        content:[{type:"paragraph"}]};

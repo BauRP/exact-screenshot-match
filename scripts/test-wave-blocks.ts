@@ -10,6 +10,7 @@ const blocks=readFileSync("src/lib/wave-blocks.ts","utf8");
 assert.ok(blocks.includes("setNodeMarkup(pos,undefined"));
 assert.ok(blocks.includes('"data-wave-tape":"true"'));
 assert.ok(blocks.includes("classList.toggle(\"wave-tape-open\")"));
+assert.ok(blocks.includes("if(ancestors>=4)return;"),"Nested section button must respect depth limit");
 const e=readFileSync("src/routes/editor.$id.tsx","utf8");
 for(const name of ["WaveCallout,","WaveFold,","WaveTape,","Вставить блок","Скрыть выбранный ответ","Сворачиваемый раздел","Быстрое меню вставки","toggleBlockquote()"]){
  assert.ok(e.includes(name),name);

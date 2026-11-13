@@ -161,6 +161,9 @@ export function liftWaveBlock(editor:Editor,getPos:()=>number|undefined):boolean
  const index=$pos.index();
  if(index>=section.childCount||waveChildOffset(section,index)!==$pos.parentOffset)return false;
  const moving=section.child(index);
+ // A nested page divider must not be promoted to a top-level page by the
+ // generic outdent action. Page boundaries use dedicated page commands.
+ if(moving.type.name==="wavePageBreak")return false;
  const sectionStart=$pos.before($pos.depth);
  const outer=doc.resolve(sectionStart),outerIndex=outer.index();
  const before=section.content.cut(0,$pos.parentOffset);
@@ -176,6 +179,12 @@ export function liftWaveBlock(editor:Editor,getPos:()=>number|undefined):boolean
  return true;
 }
 
+/** Count the deepest WaveFold chain within a movable subtree, including its root. */
+function maxWaveFoldLevels(node:PMNode):number{
+ let deepest=0;
+ node.forEach(child=>{deepest=Math.max(deepest,maxWaveFoldLevels(child));});
+ return (node.type.name==="waveFold"?1:0)+deepest;
+}
 /** Place the selected block inside the immediately preceding folded section.
  * All node content (including images, audio references and marks) is reused.
  * ProseMirror schema validation rejects forbidden parent/child combinations. */
@@ -193,7 +202,9 @@ export function nestSelectedWaveBlock(editor:Editor):boolean{
  // Do not make a deeply nested structure unusable on a small phone.
  let nestedDepth=0;
  for(let i=0;i<=$pos.depth;i++)if($pos.node(i).type.name==="waveFold")nestedDepth++;
- if(nestedDepth>=5)return false;
+ // Include nested folds already contained in the moving block.
+ // Otherwise nesting a deep section can silently create a sixth level.
+ if(nestedDepth+1+maxWaveFoldLevels(moving)>5)return false;
  const childContent=previous.content.append(Fragment.from(moving));
  if(!previous.type.validContent(childContent))return false;
  const wrapped=previous.type.create({...previous.attrs,collapsed:false},childContent,previous.marks);
@@ -232,10 +243,12 @@ export function duplicateSelectedWaveBlock(editor:Editor):boolean{
 /** Change the highlighted callout without rebuilding paragraphs or losing marks. */
 export function setSelectedCalloutKind(editor:Editor,kind:"important"|"tip"|"warning"|"info"):boolean{
  if(!editor.isEditable||editor.isDestroyed)return false;
- const {$from}=editor.state.selection;
+ const {selection}=editor.state,{$from,$to}=selection;
  for(let depth=$from.depth;depth>0;depth--){
   const node=$from.node(depth);
   if(node.type.name!=="waveCallout")continue;
+  // Do not change only the first callout of a multi-block selection.
+  if(!selection.empty&&($to.depth<depth||$to.node(depth)!==node))return false;
   if(node.attrs.kind===kind)return false;
   const pos=$from.before(depth);
   editor.view.dispatch(editor.state.tr.setNodeMarkup(pos,undefined,{...node.attrs,kind}).scrollIntoView());
