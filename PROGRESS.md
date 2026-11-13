@@ -1,5 +1,13 @@
 # PROGRESS.md — Wave Notes / постоянный технический журнал
 
+### 2026-11-14 — №17/№20: исправлено частичное изменение выделенных разделов, APK успешна
+
+- **Код:** [ef79bdf0](https://github.com/BauRP/exact-screenshot-match/commit/ef79bdf0e9cbccbea3d8c91200b0105c3133e519), файлы `src/lib/wave-block-motion.ts`, `scripts/test-wave-block-actual-transactions.ts`, `scripts/test-wave-block-cross-pages.ts`. Заменён способ нахождения целого раздела: при непустом выделении обе его границы должны относиться к одному и тому же `waveFold`.
+- При выделении через два соседних раздела, из раздела в обычный абзац или через границу страницы команды перемещения и дублирования целого раздела теперь безопасно отказываются без записи изменений. Для выделения двух абзацев одного раздела те же действия работают и оставляют его содержимое целым. Реальные ProseMirror-тесты проверяют и отказ, и успешное перемещение/копирование.
+- **CI:** [Android APK №43511175278](https://github.com/BauRP/exact-screenshot-match/actions/runs/43511175278), SHA `ef79bdf0e9cbccbea3d8c91200b0105c3133e519`, **completed/success** (web build, TypeScript, профильные/смежные тесты, Gradle, проверка и публикация debug APK). Сохранён артефакт `Wave-Notes-debug-APK` (GitHub Actions artifact ID `14079055678`). Установка на телефон остаётся отдельным этапом пользователя и не снижает проценты программной части.
+- **Проценты:** №17 91,5→92% (+0,5 п.п.), №20 72,5→73% (+0,5 п.п.), остальные 34 +0; всего 36 направлений **79,81→79,84%** (+1/36≈0,0278 п.п.). Таблица обновлена в `docs/wave-notes-feature-progress.md`. Дальше №23/№22/№29/№20 и приоритетные риски данных. `main`, Telegram, реклама, `AGENTS.md` и `AGENTS2.md` не изменялись.
+
+
 ### 2026-11-13 — №17/№18/№20: сохранность страниц и глубоких структур, успешная APK
 
 - **Код:** [0ee004b7](https://github.com/BauRP/exact-screenshot-match/commit/0ee004b78942b5319c1b4aa1dacd1aca3dad7a45). Изменены `src/lib/wave-block-motion.ts`, `src/lib/wave-blocks.ts`, `scripts/test-wave-block-actual-transactions.ts`, `scripts/test-wave-blocks.ts`. `main`, Telegram, реклама и схемы сохранённых документов не менялись.
