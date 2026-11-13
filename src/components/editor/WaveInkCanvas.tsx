@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from "react";
 import type {PointerEvent as ReactPointerEvent} from "react";
-import {appendInkPoint,ellipseInkPoints,inkStrokeAt,inkStrokeIndicesAlong,parseInk,serializeInk,type InkPoint,type InkStroke} from "@/lib/wave-ink";
+import {appendInkPoint,ellipseInkPoints,inkStrokeIndicesAlong,parseInk,serializeInk,type InkPoint,type InkStroke} from "@/lib/wave-ink";
 
 /** Per-drawing undo/redo also works for ink layered over a photograph. */
 export function WaveInkCanvas({value,onChange,editable,active=false}:{
@@ -57,8 +57,9 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
     Math.round(Math.min(1000,Math.max(0,(e.clientY-rect.top)/Math.max(rect.height,1)*1000)))];
  };
  const erase=(point:InkPoint,previous:InkPoint|null=null)=>{
-   const hits=previous?inkStrokeIndicesAlong(current.current,previous,point,eraserRadius):
-     (()=>{const result=inkStrokeAt(current.current,point,eraserRadius);return result<0?[]:[result];})();
+   // A tap and a continuous swipe should erase the same overlapping strokes.
+   // Treat a tap as a zero-length eraser path, keeping one Undo step.
+   const hits=inkStrokeIndicesAlong(current.current,previous??point,point,eraserRadius);
    if(!hits.length)return;
    markChanged();
    const removed=new Set(hits);

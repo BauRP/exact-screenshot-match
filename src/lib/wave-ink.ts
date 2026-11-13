@@ -114,26 +114,32 @@ export function inkStrokeAlong(strokes:InkStroke[],from:InkPoint,to:InkPoint,rad
  const hits=inkStrokeIndicesAlong(strokes,from,to,radius);
  return hits.length?hits[hits.length-1]:-1;
 }
-/** Render saved vector strokes at any bounded destination size. */
+/** Render saved vector strokes with the same non-uniform SVG viewBox scaling
+ * as the editor. Photos and notebook drawings are often not square: scaling
+ * only the coordinates but not the pen thickness distorts PNG/PDF exports.
+ * save/restore isolates the transformation from any following export item. */
 export function paintInk(ctx:CanvasRenderingContext2D,encoded:string,x:number,y:number,width:number,height:number):void{
+ if(![x,y,width,height].every(Number.isFinite)||width<=0||height<=0)return;
  const strokes=parseInk(encoded);
+ if(!strokes.length)return;
  ctx.save();
- ctx.beginPath();ctx.rect(x,y,width,height);ctx.clip();
+ ctx.translate(x,y);
+ ctx.scale(width/1000,height/1000);
+ ctx.beginPath();ctx.rect(0,0,1000,1000);ctx.clip();
  for(const stroke of strokes){
   const points=stroke.points;
-  if(!points.length)continue;
   ctx.beginPath();
   ctx.strokeStyle=stroke.color;
   ctx.fillStyle=stroke.color;
   ctx.lineCap="round";ctx.lineJoin="round";
-  ctx.lineWidth=stroke.width*width/1000;
+  ctx.lineWidth=stroke.width;
   ctx.globalAlpha=stroke.tool==="marker"?0.4:1;
   for(let i=0;i<points.length;i++){
-   const px=x+points[i][0]*width/1000,py=y+points[i][1]*height/1000;
+   const [px,py]=points[i];
    if(i===0)ctx.moveTo(px,py);else ctx.lineTo(px,py);
   }
   if(points.length===1){
-   ctx.arc(x+points[0][0]*width/1000,y+points[0][1]*height/1000,ctx.lineWidth/2,0,Math.PI*2);
+   ctx.arc(points[0][0],points[0][1],stroke.width/2,0,Math.PI*2);
    ctx.fill();
   }else ctx.stroke();
  }
