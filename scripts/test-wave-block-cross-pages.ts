@@ -1,7 +1,7 @@
 import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection,NodeSelection} from "@tiptap/pm/state";
-import {moveWaveBlocksToAdjacentPage,moveSelectedWaveBlock,duplicateSelectedWaveBlock,nestSelectedWaveBlock,selectedWaveBlockPos,selectedWaveSiblingRange} from "../src/lib/wave-block-motion";
+import {moveWaveBlocksToAdjacentPage,moveSelectedWaveBlock,duplicateSelectedWaveBlock,nestSelectedWaveBlock,selectedWaveBlockPos,selectedWaveSiblingRange,moveContainingWaveSection,duplicateContainingWaveSection} from "../src/lib/wave-block-motion";
 import {readFileSync} from "node:fs";
 const schema=new Schema({nodes:{
  doc:{content:"block+"},
@@ -135,4 +135,25 @@ assert.equal(moveSelectedWaveBlock(dividerEditor,"up"),false);
 assert.equal(dividerEdits,0);
 assert.equal(dividerState.doc.child(1).type.name,"wavePageBreak");
 assert.equal(dividerState.doc.check(),undefined);
+// Moving one section while text spans two logical pages must do nothing.
+let pageSections=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
+ schema.nodes.waveFold.create(null,[p("section page one")]),divider(),
+ schema.nodes.waveFold.create(null,[p("section page two")])
+])});
+let pageSectionEdits=0;
+const pageSectionEditor={isEditable:true,isDestroyed:false,get state(){return pageSections;},
+ view:{dispatch(tr:any){pageSectionEdits++;pageSections=pageSections.apply(tr);}}} as any;
+const findSectionText=(value:string):number=>{
+ let found:number|undefined;
+ pageSections.doc.descendants((node,pos)=>{if(node.type.name==="paragraph"&&node.textContent===value)found=pos+1;});
+ assert.notEqual(found,undefined);return found!;
+};
+pageSections=pageSections.apply(pageSections.tr.setSelection(TextSelection.create(
+ pageSections.doc,findSectionText("section page one"),findSectionText("section page two")+1)));
+const savedPageSections=JSON.stringify(pageSections.doc.toJSON());
+assert.equal(moveContainingWaveSection(pageSectionEditor,"down"),false);
+assert.equal(duplicateContainingWaveSection(pageSectionEditor),false);
+assert.equal(pageSectionEdits,0);
+assert.equal(JSON.stringify(pageSections.doc.toJSON()),savedPageSections);
+assert.equal(pageSections.doc.check(),undefined);
 console.log("Nested and multi-block selections never mutate unrelated blocks or page boundaries");

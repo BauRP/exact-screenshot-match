@@ -258,11 +258,18 @@ export function setSelectedCalloutKind(editor:Editor,kind:"important"|"tip"|"war
 }
 
 /** Nearest enclosing section, including its title, child blocks and media.
- * Moving a normal paragraph uses different commands; this moves the WHOLE section. */
+ * A multi-block selection is valid only when BOTH ends are inside the SAME
+ * section. Otherwise moving/duplicating just the first section would silently
+ * affect content the user did not select and leave the other side behind. */
 export function containingWaveSectionPos(editor:Editor):number|undefined{
- const {$from}=editor.state.selection;
+ if(editor.isDestroyed)return undefined;
+ const {selection}=editor.state,{$from,$to}=selection;
  for(let depth=$from.depth;depth>0;depth--){
-  if($from.node(depth).type.name==="waveFold")return $from.before(depth);
+  const section=$from.node(depth);
+  if(section.type.name!=="waveFold")continue;
+  if(!selection.empty&&($to.depth<depth||$to.node(depth)!==section))
+   return undefined;
+  return $from.before(depth);
  }
  return undefined;
 }

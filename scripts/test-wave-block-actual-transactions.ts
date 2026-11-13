@@ -1,7 +1,7 @@
 import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection,NodeSelection} from "@tiptap/pm/state";
-import {moveSelectedWaveBlock,nestSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "../src/lib/wave-block-motion";
+import {moveSelectedWaveBlock,nestSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection,containingWaveSectionPos} from "../src/lib/wave-block-motion";
 const schema=new Schema({
  nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},
  waveFold:{group:"block",content:"block+",attrs:{title:{default:"Section"},collapsed:{default:false}}},
@@ -129,4 +129,56 @@ assert.equal(allowed.edits(),1);
 assert.equal(allowed.doc().child(0).type.name,"waveFold");
 assert.equal(allowed.doc().child(0).child(1).type.name,"waveFold");
 assert.equal(allowed.doc().check(),undefined);
+
+// Section actions must never silently move/duplicate the first fold when
+// the text selection spans two sibling folds or extends out to a paragraph.
+let crossSection=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
+ p("start"),schema.nodes.waveFold.create({title:"First"},[p("first inner"),p("first other")]),
+ schema.nodes.waveFold.create({title:"Second"},[p("second inner")]),p("end")
+])});
+let crossSectionEdits=0;
+const crossSectionEditor={isEditable:true,isDestroyed:false,get state(){return crossSection;},
+ view:{dispatch(tr:any){crossSectionEdits++;crossSection=crossSection.apply(tr);}}} as any;
+const getSectionText=(label:string):number=>{
+ let found:number|undefined;
+ crossSection.doc.descendants((node,pos)=>{
+  if(node.type.name==="paragraph"&&node.textContent===label)found=pos+1;
+ });
+ assert.notEqual(found,undefined,"missing text "+label);return found!;
+};
+const chooseSection=(a:string,b?:string)=>{
+ crossSection=crossSection.apply(crossSection.tr.setSelection(TextSelection.create(
+  crossSection.doc,getSectionText(a),b?getSectionText(b)+2:getSectionText(a))));
+};
+chooseSection("first inner","second inner");
+const originalSection=JSON.stringify(crossSection.doc.toJSON());
+assert.equal(containingWaveSectionPos(crossSectionEditor),undefined);
+assert.equal(moveContainingWaveSection(crossSectionEditor,"up"),false);
+assert.equal(duplicateContainingWaveSection(crossSectionEditor),false);
+assert.equal(crossSectionEdits,0,"Cross-section commands must not dispatch");
+assert.equal(JSON.stringify(crossSection.doc.toJSON()),originalSection);
+chooseSection("first inner","end");
+assert.equal(containingWaveSectionPos(crossSectionEditor),undefined);
+assert.equal(moveContainingWaveSection(crossSectionEditor,"down"),false);
+assert.equal(duplicateContainingWaveSection(crossSectionEditor),false);
+assert.equal(crossSectionEdits,0);
+assert.equal(JSON.stringify(crossSection.doc.toJSON()),originalSection);
+
+// A selection across two paragraphs inside ONE section still legitimately
+// moves its whole rich section as one undoable document transaction.
+chooseSection("first inner","first other");
+assert.equal(typeof containingWaveSectionPos(crossSectionEditor),"number");
+assert.equal(moveContainingWaveSection(crossSectionEditor,"up"),true);
+assert.equal(crossSectionEdits,1);
+assert.equal(crossSection.doc.child(0).type.name,"waveFold");
+assert.equal(crossSection.doc.child(0).attrs.title,"First");
+assert.equal(crossSection.doc.child(0).child(0).textContent,"first inner");
+assert.equal(crossSection.doc.child(0).child(1).textContent,"first other");
+chooseSection("first inner","first other");
+assert.equal(duplicateContainingWaveSection(crossSectionEditor),true);
+assert.equal(crossSectionEdits,2);
+assert.equal(crossSection.doc.child(1).type.name,"waveFold");
+assert.equal(crossSection.doc.child(1).attrs.title,"First");
+assert.equal(crossSection.doc.child(1).textContent,crossSection.doc.child(0).textContent);
+assert.equal(crossSection.doc.check(),undefined);
 console.log("Actual ProseMirror move, nesting, outdent and duplicate transactions passed");
