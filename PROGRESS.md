@@ -1,5 +1,15 @@
 # PROGRESS.md — Wave Notes / постоянный технический журнал
 
+### 2026-11-13 — рисунки №3/№29: пропорции штрихов и точечный ластик
+
+- **Код:** [6b87d190](https://github.com/BauRP/exact-screenshot-match/commit/6b87d190e2d2ceedd9b7869be86c60e7ddcfdd01). Изменены `src/lib/wave-ink.ts`, `src/components/editor/WaveInkCanvas.tsx`, `scripts/test-wave-ink-geometry.ts`.
+- `paintInk` при экспорте PNG/вложенной фотографии применяет ту же трансформацию непропорционального SVG viewBox, что редактор. Это предотвращает несовпадение вертикальной и горизонтальной толщины линий на прямоугольной области. Проверяется реальный набор canvas-операций, не только совпадение текста исходника.
+- Короткое касание ластиком теперь проверяет все пересекающиеся штрихи через нулевой отрезок, как непрерывный жест, а не удаляет только верхний штрих. Проверены пересекающиеся и удалённые линии.
+- [Android APK CI №43369673999](https://github.com/BauRP/exact-screenshot-match/actions/runs/43369673999) запущен на кодовом SHA `6b87d190`; **статус при записи — in_progress**, пока не считать тесты и APK пройденными.
+- Предыдущий [APK CI №43336325545](https://github.com/BauRP/exact-screenshot-match/actions/runs/43336325545) на SHA `0bfb0f82` **completed/success** (web build, TypeScript, регрессии, Android APK); №7/№22/№23 в предыдущем пакете проверены автоматически. До окончания CI нового пакета **готовность по 36 направлениям 79,70%, прирост +0 п.п.** После успешного CI оценить прирост №3/№29 и добавить его в `docs/wave-notes-feature-progress.md`.
+- Telegram, нативная реклама, `main` и Android overlay не менялись. При неуспехе CI исправить первопричину и повторить. После этой задачи продолжить другие незавершённые пункты из 36.
+
+
 ### 2026-11-13 — №7/№22/№23: защита чек-листа в режиме чтения и сохранение RTL
 
 - **Код:** [0bfb0f82](https://github.com/BauRP/exact-screenshot-match/commit/0bfb0f825c5fabcd9de89306e187297ca9d4834c). Изменены только `src/lib/wave-checklist-actions.ts`, `src/lib/wave-checklist.ts`, `scripts/test-wave-checklist-split.ts`, `scripts/test-wave-checklist.ts`.
