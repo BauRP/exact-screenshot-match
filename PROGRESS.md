@@ -1,5 +1,13 @@
 # PROGRESS.md — Wave Notes / постоянный технический журнал
 
+### 2026-11-14 — №24: оптимизация автоссылок в длинных заметках, APK успешна
+
+- **Код:** [72b2d6b5](https://github.com/BauRP/exact-screenshot-match/commit/72b2d6b5714f2b3c132462ada6e03eecd0b4b48c), файлы `src/lib/editor-extensions.ts`, `scripts/test-wave-autolink-incremental.ts`, `.github/workflows/android-build.yml`. Вместо полного обхода всех абзацев при каждом `docChanged` автоссылки находят затронутые абзацы через карты изменений ProseMirror. Добавление email/телефонов сохраняется, вне затронутых областей текст/marks не меняются, скрытое Tape не превращается в ссылку. Ручное удаление ссылки не отменяется плагином.
+- **Реальные тесты:** проверены 1500 абзацев, один изменённый в конце, незатронутые email в начале/середине, телефоны, вставка нескольких абзацев, ручное удаление ссылки, Tape. Тест подключён к обычному CI и прошёл.
+- **APK CI:** [№43626715783](https://github.com/BauRP/exact-screenshot-match/actions/runs/43626715783), SHA `72b2d6b5714f2b3c132462ada6e03eecd0b4b48c`, **completed/success**. Прошли web build, TypeScript, программные проверки, Android compile/verify и публикация debug APK `Wave-Notes-debug-APK`, артефакт ID `14126083469`. Телефонная приёмка отдельно, в незавершённую программную работу не входит.
+- **Готовность:** №24 78→78,5% (+0,5 п.п.), остальные 35 +0. Всего **79,91→79,92%**, рост +0,5/36≈0,0139 п.п. Таблица `docs/wave-notes-feature-progress.md` обновлена. Следующие приоритеты: №22/№23 списки/RTL/правописание, №29 рисунки, №20 блоки и ошибки сохранения данных. `main`, Telegram, Native Ads, PDF и `AGENTS.md`/`AGENTS2.md` не менялись.
+
+
 ### 2026-11-14 — №2/№3/№29: безопасная работа с фото и прерванным рисованием, успешная APK
 
 - **Код:** [ec1c8282](https://github.com/BauRP/exact-screenshot-match/commit/ec1c8282180fffa66ea3d85724ed7501e44d1e52). Файлы: `src/components/editor/WaveImage.tsx`, `src/components/editor/WaveInkCanvas.tsx`, `src/lib/wave-image-resize.ts`, `scripts/test-wave-image-retry-erase.ts`, `scripts/test-wave-ink-geometry.ts`.
