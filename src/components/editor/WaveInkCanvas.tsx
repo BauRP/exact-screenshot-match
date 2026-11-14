@@ -110,6 +110,9 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
  };
  const stop=(e:ReactPointerEvent<SVGSVGElement>)=>{
   if(gesture.current!==e.pointerId)return;
+  // A read-only or closed annotation tool cannot save a gesture that started
+  // while editing was allowed. Restore its exact prior ink and Undo history.
+  if(!editable||!active){cancel(e);return;}
   // Android can deliver the final coordinate only on pointerup (especially
   // for quick strokes and eraser swipes). Apply that segment before saving.
   move(e);

@@ -49,6 +49,8 @@ assert.deepEqual(parseInk(JSON.stringify([{...oval,points:oval.points.slice(0,-1
 const canvas=readFileSync("src/components/editor/WaveInkCanvas.tsx","utf8");
 assert.ok(canvas.includes('aria-label="Размер ластика"'));
 assert.ok(canvas.includes("onPointerCancel={cancel}"),"Cancelled ink must not commit an incomplete stroke");
+assert.ok(canvas.includes("if(!editable||!active){cancel(e);return;}"),
+ "Pointerup after annotation mode is closed must roll back unsaved ink");
 assert.ok(canvas.includes("appendInkPoint(last.points,point)"),"Canvas must keep sampling after 500 points");
 assert.ok(canvas.includes('role="alert"'),"An unsaved drawing must show a warning");
 assert.ok(canvas.includes("onLostPointerCapture={cancel}"),"Lost capture must release an interrupted gesture");

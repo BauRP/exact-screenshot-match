@@ -4,6 +4,7 @@ import {useEffect,useRef,useState} from "react";
 import {loadImageFile} from "@/lib/image-files";
 import {WaveInkCanvas} from "@/components/editor/WaveInkCanvas";
 import {moveWaveBlock} from "@/lib/wave-block-motion";
+import {imageWidthForDrag} from "@/lib/wave-image-resize";
 
 declare module "@tiptap/core" {
  interface Commands<ReturnType> {
@@ -15,7 +16,9 @@ function ImageView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewProp
  const id=String(node.attrs.imageId||"");
  const width=Number(node.attrs.width)||320;
  const align=(["left","center","right"].includes(String(node.attrs.align))?node.attrs.align:"center") as "left"|"center"|"right";
- const resizeStart=useRef<{x:number;width:number}|null>(null);
+ const resizeStart=useRef<{pointerId:number;x:number;width:number}|null>(null);
+ const [previewWidth,setPreviewWidth]=useState<number|null>(null);
+ const shownWidth=previewWidth??width;
  const [src,setSrc]=useState("");
  const [error,setError]=useState(false);
  const [retry,setRetry]=useState(0);
@@ -30,7 +33,7 @@ function ImageView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewProp
   return ()=>{disposed=true;if(url)URL.revokeObjectURL(url);};
  },[id,retry]);
  return <NodeViewWrapper data-image-id={id} className="wave-image-block my-3" contentEditable={false}>
-   <div className="w-full max-w-full" style={{width:width+"px",marginLeft:align==="right"?"auto":align==="center"?"auto":0,marginRight:align==="left"?"auto":align==="center"?"auto":0}}>
+   <div className="w-full max-w-full" style={{width:shownWidth+"px",marginLeft:align==="right"?"auto":align==="center"?"auto":0,marginRight:align==="left"?"auto":align==="center"?"auto":0}}>
     {src?<div className="relative aspect-auto w-full overflow-hidden rounded-xl">
       <img src={src} alt={String(node.attrs.alt||"Фото в заметке")} draggable={false} className="block h-auto w-full" />
       <div className={annotating?"absolute inset-0":"pointer-events-none absolute inset-0"}>
@@ -39,10 +42,43 @@ function ImageView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewProp
       </div>
       {editor.isEditable&&!annotating&&<div role="button" tabIndex={0} aria-label="Изменить размер фото перетаскиванием"
         className="absolute bottom-1 right-1 z-10 h-7 w-7 touch-none rounded border-2 border-white bg-primary/80 shadow"
-        onPointerDown={e=>{e.preventDefault();e.stopPropagation();resizeStart.current={x:e.clientX,width};e.currentTarget.setPointerCapture(e.pointerId);}}
-        onPointerMove={e=>{if(!resizeStart.current)return;e.preventDefault();const next=resizeStart.current.width+(e.clientX-resizeStart.current.x);updateAttributes({width:Math.max(120,Math.min(720,Math.round(next/10)*10))});}}
-        onPointerUp={e=>{resizeStart.current=null;if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);}}
-        onPointerCancel={()=>{resizeStart.current=null;}}
+        onPointerDown={e=>{
+          if(resizeStart.current||!editor.isEditable||editor.isDestroyed||
+             (e.pointerType==="mouse"&&e.button!==0))return;
+          e.preventDefault();e.stopPropagation();
+          resizeStart.current={pointerId:e.pointerId,x:e.clientX,width};
+          setPreviewWidth(width);
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }}
+        onPointerMove={e=>{
+          const drag=resizeStart.current;
+          if(!drag||drag.pointerId!==e.pointerId)return;
+          e.preventDefault();
+          setPreviewWidth(imageWidthForDrag(drag.width,drag.x,e.clientX));
+        }}
+        onPointerUp={e=>{
+          const drag=resizeStart.current;
+          if(!drag||drag.pointerId!==e.pointerId)return;
+          e.preventDefault();
+          const next=imageWidthForDrag(drag.width,drag.x,e.clientX);
+          resizeStart.current=null;
+          setPreviewWidth(null);
+          if(e.currentTarget.hasPointerCapture(e.pointerId))
+            e.currentTarget.releasePointerCapture(e.pointerId);
+          // One document edit and one Undo entry per completed drag.
+          if(editor.isEditable&&!editor.isDestroyed&&next!==width)updateAttributes({width:next});
+        }}
+        onPointerCancel={e=>{
+          if(resizeStart.current?.pointerId!==e.pointerId)return;
+          resizeStart.current=null;setPreviewWidth(null);
+          if(e.currentTarget.hasPointerCapture(e.pointerId))
+            e.currentTarget.releasePointerCapture(e.pointerId);
+        }}
+        onLostPointerCapture={e=>{
+          if(resizeStart.current?.pointerId!==e.pointerId)return;
+          // Android system gestures are not successful image resizes.
+          resizeStart.current=null;setPreviewWidth(null);
+        }}
         onKeyDown={e=>{if(e.key==="ArrowLeft"||e.key==="ArrowRight"){e.preventDefault();updateAttributes({width:Math.max(120,Math.min(720,width+(e.key==="ArrowLeft"?-20:20)))})}}}/>
       }
     </div>:
@@ -53,7 +89,7 @@ function ImageView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewProp
       <label className="flex items-center gap-2 text-xs text-muted-foreground">
         Ширина <input type="range" min={120} max={720} step={20} value={width}
           aria-label="Ширина фотографии" onChange={e=>updateAttributes({width:Number(e.target.value)})}/>
-        <span>{width}px</span>
+        <span>{shownWidth}px</span>
       </label>
       <select aria-label="Расположение фотографии" value={align}
         onChange={e=>updateAttributes({align:e.target.value})}
