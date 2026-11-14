@@ -146,34 +146,41 @@ export function continueSelectedChecklistItem(editor:Editor):boolean{
  return true;
 }
 
-/** Return the innermost containing section, never a sibling section. This is
- * pure document traversal; the selection stays exactly where the user left it. */
-export function selectedSectionTaskCounts(editor:Editor):ChecklistCounts|undefined{
- if(editor.isDestroyed)return undefined;
- const {$from}=editor.state.selection;
+/** The section-scoped toolbar is meaningful only when the whole selection
+ * belongs to the SAME innermost section. A range across two sections, from
+ * a section into plain text or into a different nested section must not
+ * silently mark the first section's tasks as completed. */
+function selectedChecklistSection(editor:Editor):{node:PMNode;pos:number}|undefined{
+ const {selection}=editor.state,{$from,$to}=selection;
  for(let depth=$from.depth;depth>0;depth--){
   const node=$from.node(depth);
-  if(node.type.name==="waveFold")return countDocumentTasks(node);
+  if(node.type.name!=="waveFold")continue;
+  if(!selection.empty&&($to.depth<depth||$to.node(depth)!==node))
+   return undefined;
+  return {node,pos:$from.before(depth)};
  }
  return undefined;
 }
 
-/** Mark only tasks belonging to the innermost section containing the caret.
- * Single transaction = single Undo; all text, media and sibling tasks survive. */
+/** Return the innermost containing section; mixed-section selections have
+ * no single active section. Reading task counts never modifies the note. */
+export function selectedSectionTaskCounts(editor:Editor):ChecklistCounts|undefined{
+ if(editor.isDestroyed)return undefined;
+ const section=selectedChecklistSection(editor);
+ return section?countDocumentTasks(section.node):undefined;
+}
+
+/** Mark only tasks belonging to the innermost section containing the selection.
+ * One transaction = one Undo; all text, media and sibling tasks survive. */
 export function setSelectedSectionTasksDone(editor:Editor,done:boolean):number{
  if(!editor.isEditable||editor.isDestroyed)return 0;
- const {state}=editor,{$from}=state.selection;
- let sectionPos:number|undefined,sectionDepth=-1;
- for(let depth=$from.depth;depth>0;depth--){
-  if($from.node(depth).type.name==="waveFold"){
-   sectionDepth=depth;sectionPos=$from.before(depth);break;
-  }
- }
- if(sectionPos===undefined||sectionDepth<0)return 0;
- const section=$from.node(sectionDepth),updates:{pos:number;attrs:Record<string,unknown>}[]=[];
+ const selected=selectedChecklistSection(editor);
+ if(!selected)return 0;
+ const {state}=editor,section=selected.node,sectionPos=selected.pos;
+ const updates:{pos:number;attrs:Record<string,unknown>}[]=[];
  section.descendants((node,pos)=>{
   if(node.type.name==="waveChecklistItem"&&node.attrs.done!==done)
-   updates.push({pos:sectionPos!+1+pos,attrs:{...node.attrs,done}});
+   updates.push({pos:sectionPos+1+pos,attrs:{...node.attrs,done}});
  });
  if(!updates.length)return 0;
  let tr=state.tr;
