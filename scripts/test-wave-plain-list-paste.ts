@@ -37,3 +37,15 @@ for(const unsafe of [
  "- root\n  - [x] nested checklist",
  "- root\n\t- tab"
 ])assert.equal(structuredPlainClipboardHtml(unsafe),"","Ambiguous nesting must paste as unchanged text");
+
+// Preserving the literal original matters more than silently changing
+// numbered markers such as "01." to ordinary "1." during import.
+for(const source of [
+ "01. First\n02. Second",
+ " 01. A\n 02. B",
+ "1. Parent\n  01. Padded child\n  02. Another",
+ "- Root\n  01. Numbered child\n  02. Another"
+])assert.equal(structuredPlainClipboardHtml(source),"",
+ "Zero-padded numbering must retain the user's original plain text");
+assert.equal(structuredPlainClipboardHtml("4. Fourth\n5. Fifth"),
+ '<ol start="4"><li><p>Fourth</p></li><li><p>Fifth</p></li></ol>');

@@ -12,6 +12,23 @@ const forbidden=new Set(["SCRIPT","STYLE","IFRAME","OBJECT","EMBED","FORM","INPU
 const textBlock=new Set(["P","DIV","H1","H2","H3","H4","H5","H6","BLOCKQUOTE","PRE"]);
 export const MAX_PASTE_HTML=250_000;
 
+/** Convert browser-normalized CSS colors into portable opaque hex markup.
+ * WebView exposes even a copied "#rrggbb" as "rgb(r, g, b)" through
+ * element.style.color. Only opaque, valid RGB is allowed; no CSS variables,
+ * named colors, transparent overlays or arbitrary pasted style expressions. */
+export function safeClipboardColor(value:string):string{
+ const input=value.trim().toLowerCase();
+ if(/^#[0-9a-f]{6}$/.test(input))return input;
+ if(/^#[0-9a-f]{3}$/.test(input))
+  return "#"+input.slice(1).split("").map(ch=>ch+ch).join("");
+ const rgb=/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})(?:\s*,\s*(1(?:\.0+)?))?\s*\)$/.exec(input);
+ if(!rgb||(!input.startsWith("rgb(")&&!rgb[4]))return "";
+ const values=rgb.slice(1,4).map(Number);
+ if(values.some(v=>v>255))return "";
+ return "#"+values.map(v=>v.toString(16).padStart(2,"0")).join("");
+}
+
+
 export function safeBrowserClipboardHtml(html:string):string{
  if(typeof html!=="string"||!html.trim()||html.length>MAX_PASTE_HTML)return "";
  const source=new DOMParser().parseFromString(html,"text/html");
@@ -77,10 +94,10 @@ export function safeBrowserClipboardHtml(html:string):string{
  }
  if(tag==="SPAN"){
    // Preserve only safe text formatting from copied browser spans.
-   const ink=element.style.color;
-   if(/^#[0-9a-f]{6}$/i.test(ink))out.style.color=ink;
-   const highlight=element.style.backgroundColor;
-   if(/^#[0-9a-f]{6}$/i.test(highlight))out.style.backgroundColor=highlight;
+   const ink=safeClipboardColor(element.style.color);
+   if(ink)out.style.color=ink;
+   const highlight=safeClipboardColor(element.style.backgroundColor);
+   if(highlight)out.style.backgroundColor=highlight;
    const size=element.style.fontSize;
    if(/^(?:[8-9]|[1-6][0-9]|7[0-2])px$/.test(size))out.style.fontSize=size;
    const weight=element.style.fontWeight;
@@ -115,7 +132,8 @@ function nestedPlainClipboardHtml(lines:readonly string[],renderInline?:(text:st
   const depth=match[1].length/2;
   const kind=/^\d/.test(match[2])?"ol":"ul";
   const number=kind==="ol"?Number(match[2].slice(0,-1)):0;
-  if(kind==="ol"&&(number<1||number>99999))return "";
+  if(kind==="ol"&&(number<1||number>99999||
+    /^0\d/.test(match[2])))return ""; // Leading zeros are significant text.
   items.push({depth,kind,number,text:match[3].trim()});
  }
  if(items[0]?.depth!==0||!items.some(item=>item.depth>0))return "";
@@ -187,6 +205,9 @@ export function structuredPlainClipboardHtml(input:string):string{
   '<div data-type="wave-check-item" data-done="'+(m![1].toLowerCase()==="x"?"true":"false")+
   '" data-shape="square"'+clipboardRtlAttribute(m![2])+'>'+escape(m![2].trim())+'</div>').join("");
  if(isNumbered){
+  // HTML <ol> does not retain "01.", "02." marker formatting.
+  // Do not silently rewrite padded numbers as 1., 2.
+  if(numberedItems.some(m=>/^0\d/.test(m![1])))return "";
   const sequence=numberedItems.map(m=>Number(m![1]));
   // Never silently replace intentional numbering (e.g. 1, 3, 8).
   if(sequence.some((number,i)=>i>0&&number!==sequence[i-1]+1))return "";
@@ -291,6 +312,8 @@ export function structuredMarkdownClipboardHtml(input:string):string{
    html+="<li><p"+clipboardRtlAttribute(u[1])+">"+safeMarkdownInline(u[1])+"</p></li>";meaningful++;continue;
   }
   if(o){
+   // Do not discard zero-padded list markers copied from Markdown.
+   if(/^0\d/.test(o[1]))return "";
    const num=Number(o[1]);
    if(listType!=="ol"||num!==expected){
     close();html+='<ol'+(num!==1?' start="'+num+'"':"")+">";listType="ol";
