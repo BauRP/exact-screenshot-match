@@ -234,6 +234,9 @@ jobs:
       - name: Verify touch-friendly nested list actions
         run: bun scripts/test-wave-nested-list-controls.ts
 
+      - name: Test incremental auto-linking without rescanning long notes
+        run: bun scripts/test-wave-autolink-incremental.ts
+
       - name: Verify customizable toolbar and page breaks
         run: bun scripts/test-wave-toolbar-pages.ts
 
