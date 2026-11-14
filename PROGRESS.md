@@ -1,5 +1,14 @@
 # PROGRESS.md — Wave Notes / постоянный технический журнал
 
+### 2026-11-14 — №2/№3/№29: безопасная работа с фото и прерванным рисованием, успешная APK
+
+- **Код:** [ec1c8282](https://github.com/BauRP/exact-screenshot-match/commit/ec1c8282180fffa66ea3d85724ed7501e44d1e52). Файлы: `src/components/editor/WaveImage.tsx`, `src/components/editor/WaveInkCanvas.tsx`, `src/lib/wave-image-resize.ts`, `scripts/test-wave-image-retry-erase.ts`, `scripts/test-wave-ink-geometry.ts`.
+- Перетаскивание ширины фотографии теперь только показывает локальный предпросмотр, не делает записи по каждому движению, сохраняет окончательный размер один раз при завершении активного указателя, а при `pointercancel`/потере захвата не меняет документ. Геометрию 120–720 px, 10px шаг и недопустимые координаты проверяют тесты.
+- Если во время рисования редактор стал недоступен или режим рисования закрыт, `pointerup` теперь отменяет незавершённый штрих и восстанавливает прежнее состояние и Undo/Redo.
+- **CI:** [Android APK №43622074616](https://github.com/BauRP/exact-screenshot-match/actions/runs/43622074616), SHA `ec1c8282180fffa66ea3d85724ed7501e44d1e52` — **completed/success**: web build, TypeScript, regression tests, Gradle, проверка APK и публикация debug APK `Wave-Notes-debug-APK` ID `14124258288`. На телефоне не проверялось; это отдельная пользовательская приёмка, не снижает проценты кода.
+- **Прогресс:** №2 81,5→82 (+0,5 п.п.), №3 74→74,5 (+0,5 п.п.), №29 70→70,5 (+0,5 п.п.), остальные 33 +0. Всего 36 направлений 79,87→**79,91%** (+1,5/36≈0,0417 п.п.). Таблица `docs/wave-notes-feature-progress.md` обновлена. `main`, Telegram и реклама не менялись. Дальше №22, №23, №20, №29 и риски сохранения данных.
+
+
 ### 2026-11-14 — №7/№17: отметки задач не затрагивают чужие разделы, APK проверена
 
 - **Код:** [ead5fbe6](https://github.com/BauRP/exact-screenshot-match/commit/ead5fbe6b3d9b20ffcb7efa6ac6af072f98eabac). Изменены `src/lib/wave-checklist-actions.ts` и `scripts/test-wave-section-checklist.ts`.
