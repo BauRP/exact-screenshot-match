@@ -1,5 +1,16 @@
 # PROGRESS.md — Wave Notes / постоянный технический журнал
 
+### 2026-11-15 — большой пакет №2/№3/№16/№27/№29: защищены медиа и страницы, APK успешна
+
+- **Код:** [ea6a1b1d](https://github.com/BauRP/exact-screenshot-match/commit/ea6a1b1d696112e1be632b034c14c3b02b266c72), [исправление 547a3889](https://github.com/BauRP/exact-screenshot-match/commit/547a38899841f53e376117a23d6db010b08b356b). Изменены 3 исходника (`WaveImage.tsx`, `WaveInkCanvas.tsx`, `wave-page-actions.ts`) и 3 регрессионных теста (`test-wave-image-retry-erase.ts`, `test-wave-ink-geometry.ts`, `test-wave-page-actions.ts`).
+- **№2 (+1 п.п.):** ползунок ширины фотографии показывает предпросмотр, но записывает значение только при завершённом указателе; отменённые касания не меняют сохранённую ширину. Сохранённые выходящие за рамки размеры отображаются в диапазоне 120–720 px.
+- **№3 (+0,5 п.п.), №29 (+0,5 п.п.):** при закрытии или блокировке режима рисования незавершённый штрих отменяется без ожидания Android `pointerup`, восстанавливая предыдущие штрихи/Undo/Redo; Clear/Undo/Redo недоступны вне активного редактирования. Это общая логика обычного рисунка и рисования поверх фото.
+- **№16 (+0,5 п.п.):** повторные изменения ширины при движении пальца/мыши не засоряют Undo, завершение ползунка сохраняется одной операцией; отмена жеста чернил возвращает прошлую историю.
+- **№27 (+0,5 п.п.):** пустые страницы с сохранённым RTL, форматированными пробелами или нестандартным выравниванием не удаляются вместе с полностью пустыми страницами. Регрессионный ProseMirror-тест проверяет одну Undo-транзакцию и сохранение текста, форматирования и страниц.
+- **Проверки:** первая [CI №43740506910](https://github.com/BauRP/exact-screenshot-match/actions/runs/43740506910) выявила одну TS-ошибку непубличного `NodeType.defaultAttrs`. Исправлено, повторная [GitHub Actions №43740758512](https://github.com/BauRP/exact-screenshot-match/actions/runs/43740758512) на кодовом SHA `547a38899841f53e376117a23d6db010b08b356b` завершилась **completed/success**: TypeScript, web build, набор программных тестов, Gradle APK, verify и публикация `Wave-Notes-debug-APK` artifact `14171814661`. Устройство пользователя отдельно, не снижает программную готовность.
+- **Оценки 36:** №2 82→83%, №3 74,5→75%, №16 85→85,5%, №27 76,5→77%, №29 70,5→71%; другие 31 +0. Общая готовность **80,10→80,19%** (+3/36≈0,0833 п.п.). Таблица `docs/wave-notes-feature-progress.md` обновлена, никто не удалён из списка, завершённых на 100% пока нет. SEC-01 встроенного Telegram-токена не устранён, не считать его исправленным из-за успешной APK.
+
+
 ### 2026-11-15 — результат крупного пакета №1/№21/№22/№23/№24: проверено, APK собрана
 
 - **Исходники и тесты:** кодовый SHA `09411a919740756ddbeeb18fd133a331eb891896`; девять файлов: `src/lib/wave-checklist-actions.ts`, `src/lib/wave-smart-paste.ts`, `src/routes/editor.$id.tsx`, `src/lib/external-links.ts`, `android-overlay/app/src/main/java/app/lovable/supernotes/ExternalNoteLinkPlugin.java`, `scripts/test-wave-checklist-split.ts`, `scripts/test-wave-markdown-clipboard.ts`, `scripts/test-external-note-links.ts`, `scripts/test-wave-smart-paste.ts`.
