@@ -121,8 +121,12 @@ async function writeBackup(blob: Blob): Promise<void> {
   // Pending is known complete and recoverable even if Android closes the app
   // between the write of active and cleanup of staging.
   await Filesystem.writeFile({ path: BACKUP_FILE, directory: Directory.Data, data });
-  // The active backup is already durably written and verified via staging.
-  // A failed cleanup must not turn a successful Save into a false failure.
+  // A successful Android write call does NOT guarantee that the promoted
+  // active bytes are complete. Read and validate them before reporting Save.
+  // On failure leave the validated pending copy available for recovery.
+  await validateFullBackup(await readStored(BACKUP_FILE));
+  // Both published and staged copies are now verified. A failed cleanup
+  // must not turn a successful Save into a false failure.
   try { await Filesystem.deleteFile({ path: STAGING_FILE, directory: Directory.Data }); }
   catch (error) { console.warn("[Wave Notes] Pending backup cleanup postponed",error); }
 }

@@ -22,5 +22,8 @@ assert.throws(()=>imageBlobFromBytes(webp.slice(0,20)));
 const backup=readFileSync("src/lib/local-backup.ts","utf8");
 const staging=backup.indexOf("await validateFullBackup(await readStored(STAGING_FILE))");
 const publish=backup.indexOf("await Filesystem.writeFile({ path: BACKUP_FILE");
-assert.ok(staging>=0&&publish>staging,"Validate pending backup before overwriting active");
+const promoted=backup.indexOf("await validateFullBackup(await readStored(BACKUP_FILE))");
+const cleanup=backup.indexOf("await Filesystem.deleteFile({ path: STAGING_FILE");
+assert.ok(staging>=0&&publish>staging&&promoted>publish&&cleanup>promoted,
+ "Pending snapshot must remain recoverable until active archive is verified");
 console.log("Binary image-container validation and staged backup integrity passed");

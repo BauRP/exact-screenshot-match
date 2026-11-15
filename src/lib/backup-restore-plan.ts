@@ -33,7 +33,10 @@ export function equalDocumentBytes(a:ArrayBuffer|null,b:Uint8Array):boolean {
  * participate. Two independent 32-bit FNV streams make accidental collisions
  * vastly less likely. Never use this fingerprint for security or encryption.
  */
-export function recoveredVersionId(backedUp:Note,pdfBytes?:Uint8Array):string {
+export function recoveredVersionId(
+ backedUp:Note,pdfBytes?:Uint8Array,
+ media?:readonly {kind:"audio"|"image";id:string;bytes:Uint8Array}[],
+):string {
   const source=JSON.stringify({id:backedUp.id,content:savedContent(backedUp)});
   let a=0x811c9dc5,b=0x9e3779b9;
   const feed=(v:number)=>{
@@ -45,6 +48,18 @@ export function recoveredVersionId(backedUp:Note,pdfBytes?:Uint8Array):string {
   if(pdfBytes){
     feed(pdfBytes.byteLength);
     for(const value of pdfBytes)feed(value);
+  }
+  // Preserve legacy recovery identifiers for notes without media; for notes
+  // with attachments, include the type/ID/length and actual bytes. This
+  // distinguishes two photo or audio versions that contain identical HTML.
+  if(media?.length){
+    for(const item of [...media].sort((x,y)=>x.kind.localeCompare(y.kind)||x.id.localeCompare(y.id))){
+      feed(item.kind==="audio"?1:2);
+      feed(item.id.length);
+      for(let i=0;i<item.id.length;i++)feed(item.id.charCodeAt(i));
+      feed(item.bytes.byteLength);
+      for(const byte of item.bytes)feed(byte);
+    }
   }
   return "restored-"+a.toString(16).padStart(8,"0")+"-"+b.toString(16).padStart(8,"0");
 }

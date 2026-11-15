@@ -34,6 +34,10 @@ assert.ok(backupSource.includes('loadNewestValidatedBackup('));
 assert.ok(backupSource.includes('candidates.push({path,mtime:stat.mtime})'));
 const stageValidated=backupSource.indexOf('await validateFullBackup(await readStored(STAGING_FILE))');
 const publish=backupSource.indexOf('await Filesystem.writeFile({ path: BACKUP_FILE');
+const activeVerified=backupSource.indexOf('await validateFullBackup(await readStored(BACKUP_FILE))');
+const removePending=backupSource.indexOf('await Filesystem.deleteFile({ path: STAGING_FILE');
 assert.ok(stageValidated>=0&&publish>stageValidated,"Never overwrite active before validating pending snapshot");
+assert.ok(activeVerified>publish&&removePending>activeVerified,
+ "Never delete the valid pending backup before verifying promoted active bytes");
 assert.ok(fullSource.indexOf("touchedFolders=true;")<fullSource.indexOf("restoreFolderBackup(manifest.folders, manifest.hiddenSystem);"));
 console.log("Backup selection: newer verified copy wins, corrupt stage falls back, failed cleanup cannot invalidate save");

@@ -11,6 +11,7 @@ import { exportNotes, importBackupNotes, type Note } from "./notes-store";
 import { exportFolderBackup, restoreFolderBackup, rollbackFolderBackup, type Folder } from "./folders-store";
 import { equalDocumentBytes, hasDifferentSavedContent, recoveredVersionId, restoredNoteTitle } from "./backup-restore-plan";
 import {verifyBackupArchiveStructure} from "./backup-archive-guard";
+import {archivedNoteMedia,localMediaDiffers} from "./backup-media-conflicts";
 
 const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
 const MAX_ENTRY_BYTES = 100 * 1024 * 1024;
@@ -285,8 +286,12 @@ export async function restoreFullBackup(file: File): Promise<number> {
         current.kind==="pdf"?await loadPdfFile(saved.id):null,
         sourcePdf);
     }
+    const noteMedia=archivedNoteMedia(saved.body,entries);
+    if(current && !changed && noteMedia.length){
+      changed=await localMediaDiffers(noteMedia,loadAudioFile,loadImageFile);
+    }
     if(current && !changed)continue;
-    const destination=current?recoveredVersionId(saved,sourcePdf):saved.id;
+    const destination=current?recoveredVersionId(saved,sourcePdf,noteMedia):saved.id;
     // A previously restored copy is never overwritten or re-imported,
     // even if the user subsequently edited that recovered copy.
     if(occupied.has(destination))continue;
