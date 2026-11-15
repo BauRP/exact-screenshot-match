@@ -1,6 +1,6 @@
 import {strict as assert} from "node:assert";
 import {readFileSync} from "node:fs";
-import {directionForText,setWaveTextDirection,visibleTextForDirection} from "../src/lib/wave-text-direction";
+import {WaveTextDirection,directionForText,setWaveTextDirection,visibleTextForDirection} from "../src/lib/wave-text-direction";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection} from "@tiptap/pm/state";
 assert.equal(directionForText("  مرحبا بالعالم"),"rtl");
@@ -26,6 +26,72 @@ for(const cp of [0x10C80,0x10F00,0x10F30,0x10F70,0x10FE0]){
  assert.equal(directionForText("123 "+String.fromCodePoint(cp)+" English"),"rtl",`RTL script U+${cp.toString(16)}`);
  assert.equal(directionForText("English "+String.fromCodePoint(cp)),"ltr","First LTR letter must still win");
 }
+
+
+// HTML attribute values are case-insensitive by the HTML standard. Imported
+// rich text (especially from external apps) may have DIR="RTL" or whitespace.
+const dirAttribute=(WaveTextDirection.config.addGlobalAttributes as (this:any)=>any[]).call({})[0].attributes.textDirection;
+const htmlDir=(value:string|null)=>dirAttribute.parseHTML({
+ getAttribute:(name:string)=>name==="dir"?value:null
+});
+assert.equal(htmlDir("RTL"),"rtl");
+assert.equal(htmlDir(" Rtl "),"rtl");
+assert.equal(htmlDir("rtl"),"rtl");
+assert.equal(htmlDir("ltr"),"ltr");
+assert.equal(htmlDir(null),"ltr");
+assert.deepEqual(dirAttribute.renderHTML({textDirection:"rtl"}),{dir:"rtl"});
+assert.deepEqual(dirAttribute.renderHTML({textDirection:"ltr"}),{dir:"ltr"});
+
+// A big note with a nested section and a saved page boundary. Changing RTL
+// for one caret should update only its one paragraph; even a far-away RTL
+// paragraph must keep its manually selected direction.
+const bigSchema=new Schema({nodes:{
+ doc:{content:"block+"},paragraph:{group:"block",content:"text*",attrs:{textDirection:{default:"ltr"}}},
+ waveFold:{group:"block",content:"block+"},wavePageBreak:{group:"block",atom:true},
+ text:{group:"inline"}
+},marks:{waveTape:{},strong:{}}});
+const plain=(s:string,dir:"ltr"|"rtl"="ltr")=>
+ bigSchema.nodes.paragraph.create({textDirection:dir},bigSchema.text(s));
+const longBlocks=Array.from({length:1800},(_,index)=>plain("Paragraph "+index));
+longBlocks[0]=plain("שלום keep-manual", "ltr");
+longBlocks[1200]=bigSchema.nodes.waveFold.create(null,[
+ plain("مرحبا النص"),plain("English neighbor"),plain("مرحبا another")
+]);
+longBlocks[1201]=bigSchema.nodes.wavePageBreak.create();
+longBlocks[1799]=plain("مرحبا saved-manual","ltr");
+let bigState=EditorState.create({schema:bigSchema,doc:bigSchema.nodes.doc.create(null,longBlocks)});
+let bigChanges=0;
+const bigEditor={isEditable:true,isDestroyed:false,get state(){return bigState;},
+ view:{dispatch(tr:any){bigChanges++;bigState=bigState.apply(tr);}}} as any;
+let nestedPos=-1;
+bigState.doc.descendants((node,pos)=>{if(node.type.name==="paragraph"&&node.textContent==="مرحبا النص")nestedPos=pos+2;});
+assert.ok(nestedPos>0);
+const originalBig=bigState.doc.textContent;
+const originalBreak=bigState.doc.child(1201).toJSON();
+bigState=bigState.apply(bigState.tr.setSelection(TextSelection.create(bigState.doc,nestedPos)));
+assert.equal(setWaveTextDirection(bigEditor,"auto"),1);
+assert.equal(bigChanges,1);
+assert.equal(bigState.doc.child(1200).child(0).attrs.textDirection,"rtl");
+assert.equal(bigState.doc.child(1200).child(1).attrs.textDirection,"ltr");
+assert.equal(bigState.doc.child(1200).child(2).attrs.textDirection,"ltr");
+assert.equal(bigState.doc.child(0).attrs.textDirection,"ltr");
+assert.equal(bigState.doc.child(1799).attrs.textDirection,"ltr");
+assert.deepEqual(bigState.doc.child(1201).toJSON(),originalBreak);
+assert.equal(bigState.doc.textContent,originalBig);
+assert.equal(setWaveTextDirection(bigEditor,"auto"),0,"No-op creates no extra Undo entry");
+assert.equal(bigChanges,1);
+const sectionPos=bigState.doc.child(0).nodeSize+
+ longBlocks.slice(1,1200).reduce((total,node)=>total+node.nodeSize,0);
+const nestedFirst=sectionPos+2;
+const nestedThird=sectionPos+bigState.doc.child(1200).child(0).nodeSize+
+ bigState.doc.child(1200).child(1).nodeSize+2;
+bigState=bigState.apply(bigState.tr.setSelection(TextSelection.create(bigState.doc,nestedFirst,nestedThird)));
+assert.equal(setWaveTextDirection(bigEditor,"auto"),1,"Range affects the second RTL paragraph too");
+assert.equal(bigState.doc.child(1200).child(2).attrs.textDirection,"rtl");
+assert.equal(bigState.doc.child(1200).child(1).attrs.textDirection,"ltr");
+assert.equal(bigState.doc.child(1799).attrs.textDirection,"ltr");
+assert.equal(bigChanges,2);
+assert.equal(bigState.doc.check(),undefined);
 
 const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
 assert.ok(editor.includes('setWaveTextDirection(editor,"auto")'));

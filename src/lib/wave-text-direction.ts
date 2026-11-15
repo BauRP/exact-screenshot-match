@@ -6,7 +6,7 @@ export const WaveTextDirection=Extension.create({
   return [{types:["paragraph","heading","waveChecklistItem"],attributes:{
    textDirection:{
     default:"ltr",
-    parseHTML:element=>element.getAttribute("dir")==="rtl"?"rtl":"ltr",
+    parseHTML:element=>element.getAttribute("dir")?.trim().toLowerCase()==="rtl"?"rtl":"ltr",
     renderHTML:attrs=>attrs.textDirection==="rtl"?{dir:"rtl"}:{dir:"ltr"},
    },
   }}];
@@ -54,19 +54,34 @@ export function setWaveTextDirection(editor:Editor,mode:WaveDirectionMode,scope:
  const {doc,selection}=editor.state;
  const from=selection.from,to=selection.to;
  const changes:{pos:number;attrs:Record<string,unknown>}[]=[];
- doc.descendants((node,pos)=>{
+ const inspect=(node:PMNode,pos:number)=>{
   if(!node.isTextblock||!("textDirection" in node.attrs))return;
-  const end=pos+node.nodeSize;
-  const selected=from===to?pos<from&&from<end:pos<to&&end>from;
-  if(scope==="selection"&&!selected)return;
   const visible=mode==="auto"?visibleTextForDirection(node):"";
-  // No visible strong letter means no safe automatic direction: retain
-  // manual RTL for fully hidden Tape or entirely empty paragraphs.
+  // Fully hidden Tape and blank blocks retain their saved manual direction
+  // until a user explicitly chooses left-to-right or right-to-left.
   if(mode==="auto"&&!STRONG_LETTER.test(visible))return;
   const next=mode==="auto"?directionForText(visible):mode;
   if(node.attrs.textDirection!==next)
    changes.push({pos,attrs:{...node.attrs,textDirection:next}});
- });
+ };
+ if(scope==="document"){
+  doc.descendants((node,pos)=>{inspect(node,pos);});
+ }else if(selection.empty){
+  // With one caret there is exactly one editable textblock. Do not walk
+  // thousands of unrelated paragraphs just to change its direction.
+  const $caret=selection.$from;
+  for(let depth=$caret.depth;depth>0;depth--){
+   if(!$caret.node(depth).isTextblock)continue;
+   inspect($caret.node(depth),$caret.before(depth));
+   break;
+  }
+ }else{
+  // A text or node selection changes only intersecting blocks. This still
+  // handles selected paragraphs nested inside folded sections.
+  doc.nodesBetween(from,to,(node,pos)=>{
+   if(node.isTextblock&&pos<to&&pos+node.nodeSize>from)inspect(node,pos);
+  });
+ }
  if(!changes.length)return 0;
  let transaction=editor.state.tr;
  for(const change of changes)transaction=transaction.setNodeMarkup(change.pos,undefined,change.attrs);
