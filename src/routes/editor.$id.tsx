@@ -300,7 +300,9 @@ function EditorPage() {
         const html=event.clipboardData?.getData("text/html")||"";
         if(!html){
           const plain=event.clipboardData?.getData("text/plain")||"";
-          const structured=structuredPlainClipboardHtml(plain)||structuredMarkdownClipboardHtml(plain);
+          // Prefer Markdown when pasted tasks have bold/italic/link markup;
+          // retain the strict plain-list converter as a fallback.
+          const structured=structuredMarkdownClipboardHtml(plain)||structuredPlainClipboardHtml(plain);
           if(!structured)return false;
           try{
             const container=document.createElement("div");container.innerHTML=structured;
