@@ -1,5 +1,13 @@
 # PROGRESS.md — Wave Notes / постоянный технический журнал
 
+### 2026-11-15 — №24: сохранены числовые email, устранены ложные телефонные ссылки, APK успешна
+
+- **Код:** [6bd5717f](https://github.com/BauRP/exact-screenshot-match/commit/6bd5717f10fdd5934c2a013c25c480e6b7e3b18d). Изменены только `src/lib/editor-extensions.ts` и `scripts/test-wave-autolink-incremental.ts`.
+- **Ошибка и решение:** регулярное выражение телефонных ссылок находило цифры внутри email, вследствие чего `tel:` мог перезаписать часть `mailto:`. Теперь диапазоны email защищены от телефонного поиска; телефон должен содержать минимум семь цифр и быть отдельным от слова/идентификатора. Настоящий телефон рядом с email продолжает превращаться в телефонную ссылку.
+- **Проверка:** новые настоящие ProseMirror тесты числового email, телефона, пробелов между цифрами и встроенного числового идентификатора; старые тесты 1500 абзацев и скрытых Tape сохранены. [APK CI №43657467605](https://github.com/BauRP/exact-screenshot-match/actions/runs/43657467605), SHA `6bd5717f10fdd5934c2a013c25c480e6b7e3b18d` — **completed/success**: TypeScript, web build, регрессии, Android Gradle, verify и публикация debug APK `Wave-Notes-debug-APK` (artifact `14138142697`). Реальную установку пользователь проверяет отдельно, готовность программного кода не снижается.
+- **Прогресс:** №24 78,5→79% (+0,5 п.п.), 35 остальных +0. По 36 направлениям **79,95→79,96%** (+0,5/36≈0,0139 п.п.). Актуальная таблица `docs/wave-notes-feature-progress.md` обновлена. Дальше №23 правописание/RTL, №22 списки, №29 рисование, №20 блоки и риски сохранения данных. `main`, реклама и Telegram не менялись.
+
+
 ### 2026-11-15 — №21/№22: правильная вставка цветов и сохранение точной нумерации, APK успешна
 
 - **Код:** [0556fcc9](https://github.com/BauRP/exact-screenshot-match/commit/0556fcc95f359ced01bd5ab66e45ccdb56103109). Изменены `src/lib/wave-smart-paste.ts`, `scripts/test-wave-smart-paste.ts`, `scripts/test-wave-plain-list-paste.ts`.
