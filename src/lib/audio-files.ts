@@ -4,6 +4,7 @@
  * readable through the legacy audio node path.
  */
 import {createIndexedDbOpener} from "./indexeddb-open";
+import {runIndexedDbTransaction} from "./indexeddb-transaction";
 
 const DB_NAME = "sn.audio.v1";
 const STORE = "recordings";
@@ -17,15 +18,9 @@ const openAudioDB=createIndexedDbOpener(DB_NAME,STORE,{
 
 async function operate<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   const db = await openAudioDB();
-  return new Promise<T>((resolve, reject) => {
-    const tx = db.transaction(STORE, mode);
-    let value: T;
-    const request = run(tx.objectStore(STORE));
-    request.onsuccess = () => { value = request.result; };
-    request.onerror = () => reject(request.error ?? new Error("Audio storage failed"));
-    tx.oncomplete = () => resolve(value);
-    tx.onerror = () => reject(tx.error ?? new Error("Audio transaction failed"));
-    tx.onabort = () => reject(tx.error ?? new Error("Audio transaction cancelled"));
+  return runIndexedDbTransaction(db, STORE, mode, run, {
+    request:"Audio storage failed",transaction:"Audio transaction failed",
+    aborted:"Audio transaction cancelled",timeout:"Audio storage did not finish in time",
   });
 }
 

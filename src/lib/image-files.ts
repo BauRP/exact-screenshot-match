@@ -3,6 +3,7 @@
  * notes contain small image IDs, while the Blobs live in IndexedDB.
  */
 import {createIndexedDbOpener} from "./indexeddb-open";
+import {runIndexedDbTransaction} from "./indexeddb-transaction";
 
 const DB_NAME="wave.note.images.v1";
 const STORE="images";
@@ -17,15 +18,9 @@ const db=createIndexedDbOpener(DB_NAME,STORE,{
 
 async function operation<T>(mode:IDBTransactionMode,fn:(store:IDBObjectStore)=>IDBRequest<T>):Promise<T>{
  const connection=await db();
- return new Promise((resolve,reject)=>{
-  const tx=connection.transaction(STORE,mode);
-  let value:T;
-  const request=fn(tx.objectStore(STORE));
-  request.onsuccess=()=>{value=request.result;};
-  request.onerror=()=>reject(request.error||Error("Ошибка сохранения изображения"));
-  tx.oncomplete=()=>resolve(value);
-  tx.onerror=()=>reject(tx.error||Error("Сбой хранилища изображений"));
-  tx.onabort=()=>reject(tx.error||Error("Сохранение изображения отменено"));
+ return runIndexedDbTransaction(connection,STORE,mode,fn,{
+  request:"Ошибка сохранения изображения",transaction:"Сбой хранилища изображений",
+  aborted:"Сохранение изображения отменено",timeout:"Хранилище изображений не завершило операцию вовремя",
  });
 }
 function validate(id:string,blob?:Blob):void{

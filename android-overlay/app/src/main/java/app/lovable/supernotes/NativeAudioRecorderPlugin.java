@@ -17,14 +17,23 @@ import java.io.*;
 @CapacitorPlugin(name="NativeAudioRecorder",permissions={@Permission(alias="microphone",strings={Manifest.permission.RECORD_AUDIO})})
 public class NativeAudioRecorderPlugin extends Plugin{
  private MediaRecorder rec;private File file;private boolean active;private long started;
- @PluginMethod public void start(PluginCall call){
-  if(active){call.reject("Запись уже выполняется");return;}
+ // Permission dialogs finish asynchronously. A cancelled or destroyed editor
+ // must never start recording when Android eventually returns the permission.
+ private PluginCall pendingPermissionCall;
+ @PluginMethod public synchronized void start(PluginCall call){
+  if(active||pendingPermissionCall!=null){call.reject("Запись уже выполняется или ожидает разрешения");return;}
   if(ContextCompat.checkSelfPermission(getContext(),Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
-   requestPermissionForAlias("microphone",call,"onPermission");return;
+   pendingPermissionCall=call;
+   try{requestPermissionForAlias("microphone",call,"onPermission");}
+   catch(Exception error){pendingPermissionCall=null;call.reject("Не удалось запросить разрешение микрофона",error);}
+   return;
   }
   begin(call);
  }
- @PermissionCallback private void onPermission(PluginCall call){
+ @PermissionCallback private synchronized void onPermission(PluginCall call){
+  // A late result must not resurrect a cancelled microphone session.
+  if(pendingPermissionCall!=call)return;
+  pendingPermissionCall=null;
   if(ContextCompat.checkSelfPermission(getContext(),Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){call.reject("Разрешите микрофон в настройках Android");return;}
   begin(call);
  }
@@ -64,9 +73,18 @@ public class NativeAudioRecorderPlugin extends Plugin{
  }
  /** Abandon audio without serializing private microphone data. */
  @PluginMethod public synchronized void cancel(PluginCall call){
+  if(pendingPermissionCall!=null){
+   PluginCall previous=pendingPermissionCall;pendingPermissionCall=null;
+   previous.reject("Запись отменена");
+  }
   clean();call.resolve();
  }
  @PluginMethod public synchronized void stop(PluginCall call){
+  if(pendingPermissionCall!=null){
+   PluginCall previous=pendingPermissionCall;pendingPermissionCall=null;
+   previous.reject("Запись отменена");
+   call.reject("Запись ещё не началась");return;
+  }
   if(!active||rec==null){call.reject("Запись не запущена");return;}
   if(System.currentTimeMillis()-started<300){clean();call.reject("Запись слишком короткая. Начните новую запись и говорите не менее секунды.");return;}
   try{
@@ -81,5 +99,11 @@ public class NativeAudioRecorderPlugin extends Plugin{
   active=false;if(rec!=null){try{rec.reset();}catch(Exception ignored){}try{rec.release();}catch(Exception ignored){}rec=null;}
   if(file!=null){file.delete();file=null;}
  }
- @Override protected void handleOnDestroy(){clean();super.handleOnDestroy();}
+ @Override protected synchronized void handleOnDestroy(){
+  if(pendingPermissionCall!=null){
+   PluginCall previous=pendingPermissionCall;pendingPermissionCall=null;
+   previous.reject("Запись отменена: экран закрыт");
+  }
+  clean();super.handleOnDestroy();
+ }
 }

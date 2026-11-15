@@ -280,6 +280,12 @@ jobs:
       - name: Verify audio error messages and retry action
         run: bun scripts/test-wave-audio-retry.ts
 
+      - name: Decode long Android recordings in bounded, yielding chunks
+        run: bun scripts/test-wave-native-audio-decode.ts
+
+      - name: Reject stuck media transactions without publishing partial saves
+        run: bun scripts/test-wave-media-transaction.ts
+
       - name: Check saved image alignment and drag resizing
         run: bun scripts/test-wave-image-layout.ts
 

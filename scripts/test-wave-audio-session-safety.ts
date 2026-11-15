@@ -29,6 +29,14 @@ assert.ok(playback.includes("if(!analyser)return;"));
 assert.ok(playback.includes("Audio visualization is unavailable on this WebView"));
 
 assert.ok(native.includes("startRecordingWithFormat(44100,64000)"));
+assert.ok(native.includes("if(pendingPermissionCall!=call)return;"),
+ "Late Android permission callbacks must not restart cancelled recording");
+assert.ok(native.includes("if(active||pendingPermissionCall!=null)"),
+ "Only one in-flight microphone session is allowed");
+assert.ok(native.includes('previous.reject("Запись отменена")'),
+ "Cancel/stop must settle any pending permission request");
+assert.ok(native.includes("handleOnDestroy(){"),
+ "Destroy must invalidate pending microphone permission");
 assert.ok(native.includes("startRecordingWithFormat(16000,32000)"));
 assert.ok(native.includes("fallbackFailure.addSuppressed(standardFailure)"));
 assert.ok(native.includes('file=File.createTempFile("wave-audio-"'));

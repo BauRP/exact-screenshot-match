@@ -7,6 +7,7 @@
  */
 
 import {createIndexedDbOpener} from "./indexeddb-open";
+import {runIndexedDbTransaction} from "./indexeddb-transaction";
 
 const DB_NAME = "sn.pdf.v1";
 const STORE = "files";
@@ -19,19 +20,10 @@ const openDatabase=createIndexedDbOpener(DB_NAME,STORE,{
 });
 
 function withStore<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-  return openDatabase().then(
-    (db) =>
-      new Promise<T>((resolve, reject) => {
-        const tx = db.transaction(STORE, mode);
-        const request = run(tx.objectStore(STORE));
-        let value: T;
-        request.onsuccess = () => { value = request.result; };
-        request.onerror = () => reject(request.error ?? new Error("PDF storage request failed"));
-        tx.oncomplete = () => resolve(value);
-        tx.onerror = () => reject(tx.error ?? new Error("PDF storage transaction failed"));
-        tx.onabort = () => reject(tx.error ?? new Error("PDF storage transaction aborted"));
-      }),
-  );
+  return openDatabase().then(db=>runIndexedDbTransaction(db,STORE,mode,run,{
+    request:"PDF storage request failed",transaction:"PDF storage transaction failed",
+    aborted:"PDF storage transaction aborted",timeout:"PDF storage did not finish in time",
+  }));
 }
 
 export async function savePdfFile(id: string, bytes: ArrayBuffer): Promise<void> {
