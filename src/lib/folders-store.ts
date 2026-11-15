@@ -72,8 +72,46 @@ let customFolders: Folder[] = [];
 let hiddenSystem: string[] = [];
 let activeId: string = "all";
 let hydrated = false;
+let folderStorageError: string|null=null;
+
+/** Check saved folder metadata without rewriting the source bytes. A broken
+ * record must not later be replaced by an apparently empty folder list. */
+function parseSavedFolders(raw:string|null):Folder[]{
+ if(raw===null)return [];
+ const parsed:unknown=JSON.parse(raw);
+ if(!Array.isArray(parsed)||parsed.length>1000)throw Error("Invalid folders database");
+ const ids=new Set(SYSTEM_FOLDERS.map(item=>item.id));
+ const result:Folder[]=[];
+ for(const item of parsed){
+  if(!item||typeof item!=="object"||Array.isArray(item))throw Error("Invalid folder record");
+  const folder=item as Record<string,unknown>;
+  if(typeof folder.id!=="string"||!/^[\\w-]{1,128}$/.test(folder.id)||
+     ids.has(folder.id)||typeof folder.name!=="string"||folder.name.length>120||
+     (folder.parentId!==undefined&&
+      (typeof folder.parentId!=="string"||!/^[\\w-]{1,128}$/.test(folder.parentId))))
+     throw Error("Invalid folder metadata");
+  ids.add(folder.id);
+  result.push({id:folder.id,name:folder.name,
+   ...(folder.parentId===undefined?{}:{parentId:folder.parentId as string})});
+ }
+ return result;
+}
+function parseHiddenFolders(raw:string|null):string[]{
+ if(raw===null)return [];
+ const data:unknown=JSON.parse(raw);
+ if(!Array.isArray(data)||data.length>2||
+    data.some(id=>typeof id!=="string"||id==="all"||
+     !SYSTEM_FOLDERS.some(folder=>folder.id===id)))
+    throw Error("Invalid hidden folders");
+ return [...new Set(data)] as string[];
+}
+function ensureFolderStorageWritable(){
+ if(folderStorageError)throw Error(
+  "Повреждены сохранённые папки. Исходные данные защищены от перезаписи. Восстановите резервную копию.");
+}
 
 function persist(nextFolders: Folder[] = customFolders, nextHidden: string[] = hiddenSystem, nextActive?:string) {
+  ensureFolderStorageWritable();
   // Write before exposing changes in React. A full disk must never show
   // a folder as saved when localStorage refused the write.
   const oldFolders=localStorage.getItem(FOLDERS_KEY);
@@ -104,13 +142,18 @@ function hydrate() {
   if (hydrated || typeof window === "undefined") return;
   hydrated = true;
   try {
-    const raw = localStorage.getItem(FOLDERS_KEY);
-    if (raw) customFolders = JSON.parse(raw);
-    const hidden = localStorage.getItem(HIDDEN_KEY);
-    if (hidden) hiddenSystem = JSON.parse(hidden);
-    const a = localStorage.getItem(ACTIVE_KEY);
-    if (a) activeId = a;
-  } catch {}
+    customFolders=parseSavedFolders(localStorage.getItem(FOLDERS_KEY));
+    hiddenSystem=parseHiddenFolders(localStorage.getItem(HIDDEN_KEY));
+  } catch {
+    // Leave malformed localStorage intact, let the user recover the original
+    // backup, and forbid all writes that could overwrite damaged bytes.
+    customFolders=[];hiddenSystem=[];folderStorageError="Invalid folder metadata";
+  }
+  try {
+    const a=localStorage.getItem(ACTIVE_KEY);
+    const visible=[...SYSTEM_FOLDERS.filter(f=>!hiddenSystem.includes(f.id)),...customFolders];
+    activeId=a&&visible.some(f=>f.id===a)?a:"all";
+  }catch{activeId="all";}
 }
 
 function subscribe(cb: () => void) {
@@ -153,9 +196,18 @@ export function useActiveFolder(): string {
 
 export function setActiveFolder(id: string) {
   hydrate();
+  ensureFolderStorageWritable();
+  if(!snapshot().some(folder=>folder.id===id))
+   throw Error("Папка не найдена или скрыта");
   localStorage.setItem(ACTIVE_KEY,id);
   activeId=id;
   emit();
+}
+
+/** Guard note moves against unknown or hidden destinations. */
+export function folderExists(id:string):boolean {
+ hydrate();ensureFolderStorageWritable();
+ return snapshot().some(folder=>folder.id===id);
 }
 
 export function addFolder(name: string,activate=false,parentId="all"): Folder {
@@ -233,7 +285,7 @@ export function exportFolderBackup(): { folders: Folder[]; hiddenSystem: string[
  * Persist changes before publishing to the UI, and rollback a partial write.
  */
 export function restoreFolderBackup(folders: Folder[], restoredHidden: string[]): void {
-  hydrate();
+  hydrate();ensureFolderStorageWritable();
   if (!Array.isArray(folders) || folders.length > 1000 ||
       !Array.isArray(restoredHidden) || restoredHidden.length > SYSTEM_FOLDERS.length ||
       restoredHidden.some((id) => typeof id !== "string" || id === "all" ||

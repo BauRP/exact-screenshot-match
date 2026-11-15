@@ -1,4 +1,5 @@
 import {validReminderTime} from "./note-reminders";
+import {folderExists} from "./folders-store";
 import {combineReturnedBodies} from "./wave-note-conflicts";
 import { useSyncExternalStore } from "react";
 import { markBackupDirty } from "./backup-signals";
@@ -868,7 +869,7 @@ export function deleteSelectedNotes(noteIds:readonly string[]):number{
  * change, none of the selected notes is modified in memory or on screen. */
 export function moveSelectedNotesToFolder(noteIds:readonly string[],destinationId:string):number {
  ensureReadyForMutation();
- if(!destinationId||destinationId.length>128)return 0;
+ if(!destinationId||destinationId.length>128||!folderExists(destinationId))return 0;
  const ids=new Set(noteIds);
  if(!ids.size)return 0;
  let changed=0;
@@ -904,7 +905,7 @@ export function setSelectedNotesCardColor(noteIds:readonly string[],color:string
 /** Move the notes out of a folder BEFORE its tab is removed. */
 export function moveNotesToFolder(sourceId: string, destinationId = "all") {
   ensureReadyForMutation();
-  if (sourceId === destinationId) return;
+  if (sourceId === destinationId || !folderExists(destinationId)) return;
   const nextNotes = state.notes.map((note) =>
     note.folderId === sourceId ? { ...note, folderId: destinationId } : note,
   );

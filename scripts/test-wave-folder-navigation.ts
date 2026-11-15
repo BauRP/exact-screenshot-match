@@ -34,3 +34,9 @@ assert.ok(editor.includes('aria-label="Поиск папки в редактор
 assert.ok(editor.includes("folderNavigationRows(folders,new Set(),editorFolderQuery)"));
 assert.ok(editor.includes("max-h-[min(24rem,70dvh)]"));
 console.log("Nested drawer, parent-picker search and editor folder navigation passed");
+
+assert.deepEqual(folderNavigationRows(folders,new Set(),"ЛИЧНОЕ").map(r=>r.folder.id),
+ ["all","c","d"],"Searching a parent opens the path and children");
+const withYo=[{id:"all",name:"All"},{id:"x",name:"Ёжики"},{id:"y",name:"Планы",parentId:"x"}] as Folder[];
+assert.deepEqual(folderNavigationRows(withYo,new Set(["x"]),"ежики").map(r=>r.folder.id),
+ ["all","x","y"],"Russian Ё and Е must match without changing folder names");

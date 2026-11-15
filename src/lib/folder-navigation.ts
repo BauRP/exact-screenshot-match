@@ -22,11 +22,12 @@ export function folderNavigationRows(
 ):FolderNavigationRow[]{
  const ordered=orderedFolderTree(folders);
  const parents=new Set(folders.filter(f=>f.id!==folderParent(f)).map(f=>folderParent(f)));
- const query=search.trim().normalize("NFKC").toLocaleLowerCase();
+ const normalize=(s:string)=>s.normalize("NFKC").toLocaleLowerCase().replace(/ё/g,"е");
+ const query=normalize(search.trim());
  const show=new Set<string>();
  if(query){
   for(const folder of ordered){
-   if(!folderDisplayPath(folders,folder.id).normalize("NFKC").toLocaleLowerCase().includes(query))continue;
+   if(!normalize(folderDisplayPath(folders,folder.id)).includes(query))continue;
    show.add(folder.id);
    for(const ancestor of folderAncestors(folders,folder.id))show.add(ancestor.id);
   }

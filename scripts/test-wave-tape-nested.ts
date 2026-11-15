@@ -9,3 +9,13 @@ const note={id:"x",title:"Обычная",body:html,createdAt:1,updatedAt:1};
 assert.equal(noteMatchesSearch(note,"вложенный"),false);
 assert.equal(noteMatchesSearch(note,"безопасно"),true);
 console.log("Nested hidden Tape text protected");
+
+const quotedHtml='<p>Open <span title="the > sign" data-wave-tape="true">INVISIBLE-ANSWER <span title="x > y">SECRET</span> LAST</span> safe</p>';
+const quotedClean=readableText(quotedHtml);
+for(const text of ["INVISIBLE-ANSWER","SECRET","LAST"])
+ assert.ok(!quotedClean.includes(text),"Quoted > inside a span attribute must not reveal Tape");
+assert.ok(quotedClean.includes("Open")&&quotedClean.includes("safe"));
+assert.equal(noteMatchesSearch({...note,body:quotedHtml},"INVISIBLE-ANSWER"),false);
+assert.equal(noteMatchesSearch({...note,body:quotedHtml},"safe"),true);
+const singleQuote='<span title=\'foo > bar\' data-wave-tape="true">PRIVATE-NOTE</span>';
+assert.equal(noteMatchesSearch({...note,body:singleQuote},"PRIVATE-NOTE"),false);

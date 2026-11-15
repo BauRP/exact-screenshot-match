@@ -19,7 +19,7 @@ export function parseNoteQuery(input:string, selected:NoteSearchFilter="all"):Pa
  * A single regex would stop at the first inner </span> and reveal the rest.
  * This scanner is pure and also runs in the Node-based CI tests. */
 export function concealTapeHtml(html:string):string{
- const tag=/<\/?span\b[^>]*>/gi;
+ const tag=/<\/?span\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
  let out="",last=0,hiddenDepth=0;
  const spans:boolean[]=[];
  for(const match of html.matchAll(tag)){

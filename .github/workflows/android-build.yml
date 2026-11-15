@@ -138,6 +138,8 @@ jobs:
 
       - name: Verify nested folders and safe hierarchy
         run: bun scripts/test-wave-nested-folders.ts
+      - name: Reject corrupted folder metadata without deleting the original
+        run: bun scripts/test-wave-folder-corruption.ts
 
       - name: Verify collapsible folder drawer and searchable move destinations
         run: bun scripts/test-wave-folder-navigation.ts
