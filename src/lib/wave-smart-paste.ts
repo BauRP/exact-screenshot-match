@@ -60,7 +60,7 @@ export function safeBrowserClipboardHtml(html:string):string{
    out.setAttribute("data-done",element.getAttribute("data-done")==="true"?"true":"false");
    const shape=element.getAttribute("data-shape")||"";
    out.setAttribute("data-shape",["square","circle","diamond","check"].includes(shape)?shape:"square");
-   if(element.getAttribute("dir")==="rtl")out.setAttribute("dir","rtl");
+   if(element.getAttribute("dir")?.trim().toLowerCase()==="rtl")out.setAttribute("dir","rtl");
   }
   if(tag==="SECTION"&&element.hasAttribute("data-wave-fold")){
    out.setAttribute("data-wave-fold","true");
@@ -86,7 +86,7 @@ export function safeBrowserClipboardHtml(html:string):string{
   if(textBlock.has(tag)){
    const align=element.style.textAlign;
    if(["left","right","center","justify"].includes(align))out.style.textAlign=align;
-   if(element.getAttribute("dir")==="rtl")out.setAttribute("dir","rtl");
+   if(element.getAttribute("dir")?.trim().toLowerCase()==="rtl")out.setAttribute("dir","rtl");
   }
   if(tag==="OL"&&/^\d{1,5}$/.test(element.getAttribute("start")||""))out.setAttribute("start",element.getAttribute("start")!);
  if(tag==="TH"||tag==="TD"){
