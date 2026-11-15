@@ -58,12 +58,16 @@ export function normalizeSearchText(value:string):string {
  * skips the match or cuts from the wrong part of the note. */
 function originalSnippetOffset(source:string,normalizedOffset:number):number{
  if(normalizedOffset<=0)return 0;
- let normalizedPos=0,sourcePos=0;
+ let normalizedPos=0,sourcePos=0,previousWhitespace=false;
  for(const character of source){
-  const part=character===" "?" ":normalizeSearchText(character);
+  const whitespace=/\s/u.test(character);
+  // normalizeSearchText collapses runs of spaces, newlines and tabs into
+  // one. Counting every source whitespace shifts the preview away from hits.
+  const part=whitespace?(previousWhitespace?"":" "):normalizeSearchText(character);
   if(normalizedPos+part.length>normalizedOffset)return sourcePos;
   normalizedPos+=part.length;
   sourcePos+=character.length;
+  previousWhitespace=whitespace;
  }
  return source.length;
 }

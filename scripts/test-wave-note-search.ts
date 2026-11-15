@@ -14,3 +14,7 @@ const snippet=noteSearchSnippet(sample as any,"искомая");
 assert.ok(snippet.includes("ИскОмая"),"Preview must show matched text after Unicode expansions");
 assert.ok(snippet.length>0,"Preview must not begin after the note end");
 assert.equal(noteSearchSnippet({body:"<p>Hello</p>"} as any,"Hello"),"Hello");
+
+const folded={body:"<p>"+"x".repeat(150)+"\t".repeat(700)+
+ "НАЙДЕНО"+"y".repeat(250)+"</p>"} as any;
+assert.ok(noteSearchSnippet(folded,"найдено").includes("НАЙДЕНО"));

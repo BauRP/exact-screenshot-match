@@ -85,10 +85,10 @@ function parseSavedFolders(raw:string|null):Folder[]{
  for(const item of parsed){
   if(!item||typeof item!=="object"||Array.isArray(item))throw Error("Invalid folder record");
   const folder=item as Record<string,unknown>;
-  if(typeof folder.id!=="string"||!/^[\\w-]{1,128}$/.test(folder.id)||
+  if(typeof folder.id!=="string"||!/^[\w-]{1,128}$/.test(folder.id)||
      ids.has(folder.id)||typeof folder.name!=="string"||folder.name.length>120||
      (folder.parentId!==undefined&&
-      (typeof folder.parentId!=="string"||!/^[\\w-]{1,128}$/.test(folder.parentId))))
+      (typeof folder.parentId!=="string"||!/^[\w-]{1,128}$/.test(folder.parentId))))
      throw Error("Invalid folder metadata");
   ids.add(folder.id);
   result.push({id:folder.id,name:folder.name,

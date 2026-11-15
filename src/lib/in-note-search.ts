@@ -16,23 +16,35 @@ export function findWords(doc:PMNode,query:string,caseSensitive=false):FoundWord
  const needle=caseSensitive?query:query.toLowerCase();
  doc.descendants((node,pos)=>{
   if(!node.isTextblock||matches.length>=200)return;
-  let text="";const offsets:number[]=[];
+  // Unicode lowercasing can expand characters (İ -> i + combining dot).
+  // Keep a map from every folded code unit to the ORIGINAL ProseMirror range.
+  // Otherwise Find/Replace can delete a neighbouring letter or mark.
+  let haystack="";const starts:number[]=[],ends:number[]=[];
+  const add=(folded:string,from:number,to:number)=>{
+   haystack+=folded;
+   for(let i=0;i<folded.length;i++){starts.push(from);ends.push(to);}
+  };
   node.forEach((child,offset)=>{
-   if(child.isText){
-    const part=child.text||"";
-    const concealed=child.marks.some(mark=>mark.type.name==="waveTape");
-    text+=concealed?"\uFFFC".repeat(part.length):part;
-    for(let i=0;i<part.length;i++)offsets.push(pos+offset+1+i);
-   }else{
-    text+="\uFFFC";offsets.push(pos+offset+1);
+   const base=pos+offset+1;
+   if(!child.isText){
+    add("\uFFFC",base,base+child.nodeSize);
+    return;
+   }
+   const concealed=child.marks.some(mark=>mark.type.name==="waveTape");
+   let characterOffset=0;
+   for(const character of child.text||""){
+    const from=base+characterOffset,to=from+character.length;
+    // Tape content must never be matched or replaced; it also separates
+    // visible fragments, so a query cannot join across it.
+    add(concealed?"\uFFFC":caseSensitive?character:character.toLowerCase(),from,to);
+    characterOffset+=character.length;
    }
   });
-  const haystack=caseSensitive?text:text.toLowerCase();
   let from=0;
   while(from<haystack.length&&matches.length<200){
    const at=haystack.indexOf(needle,from);if(at<0)break;
-   const start=offsets[at],end=offsets[at+needle.length-1];
-   if(start!==undefined&&end!==undefined)matches.push({from:start,to:end+1});
+   const start=starts[at],end=ends[at+needle.length-1];
+   if(start!==undefined&&end!==undefined)matches.push({from:start,to:end});
    from=at+Math.max(needle.length,1);
   }
  });

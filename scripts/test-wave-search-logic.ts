@@ -13,3 +13,11 @@ assert.equal(readableText(concealed).includes("Секретный ответ"),f
 assert.equal(noteMatchesSearch({...note,body:concealed},"Секретный"),false);
 assert.equal(noteSearchSnippet({...note,body:concealed},"ответ").includes("Секретный"),false);
 console.log("Cyrillic normalization, word-order-independent search and snippets passed");
+
+// A long paragraph with collapsed whitespace must keep the visible match in
+// the preview instead of cutting a completely different part of the text.
+const noisy={...note,body:"<p>"+"a".repeat(220)+" ".repeat(800)+
+ "ИСКОМАЯ-СТРОКА"+"z".repeat(400)+"</p>"};
+const noisySnippet=noteSearchSnippet(noisy,"искомая");
+assert.ok(noisySnippet.includes("ИСКОМАЯ-СТРОКА"),
+ "Search snippet must map offsets through collapsed whitespace");

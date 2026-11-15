@@ -140,6 +140,8 @@ jobs:
         run: bun scripts/test-wave-nested-folders.ts
       - name: Reject corrupted folder metadata without deleting the original
         run: bun scripts/test-wave-folder-corruption.ts
+      - name: Preserve valid saved folder IDs and nested folder edits
+        run: bun scripts/test-wave-folder-valid-hydration.ts
 
       - name: Verify collapsible folder drawer and searchable move destinations
         run: bun scripts/test-wave-folder-navigation.ts
