@@ -2,6 +2,7 @@
  * The clipboard is untrusted; never load remote images or execute embeds.
  * Tiptap will parse the returned small allowlisted HTML into editor nodes. */
 import {directionForText} from "./wave-text-direction";
+import {normalizedSafeNoteLink} from "./external-links";
 /** Only explicit RTL text needs a direction attribute. The editor retains
  * its existing defaults for Latin, Cyrillic, Kazakh, Japanese and Chinese. */
 export function clipboardRtlAttribute(value:string):string{
@@ -77,11 +78,9 @@ export function safeBrowserClipboardHtml(html:string):string{
    out.setAttribute("data-wave-tape","true");
   }
   if(tag==="A"){
-   const href=element.getAttribute("href")||"";
-   try{
-    const url=new URL(href);
-    if((url.protocol==="http:"||url.protocol==="https:")&&!url.username&&!url.password&&url.href.length<=2048)out.setAttribute("href",url.href);
-   }catch{/* Unsafe or relative links become plain text. */}
+   // Pasted mailto/tel and browser links share the editor's strict allowlist.
+   const href=normalizedSafeNoteLink(element.getAttribute("href")||"");
+   if(href)out.setAttribute("href",href);
   }
   if(textBlock.has(tag)){
    const align=element.style.textAlign;
