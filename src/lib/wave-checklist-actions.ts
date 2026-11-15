@@ -124,6 +124,11 @@ export function continueSelectedChecklistItem(editor:Editor):boolean{
    if(Object.prototype.hasOwnProperty.call(parent.attrs,key))
     sharedAttrs[key]=parent.attrs[key];
   }
+  // Some nested containers require a checklist item and do not allow a
+  // paragraph in its place. Never dispatch an invalid document on Enter.
+  const containerDepth=$pos.depth-1;
+  const container=$pos.node(containerDepth),index=$pos.index(containerDepth);
+  if(!container.canReplaceWith(index,index+1,paragraph))return false;
   tr.setNodeMarkup($pos.before(),paragraph,sharedAttrs);
   editor.view.dispatch(tr.scrollIntoView());
   return true;
