@@ -1,5 +1,13 @@
 # PROGRESS.md — Wave Notes / постоянный технический журнал
 
+### 2026-11-16 — большой пакет №2/№34/№36: безопасный микрофон, аудио и транзакции всех медиа; APK успешно собрана
+
+- **Код:** [a3c82bbc](https://github.com/BauRP/exact-screenshot-match/commit/a3c82bbcf3d004ebbd464af7ed78456009772502); 11 файлов. `NativeAudioRecorderPlugin.java` блокирует повторный запрос микрофона и поздний callback после отмены/закрытия; оба случая завершают ожидающий вызов. `native-audio-decode.ts` ограничивает размер base64 до выделения памяти и декодирует длинную запись частями с передачей управления Android WebView.
+- **Надёжность медиа:** `indexeddb-transaction.ts` используется в audio/image/pdf хранилищах; тайм-аут 60 секунд с abort, ошибки/поздний callback, успешная запись только после `transaction.oncomplete`; запрета на старые форматы и удаления пользовательских данных нет. Добавлены два регрессионных теста и проверки Android разрешения в существующем тесте.
+- **Автоматическая проверка:** [Android APK run №43768231943](https://github.com/BauRP/exact-screenshot-match/actions/runs/43768231943) — **completed/success** на SHA `a3c82bbcf3d004ebbd464af7ed78456009772502`. TypeScript, web build, полный набор тестов и новые проверки, Gradle assemble, verify/upload APK. Артефакт `Wave-Notes-debug-APK`, ID `14182933559`. [Android emulator run №43768231986](https://github.com/BauRP/exact-screenshot-match/actions/runs/43768231986) — `queued` / `пока нет результата` на момент записи; не выдавать за success.
+- **Готовность:** №2 83→84% (+1), №34 77→77,5% (+0,5), №36 70,5→72,5% (+2). Остальные 33 +0. Сумма +3,5 п.п. по трём направлениям; общая 80,40→**80,49%** (2897,8/36).
+- **Следующий пакет:** жизненный цикл микрофона и операции чтения/записи при ошибках/смене экрана; независимые Q2 сохранность данных, Q3 OCR камеры; риск SEC-01 Telegram остаётся P0 до согласованной безопасной миграции. `main`, реклама, работающий Telegram не менялись. Личный телефон не часть незавершённого кода.
+
 ### 2026-11-16 — крупный пакет №7/№9/№12/№15/№16/№22/№31: восстановление UUID-папок и корректных позиций Unicode, APK успешна
 
 - **Код:** [a29503ac](https://github.com/BauRP/exact-screenshot-match/commit/a29503ac9ff7b3e6df2980c57f2a694b7c5981fe), [исправление теста 03b89265](https://github.com/BauRP/exact-screenshot-match/commit/03b89265663e79be53166d6a4bf65926a9a5856f). Файлы: `src/lib/folders-store.ts`, `in-note-search.ts`, `note-search.ts`, `note-checklist-summary.ts`, тесты `test-wave-find-replace.ts`, `test-wave-search-logic.ts`, `test-wave-note-search.ts`, `test-wave-checklist-summary.ts`, новый `test-wave-folder-valid-hydration.ts`, CI workflow.
