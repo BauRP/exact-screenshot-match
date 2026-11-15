@@ -181,3 +181,22 @@ const ui=await import("node:fs").then(m=>m.readFileSync("src/lib/wave-checklist.
 assert.ok(ui.includes('return continueSelectedChecklistItem(this.editor);'));
 assert.ok(ui.includes('insertUncheckedChecklistAfter(this.editor)'),"Keyboard shortcut must use validated single-transaction action");
 console.log("Checklist caret split and empty-row Enter preserve text, formatting, and undo semantics");
+
+
+// A fixed-layout parent requires one checklist row; pressing Enter in its
+// empty row must never dispatch an invalid paragraph and lose note data.
+const mandatoryEmpty=parentSchema.nodes.waveChecklistItem.create({
+ shape:"square",done:false,textDirection:"rtl",textAlign:"right"
+});
+let mandatory=EditorState.create({schema:parentSchema,doc:parentSchema.nodes.doc.create(null,[
+ parentSchema.nodes.fixedChecklist.create(null,mandatoryEmpty)
+])});
+let mandatoryWrites=0;
+const mandatoryEditor={isEditable:true,isDestroyed:false,get state(){return mandatory;},
+ view:{dispatch(tr:any){mandatoryWrites++;mandatory=mandatory.apply(tr);}}} as any;
+mandatory=mandatory.apply(mandatory.tr.setSelection(TextSelection.create(mandatory.doc,2)));
+const savedMandatory=JSON.stringify(mandatory.doc.toJSON());
+assert.equal(continueSelectedChecklistItem(mandatoryEditor),false);
+assert.equal(mandatoryWrites,0,"No invalid transaction or Undo entry");
+assert.equal(JSON.stringify(mandatory.doc.toJSON()),savedMandatory);
+assert.equal(mandatory.doc.check(),undefined);
