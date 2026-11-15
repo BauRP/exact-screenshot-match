@@ -62,3 +62,17 @@ assert.ok(structuredMarkdownClipboardHtml("# Checklist\n- [x] Done\n- [ ] Pendin
  "Regular checklists must remain supported");
 assert.ok(structuredMarkdownClipboardHtml("# Code\n\x60\x60\x60\n  - literal code\n\x60\x60\x60").includes("  - literal code"),
  "A code fence must not be interpreted as a nested list");
+
+
+// Pasted Markdown checklists keep checked state, inline formatting, and RTL.
+// The editor prefers the rich converter over plain-list fallback.
+const richTasks=structuredMarkdownClipboardHtml(
+ "## Today\n- [x] **Paid** [receipt](https://example.org/)\n- [ ] *Next*");
+assert.ok(richTasks.includes('data-done="true"'));
+assert.ok(richTasks.includes('<strong>Paid</strong>'));
+assert.ok(richTasks.includes('<a href="https://example.org/">receipt</a>'));
+assert.ok(richTasks.includes("<em>Next</em>"));
+assert.ok(editor.includes("structuredMarkdownClipboardHtml(plain)||structuredPlainClipboardHtml(plain)"));
+const rtlTasks=structuredMarkdownClipboardHtml("- [x] **تم**\n- [ ] *שלום*");
+assert.ok(rtlTasks.includes('dir="rtl"'));
+assert.ok(rtlTasks.includes("<strong>تم</strong>"));
