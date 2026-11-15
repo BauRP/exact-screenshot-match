@@ -21,8 +21,8 @@ const richSchema=new Schema({nodes:{
 },marks:{waveTape:{},strong:{}}});
 const rich=(text:string,mark?:string)=>richSchema.text(text,mark?[richSchema.marks[mark].create()]:[]);
 let richState=EditorState.create({schema:richSchema,doc:richSchema.nodes.doc.create(null,[
- richSchema.nodes.paragraph.create(null,[rich("İ"),rich(" SECRET ","waveTape"),rich("İ visible ","strong"),rich("suffix")]),
- richSchema.nodes.paragraph.create(null,rich("İ again"))
+ richSchema.nodes.paragraph.create(null,[rich("İ"),rich(" SECRET ","waveTape"),rich("İ text ","strong"),rich("end")]),
+ richSchema.nodes.paragraph.create(null,rich("İ more"))
 ])});
 let writes=0;
 const richEditor={isEditable:true,isDestroyed:false,get state(){return richState;},
@@ -30,8 +30,8 @@ const richEditor={isEditable:true,isDestroyed:false,get state(){return richState
 assert.equal(replaceAllInNote(richEditor,"i","X"),3,
  "Case-insensitive search must match dotted capitals without touching hidden Tape");
 assert.equal(writes,1,"Bulk replacement is one undoable transaction");
-assert.equal(richState.doc.child(0).textContent,"X SECRET X visible suffix");
-assert.equal(richState.doc.child(1).textContent,"X again");
+assert.equal(richState.doc.child(0).textContent,"X SECRET X text end");
+assert.equal(richState.doc.child(1).textContent,"X more");
 assert.equal(richState.doc.child(0).child(1).marks[0].type.name,"waveTape",
  "Concealed words and marks must not be modified");
 assert.equal(richState.doc.check(),undefined);
