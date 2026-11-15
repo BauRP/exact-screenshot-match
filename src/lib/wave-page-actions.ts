@@ -166,8 +166,15 @@ export function isEmptyPageBody(body:Fragment):boolean{
  for(let i=0;i<body.childCount;i++){
   const node=body.child(i);
   if(node.type.name!=="paragraph")return false;
+  // An "empty" paragraph can still carry manual RTL, font, alignment or
+  // styled whitespace. Deleting its page would destroy those saved settings.
+  const defaults=node.type.defaultAttrs||{};
+  if(Object.keys(node.attrs).some(key=>node.attrs[key]!==defaults[key])||
+     node.marks.length)return false;
   let blank=true;
-  node.forEach(child=>{if(!child.isText||Boolean(child.text?.trim()))blank=false;});
+  node.forEach(child=>{
+   if(!child.isText||Boolean(child.text?.trim())||child.marks.length)blank=false;
+  });
   if(!blank)return false;
  }
  return true;

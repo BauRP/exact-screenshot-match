@@ -14,11 +14,15 @@ declare module "@tiptap/core" {
 function ImageView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewProps){
  const [annotating,setAnnotating]=useState(false);
  const id=String(node.attrs.imageId||"");
- const width=Number(node.attrs.width)||320;
+ // Historic notes can contain an out-of-range width; the preview and
+ // slider must still stay inside the supported image size.
+ const width=Math.max(120,Math.min(720,Number(node.attrs.width)||320));
  const align=(["left","center","right"].includes(String(node.attrs.align))?node.attrs.align:"center") as "left"|"center"|"right";
  const resizeStart=useRef<{pointerId:number;x:number;width:number}|null>(null);
  const [previewWidth,setPreviewWidth]=useState<number|null>(null);
- const shownWidth=previewWidth??width;
+ const [sliderPreview,setSliderPreview]=useState<number|null>(null);
+ const sliderGesture=useRef<{pointerId:number;width:number}|null>(null);
+ const shownWidth=sliderPreview??previewWidth??width;
  const [src,setSrc]=useState("");
  const [error,setError]=useState(false);
  const [retry,setRetry]=useState(0);
@@ -87,8 +91,38 @@ function ImageView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewProp
       </div>}
     {editor.isEditable&&<div className="mt-2 flex flex-wrap items-center justify-between gap-2">
       <label className="flex items-center gap-2 text-xs text-muted-foreground">
-        Ширина <input type="range" min={120} max={720} step={20} value={width}
-          aria-label="Ширина фотографии" onChange={e=>updateAttributes({width:Number(e.target.value)})}/>
+        Ширина <input type="range" min={120} max={720} step={20} value={sliderPreview??width}
+          aria-label="Ширина фотографии"
+          onPointerDown={e=>{
+            if(!editor.isEditable||editor.isDestroyed||
+               (e.pointerType==="mouse"&&e.button!==0))return;
+            sliderGesture.current={pointerId:e.pointerId,width};
+          }}
+          onChange={e=>{
+            if(!editor.isEditable||editor.isDestroyed)return;
+            const next=Math.max(120,Math.min(720,Number(e.target.value)||320));
+            if(sliderGesture.current){
+              sliderGesture.current.width=next;
+              setSliderPreview(next);
+            }else if(next!==width)updateAttributes({width:next});
+          }}
+          onPointerUp={e=>{
+            const gesture=sliderGesture.current;
+            if(!gesture||gesture.pointerId!==e.pointerId)return;
+            sliderGesture.current=null;
+            setSliderPreview(null);
+            // One saved change (and one Undo entry) per completed drag.
+            if(editor.isEditable&&!editor.isDestroyed&&gesture.width!==width)
+              updateAttributes({width:gesture.width});
+          }}
+          onPointerCancel={e=>{
+            if(sliderGesture.current?.pointerId!==e.pointerId)return;
+            sliderGesture.current=null;setSliderPreview(null);
+          }}
+          onLostPointerCapture={e=>{
+            if(sliderGesture.current?.pointerId!==e.pointerId)return;
+            sliderGesture.current=null;setSliderPreview(null);
+          }}/>
         <span>{shownWidth}px</span>
       </label>
       <select aria-label="Расположение фотографии" value={align}

@@ -103,3 +103,12 @@ const count=calls.length;
 paintInk(ctx,"[]",0,0,800,320);
 paintInk(ctx,serializeInk([line]),0,0,0,100);
 assert.equal(calls.length,count,"Empty/zero-sized drawings must not alter canvas state");
+
+// Both notebook ink and photo annotations use this canvas. Closing the tool
+// while a finger is down must restore the pre-gesture ink/Undo history.
+assert.ok(canvas.includes("if((editable&&active)||gesture.current===null)return;"));
+assert.ok(canvas.includes("if(canvas?.hasPointerCapture(pointer))canvas.releasePointerCapture(pointer)"));
+assert.ok(canvas.includes("gesture.current=null;lastEraserPoint.current=null;shapeStart.current=null;"));
+assert.ok(canvas.includes("if(!editable||!active||gesture.current!==null||current.current.length===0)return;"));
+assert.ok(canvas.includes("if(!editable||!active||gesture.current!==null||!past.current.length)return;"));
+assert.ok(canvas.includes("if(!editable||!active||gesture.current!==null||!future.current.length)return;"));

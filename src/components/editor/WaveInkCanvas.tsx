@@ -13,6 +13,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
  const future=useRef<InkStroke[][]>([]);
  const [historyVersion,setHistoryVersion]=useState(0);
  const gesture=useRef<number|null>(null);
+ const canvasRef=useRef<SVGSVGElement|null>(null);
  const gestureChanged=useRef(false);
  const gestureBefore=useRef<{strokes:InkStroke[];past:InkStroke[][];future:InkStroke[][]}|null>(null);
  const lastEraserPoint=useRef<InkPoint|null>(null);
@@ -32,6 +33,24 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
    past.current=[];future.current=[];setHistoryVersion(v=>v+1);
  },[value]);
  const replace=(list:InkStroke[])=>{current.current=list;setStrokes(list);};
+ // When a photo is closed, editor becomes read-only or annotation is
+ // switched off mid-gesture, abort immediately. Android may never deliver
+ // pointerup after a modal or focus change, so do not leave the canvas locked.
+ useEffect(()=>{
+   if((editable&&active)||gesture.current===null)return;
+   const pointer=gesture.current;
+   gesture.current=null;lastEraserPoint.current=null;shapeStart.current=null;
+   const before=gestureBefore.current;
+   gestureBefore.current=null;
+   if(before&&gestureChanged.current){
+     replace(before.strokes);
+     past.current=before.past;future.current=before.future;
+     setHistoryVersion(v=>v+1);
+   }
+   gestureChanged.current=false;
+   const canvas=canvasRef.current;
+   if(canvas?.hasPointerCapture(pointer))canvas.releasePointerCapture(pointer);
+ },[editable,active]);
  const markChanged=()=>{
    if(gestureChanged.current)return;
    past.current=[...past.current.slice(-29),current.current];
@@ -139,7 +158,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
   if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);
  };
  const clear=()=>{
-   if(gesture.current!==null||current.current.length===0)return;
+   if(!editable||!active||gesture.current!==null||current.current.length===0)return;
    past.current=[...past.current.slice(-29),current.current];
    future.current=[];
    replace([]);
@@ -147,14 +166,14 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
    emit([]);
  };
  const undo=()=>{
-   if(gesture.current!==null||!past.current.length)return;
+   if(!editable||!active||gesture.current!==null||!past.current.length)return;
    const previous=past.current[past.current.length-1];
    past.current=past.current.slice(0,-1);
    future.current=[...future.current.slice(-29),current.current];
    replace(previous);setHistoryVersion(v=>v+1);emit(previous);
  };
  const redo=()=>{
-   if(gesture.current!==null||!future.current.length)return;
+   if(!editable||!active||gesture.current!==null||!future.current.length)return;
    const next=future.current[future.current.length-1];
    future.current=future.current.slice(0,-1);
    past.current=[...past.current.slice(-29),current.current];
@@ -164,7 +183,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
    {saveError&&<div role="alert" className="absolute left-2 right-2 top-2 z-10 rounded-lg bg-destructive px-3 py-2 text-xs text-destructive-foreground">
      Рисунок слишком большой. Последний штрих не сохранён.
    </div>}
-   <svg role="img" aria-label="Рисунок" viewBox="0 0 1000 1000" preserveAspectRatio="none"
+   <svg ref={canvasRef} role="img" aria-label="Рисунок" viewBox="0 0 1000 1000" preserveAspectRatio="none"
      className={`absolute inset-0 h-full w-full ${editable&&active?"touch-none cursor-crosshair":"pointer-events-none"}`}
      onPointerDown={start} onPointerMove={move} onPointerUp={stop}
      onPointerCancel={cancel} onLostPointerCapture={cancel}>

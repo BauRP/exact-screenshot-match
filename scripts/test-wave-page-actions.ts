@@ -177,3 +177,38 @@ assert.equal(duplicateCurrentPage(crossEditor),true);
 assert.equal(crossDispatches,1);
 assert.equal(topLevelPageRanges(crossState.doc).length,4);
 assert.equal(crossState.doc.check(),undefined);
+
+// Empty pages must not erase saved formatting, RTL or manually styled spaces.
+// The page-delete command may remove only truly default blank paragraphs.
+const styledSchema=new Schema({nodes:{
+ doc:{content:"block+"},
+ paragraph:{group:"block",content:"text*",attrs:{
+  textDirection:{default:"ltr"},textAlign:{default:"left"}
+ }},
+ wavePageBreak:{group:"block",atom:true,attrs:{label:{default:""}}},
+ text:{group:"inline"}
+},marks:{strong:{}}});
+const pStyled=(value:string,dir:"rtl"|"ltr"="ltr",bold=false)=>
+ styledSchema.nodes.paragraph.create({textDirection:dir},
+ value?styledSchema.text(value,bold?[styledSchema.marks.strong.create()]:[]):undefined);
+const divStyled=(name:string)=>styledSchema.nodes.wavePageBreak.create({label:name});
+let styledState=EditorState.create({schema:styledSchema,doc:styledSchema.nodes.doc.create(null,[
+ pStyled("KEEP"),divStyled("RTL blank"),pStyled("", "rtl"),
+ divStyled("Formatted spaces"),pStyled("  ","ltr",true),
+ divStyled("Plain empty"),pStyled("  "),
+ divStyled("Real text"),pStyled("still here")
+])});
+let styledWrites=0;
+const styledEditor={isEditable:true,isDestroyed:false,get state(){return styledState;},
+ view:{dispatch(tr:any){styledWrites++;styledState=styledState.apply(tr);}}} as any;
+const beforeStyled=topLevelPageRanges(styledState.doc);
+assert.equal(isEmptyPageBody(styledState.doc.content.cut(beforeStyled[1].bodyStart,beforeStyled[1].end)),false);
+assert.equal(isEmptyPageBody(styledState.doc.content.cut(beforeStyled[2].bodyStart,beforeStyled[2].end)),false);
+assert.equal(isEmptyPageBody(styledState.doc.content.cut(beforeStyled[3].bodyStart,beforeStyled[3].end)),true);
+assert.equal(removeAllEmptyPages(styledEditor),1);
+assert.equal(styledWrites,1,"Removing all genuinely empty pages is one Undo transaction");
+assert.equal(topLevelPageRanges(styledState.doc).length,4);
+assert.equal(styledState.doc.child(2).attrs.textDirection,"rtl");
+assert.equal(styledState.doc.child(4).firstChild?.marks[0].type.name,"strong");
+assert.ok(styledState.doc.textContent.includes("still here"));
+assert.equal(styledState.doc.check(),undefined);

@@ -26,3 +26,20 @@ assert.ok(image.includes("drag.pointerId!==e.pointerId"),"Only the captured poin
 assert.ok(image.includes("onLostPointerCapture={e=>{"),"Capture loss discards previews");
 assert.ok(image.includes('width:shownWidth+"px"'),"Drag preview must be visible");
 console.log("Offline image retry, bounded single-commit photo resize and drawing erase integration checked");
+// A range slider must preview locally and commit only on pointerup. Canceled
+// gestures must not write an incomplete resize; arrow-key steps remain usable.
+const range=image.slice(image.indexOf('Ширина <input type="range"'),
+ image.indexOf("</label>",image.indexOf('Ширина <input type="range"')));
+const rangeChange=range.slice(range.indexOf("onChange={e=>{"),range.indexOf("onPointerUp={e=>{"));
+assert.ok(rangeChange.includes("sliderGesture.current.width=next"));
+assert.ok(rangeChange.includes("setSliderPreview(next)"));
+assert.ok(range.includes("sliderGesture.current=null;"));
+assert.ok(range.includes("gesture.width!==width"));
+assert.ok(range.includes("onPointerCancel={e=>{"));
+assert.ok(range.includes("onLostPointerCapture={e=>{"));
+const cancelRange=range.slice(range.indexOf("onPointerCancel={e=>{"));
+assert.ok(!cancelRange.includes("updateAttributes("),"Canceled slider never writes a photo size");
+assert.ok(image.includes("sliderPreview??previewWidth??width"),
+ "Image preview follows the active slider without changing saved data");
+assert.ok(image.includes("Math.max(120,Math.min(720,Number(node.attrs.width)||320))"),
+ "Invalid saved image size must be bounded in the editor");
