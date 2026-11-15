@@ -58,21 +58,33 @@ export const AutoLinkExtras = Extension.create({
               if(!node.isText||!node.text||
                  node.marks.some(m=>m.type===linkType||m.type.name==="waveTape"))return;
               const pos=blockPos+1+offset;
-              const scan=(re:RegExp,prefix:"mailto:"|"tel:")=>{
-                re.lastIndex=0;
-                let match:RegExpExecArray|null;
-                while((match=re.exec(node.text!))!==null){
-                  const raw=match[1];
-                  const href=prefix==="tel:"
-                    ? "tel:"+raw.replace(/[\s\-().]/g,"")
-                    : prefix+raw;
-                  tr.addMark(pos+match.index,pos+match.index+raw.length,
-                    linkType.create({href}));
-                  modified=true;
-                }
-              };
-              scan(EMAIL_RE,"mailto:");
-              scan(PHONE_RE,"tel:");
+              const text=node.text;
+              const emailSpans:{from:number;to:number}[]=[];
+              EMAIL_RE.lastIndex=0;
+              let match:RegExpExecArray|null;
+              // Email takes precedence over phone. Both regexes can match
+              // digits inside the SAME email, and two overlapping "link"
+              // marks would otherwise split its mailto: target.
+              while((match=EMAIL_RE.exec(text))!==null){
+                const raw=match[1],from=match.index,to=from+raw.length;
+                emailSpans.push({from,to});
+                tr.addMark(pos+from,pos+to,linkType.create({href:"mailto:"+raw}));
+                modified=true;
+              }
+              PHONE_RE.lastIndex=0;
+              while((match=PHONE_RE.exec(text))!==null){
+                const raw=match[1],from=match.index,to=from+raw.length;
+                if(emailSpans.some(span=>from<span.to&&to>span.from))continue;
+                // Several spaces between two digits are NOT a valid phone.
+                if(raw.replace(/\D/g,"").length<7)continue;
+                // Do not link numbers embedded inside identifiers or
+                // email-like strings. A standalone "+7 ..." still works.
+                if((from>0&&/[\p{L}\p{N}_@]/u.test(text[from-1]))||
+                   (to<text.length&&/[\p{L}\p{N}_@]/u.test(text[to])))continue;
+                const href="tel:"+raw.replace(/[\s\-().]/g,"");
+                tr.addMark(pos+from,pos+to,linkType.create({href}));
+                modified=true;
+              }
             });
           }
           return modified?tr:null;

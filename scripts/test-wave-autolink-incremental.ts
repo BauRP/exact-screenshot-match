@@ -51,4 +51,31 @@ hidden=hidden.apply(hidden.tr.addMark(1,hidden.doc.firstChild!.nodeSize-1,
 hidden=hidden.apply(hidden.tr.insertText("!",hidden.doc.firstChild!.nodeSize-1));
 assert.deepEqual(hrefs(hidden,0),[],"Concealed Tape answers must not gain links");
 assert.equal(hidden.doc.firstChild!.textContent,"masked@site.org!");
-console.log("Incremental email and phone auto-linking preserves large notes, other paragraphs and hidden answers");
+
+/** An email containing only digits must stay ONE mailto link, never split
+ * into a tel segment and a separate domain link. */
+const numericEmail="1234567890@example.org";
+let numeric=create(["Contact "+numericEmail+" or +1 415 555 1234"]);
+numeric=numeric.apply(numeric.tr.insertText("!",numeric.doc.content.size-1));
+const numericLinks=numeric.doc.firstChild!.content.content
+ .filter(n=>n.marks.some(m=>m.type.name==="link"))
+ .map(n=>({text:n.textContent,href:String(n.marks.find(m=>m.type.name==="link")!.attrs.href)}));
+assert.ok(numericLinks.some(x=>x.text===numericEmail&&x.href==="mailto:"+numericEmail),
+ "Numeric email must remain one uninterrupted mailto link");
+assert.ok(numericLinks.some(x=>x.href==="tel:+14155551234"),
+ "Standalone phone next to numeric email still works");
+assert.ok(!numericLinks.some(x=>x.href.startsWith("tel:")&&x.text.includes("@")),
+ "Phone matcher must never overlap an email");
+
+let falsePhones=create(["Only 1        2 and item1234567890suffix and 12 34"]);
+falsePhones=falsePhones.apply(falsePhones.tr.insertText(".",falsePhones.doc.content.size-1));
+assert.deepEqual(hrefs(falsePhones,0),[],
+ "Spaced two-digit patterns and digits inside identifiers are not phone numbers");
+
+let phoneOnly=create(["Call 8 (800) 555-35-35"]);
+phoneOnly=phoneOnly.apply(phoneOnly.tr.insertText("!",phoneOnly.doc.content.size-1));
+assert.ok(hrefs(phoneOnly,0).includes("tel:8(800)5553535")||
+ hrefs(phoneOnly,0).includes("tel:88005553535"),
+ "Legitimate formatted phone still gets a callable link");
+
+console.log("Incremental auto-links preserve numeric emails and reject false phones in large notes");
