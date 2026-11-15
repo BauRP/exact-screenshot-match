@@ -1,5 +1,13 @@
 # PROGRESS.md — Wave Notes / постоянный технический журнал
 
+### 2026-11-15 — №1/№22: новая задача через безопасное создание в редакторе, APK успешно собрана
+
+- **Код:** [ad000716](https://github.com/BauRP/exact-screenshot-match/commit/ad000716e3e4d2ca233b9353b7120054e1500b7e), [исправление регрессии 624ede1a](https://github.com/BauRP/exact-screenshot-match/commit/624ede1a7d693b443402b29e57ebdba29e2826e3). Файлы: `src/lib/wave-checklist-actions.ts`, `src/lib/wave-checklist.ts`, `scripts/test-wave-checklist-split.ts`, `scripts/test-wave-editor-menu.ts`.
+- Горячая клавиша добавления задачи `Mod-Shift-Enter` теперь использует `insertUncheckedChecklistAfter` с проверкой допустимости прямого родительского раздела перед вставкой. Создаёт неотмеченную задачу в том же формате с сохранением RTL/выравнивания, ставит курсор в новый пункт, делает одну Undo-транзакцию. Если схема запрещает добавление второго пункта, если выделен диапазон либо редактор заблокирован/закрыт, документ остаётся неизменным.
+- **Проверки и восстановление CI:** первый запуск [№43660307030](https://github.com/BauRP/exact-screenshot-match/actions/runs/43660307030) выявил в старом `test-wave-editor-menu.ts` проверку строки удалённого способа вставки. Обновили тест на фактическую безопасную команду и положение курсора, повторная [CI №43660463430](https://github.com/BauRP/exact-screenshot-match/actions/runs/43660463430) на SHA `624ede1a7d693b443402b29e57ebdba29e2826e3` **completed/success**, включая web build, TS, ProseMirror тесты, Gradle APK, verify, публикацию `Wave-Notes-debug-APK` (artifact `14139828016`). Телефонная приёмка отдельно, не снижает оценку программной части.
+- **Готовность 36:** №1 95→95,5% (+0,5 п.п.), №22 69,5→70% (+0,5 п.п.), остальные 34 +0. Общая готовность **79,96→79,99%** (+1/36≈0,0278 п.п.). Таблица `docs/wave-notes-feature-progress.md` обновлена. Дальше №23 правописание/RTL, №20 блоки, №29 рисование, №22 списки, защита данных. `main`, Telegram и реклама не менялись.
+
+
 ### 2026-11-15 — №24: сохранены числовые email, устранены ложные телефонные ссылки, APK успешна
 
 - **Код:** [6bd5717f](https://github.com/BauRP/exact-screenshot-match/commit/6bd5717f10fdd5934c2a013c25c480e6b7e3b18d). Изменены только `src/lib/editor-extensions.ts` и `scripts/test-wave-autolink-incremental.ts`.
