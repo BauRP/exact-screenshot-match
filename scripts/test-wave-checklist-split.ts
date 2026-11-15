@@ -1,7 +1,7 @@
 import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection} from "@tiptap/pm/state";
-import {continueSelectedChecklistItem,toggleWaveChecklistAtPosition} from "../src/lib/wave-checklist-actions";
+import {continueSelectedChecklistItem,insertUncheckedChecklistAfter,toggleWaveChecklistAtPosition} from "../src/lib/wave-checklist-actions";
 import {WaveChecklistItem} from "../src/lib/wave-checklist";
 const schema=new Schema({nodes:{doc:{content:"block+"},
  paragraph:{group:"block",content:"inline*",attrs:{textDirection:{default:"ltr"},textAlign:{default:"left"}}},
@@ -114,6 +114,70 @@ shortcutState=shortcutState.apply(shortcutState.tr.setSelection(TextSelection.cr
 assert.equal(shortcuts["Mod-Enter"](),false);
 assert.equal(shortcuts["Mod-Shift-Enter"](),false);
 assert.equal(shortcutEdits,2);
+
+// The shared keyboard/toolbar action must honor the direct parent schema:
+// inside a folded section insertion is legal, but a fixed one-task section
+// cannot gain a second task (and must not rewrite its existing content).
+const parentSchema=new Schema({nodes:{
+ doc:{content:"block+"},
+ waveFold:{group:"block",content:"block+"},
+ fixedChecklist:{group:"block",content:"waveChecklistItem"},
+ paragraph:{group:"block",content:"text*"},
+ waveChecklistItem:{group:"block",content:"text*",
+   attrs:{shape:{default:"square"},done:{default:false},
+     textDirection:{default:"ltr"},textAlign:{default:"left"}}},
+ text:{}
+},marks:{strong:{}}});
+const fixedRow=parentSchema.nodes.waveChecklistItem.create(
+ {shape:"diamond",done:true,textDirection:"rtl",textAlign:"right"},
+ parentSchema.text("שלום", [parentSchema.marks.strong.create()]));
+let folded=EditorState.create({schema:parentSchema,doc:parentSchema.nodes.doc.create(null,[
+ parentSchema.nodes.waveFold.create(null,[fixedRow,parentSchema.nodes.paragraph.create(null,parentSchema.text("after"))])
+])});
+let foldEdits=0;
+const foldEditor={isEditable:true,isDestroyed:false,get state(){return folded;},
+ view:{dispatch(tr:any){foldEdits++;folded=folded.apply(tr);}}} as any;
+folded=folded.apply(folded.tr.setSelection(TextSelection.create(folded.doc,3)));
+assert.equal(insertUncheckedChecklistAfter(foldEditor),true);
+assert.equal(foldEdits,1,"One safe insertion creates one transaction");
+assert.equal(folded.doc.child(0).childCount,3);
+assert.equal(folded.doc.child(0).child(0).textContent,"שלום");
+assert.equal(folded.doc.child(0).child(0).attrs.done,true);
+assert.equal(folded.doc.child(0).child(1).textContent,"");
+assert.equal(folded.doc.child(0).child(1).attrs.done,false);
+assert.equal(folded.doc.child(0).child(1).attrs.shape,"diamond");
+assert.equal(folded.doc.child(0).child(1).attrs.textDirection,"rtl");
+assert.equal(folded.doc.child(0).child(1).attrs.textAlign,"right");
+assert.equal(folded.doc.child(0).child(2).textContent,"after");
+assert.equal(folded.selection.$from.parent.type.name,"waveChecklistItem");
+assert.equal(folded.selection.$from.parentOffset,0);
+assert.equal(folded.doc.check(),undefined);
+
+let fixed=EditorState.create({schema:parentSchema,doc:parentSchema.nodes.doc.create(null,[
+ parentSchema.nodes.fixedChecklist.create(null,fixedRow)
+])});
+let fixedEdits=0;
+const fixedEditor={isEditable:true,isDestroyed:false,get state(){return fixed;},
+ view:{dispatch(tr:any){fixedEdits++;fixed=fixed.apply(tr);}}} as any;
+fixed=fixed.apply(fixed.tr.setSelection(TextSelection.create(fixed.doc,3)));
+const fixedBefore=JSON.stringify(fixed.doc.toJSON());
+assert.equal(insertUncheckedChecklistAfter(fixedEditor),false,
+ "Schema permits exactly one checklist row; a second is forbidden");
+assert.equal(fixedEdits,0);
+assert.equal(JSON.stringify(fixed.doc.toJSON()),fixedBefore);
+assert.equal(fixed.doc.check(),undefined);
+fixed=fixed.apply(fixed.tr.setSelection(TextSelection.create(fixed.doc,2,4)));
+assert.equal(insertUncheckedChecklistAfter(fixedEditor),false,
+ "A range selection is not permission to insert a new row");
+assert.equal(fixedEdits,0);
+
+let locked=true,closed=false;
+const protectedEditor={get isEditable(){return !locked;},get isDestroyed(){return closed;},
+ get state(){return folded;},view:{dispatch(_tr:any){throw new Error("No edit should occur");}}} as any;
+assert.equal(insertUncheckedChecklistAfter(protectedEditor),false);
+locked=false;closed=true;
+assert.equal(insertUncheckedChecklistAfter(protectedEditor),false);
 const ui=await import("node:fs").then(m=>m.readFileSync("src/lib/wave-checklist.ts","utf8"));
 assert.ok(ui.includes('return continueSelectedChecklistItem(this.editor);'));
+assert.ok(ui.includes('insertUncheckedChecklistAfter(this.editor)'),"Keyboard shortcut must use validated single-transaction action");
 console.log("Checklist caret split and empty-row Enter preserve text, formatting, and undo semantics");

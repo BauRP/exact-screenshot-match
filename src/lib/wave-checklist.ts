@@ -1,5 +1,5 @@
 import { Node, mergeAttributes } from "@tiptap/core";
-import {continueSelectedChecklistItem,toggleWaveChecklistAtPosition} from "./wave-checklist-actions";
+import {continueSelectedChecklistItem,insertUncheckedChecklistAfter,toggleWaveChecklistAtPosition} from "./wave-checklist-actions";
 export type CheckShape="square"|"circle"|"diamond"|"check";
 const valid=(shape:string):shape is CheckShape=>["square","circle","diamond","check"].includes(shape);
 /** The checkbox is real saved document data. The DOM marker is only its UI.
@@ -9,14 +9,8 @@ export const WaveChecklistItem=Node.create({
  name:"waveChecklistItem",
  priority:1100,
  addKeyboardShortcuts(){
-  return {"Mod-Shift-Enter":()=>{
-    if(!this.editor.isEditable||this.editor.isDestroyed||!this.editor.state.selection.empty)return false;
-    const {$from}=this.editor.state.selection;
-    if($from.parent.type.name!=="waveChecklistItem")return false;
-    const at=$from.after();
-    return this.editor.chain().focus().insertContentAt(at,{type:"waveChecklistItem",
-      attrs:{...$from.parent.attrs,done:false},content:[]}).setTextSelection(at+1).run();
-   },"Mod-Enter":()=>{
+  return {"Mod-Shift-Enter":()=>insertUncheckedChecklistAfter(this.editor),
+   "Mod-Enter":()=>{
     const {selection}=this.editor.state,{$from,$to}=selection;
     if($from.parent.type.name!=="waveChecklistItem"||
        $to.parent.type.name!=="waveChecklistItem"||

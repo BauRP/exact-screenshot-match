@@ -146,6 +146,24 @@ export function continueSelectedChecklistItem(editor:Editor):boolean{
  return true;
 }
 
+/** Insert an unchecked task immediately after the caret's task.
+ * Unlike a generic Tiptap insertContentAt, check the direct parent schema
+ * first: invalid nested structures must remain unchanged. One transaction
+ * creates one undoable row, and the caret moves into the new empty task. */
+export function insertUncheckedChecklistAfter(editor:Editor):boolean{
+ if(!editor.isEditable||editor.isDestroyed||!editor.state.selection.empty)return false;
+ const {state}=editor,{$from}=state.selection;
+ const row=$from.parent;
+ if(row.type.name!=="waveChecklistItem")return false;
+ const at=$from.after(),$at=state.doc.resolve(at);
+ if(!$at.parent.canReplaceWith($at.index(),$at.index(),row.type))return false;
+ const next=row.type.create({...row.attrs,done:false});
+ const tr=state.tr.insert(at,next);
+ tr.setSelection(TextSelection.create(tr.doc,at+1));
+ editor.view.dispatch(tr.scrollIntoView());
+ return true;
+}
+
 /** The section-scoped toolbar is meaningful only when the whole selection
  * belongs to the SAME innermost section. A range across two sections, from
  * a section into plain text or into a different nested section must not
