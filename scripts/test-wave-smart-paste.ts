@@ -17,8 +17,8 @@ for(const token of ["element.style.backgroundColor","out.style.backgroundColor=h
  assert.ok(paste.includes(token),token);
 }
 assert.ok(!paste.includes("out.style.cssText"),"Never paste arbitrary clipboard styles");
-assert.ok(paste.includes('!url.username&&!url.password&&url.href.length<=2048'),
- "Imported browser links must not contain embedded credentials or huge URLs");
+assert.ok(paste.includes('normalizedSafeNoteLink(element.getAttribute("href")||"")'),
+ "Pasted links must use the shared strict URL allowlist");
 assert.ok(paste.includes('if(url.protocol==="http:"||url.protocol==="https:")')===false,
  "No permissive unconditional URL acceptance");
 
@@ -38,3 +38,7 @@ for(const input of [
 ])assert.equal(safeClipboardColor(input),"","Unsafe or lossy CSS must not survive: "+input);
 assert.ok(paste.includes("if(ink)out.style.color=ink"));
 assert.ok(paste.includes("if(highlight)out.style.backgroundColor=highlight"));
+
+assert.ok(paste.includes('if(href)out.setAttribute("href",href)'));
+assert.equal(paste.split('getAttribute("dir")?.trim().toLowerCase()==="rtl"').length-1,2,
+ "Copied rich text and checklist rows must preserve case-insensitive RTL");
