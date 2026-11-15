@@ -99,7 +99,7 @@ import {setSelectedChecklistShape,setSelectedTasksDone,continueSelectedChecklist
 import {setAllFoldSections,setFoldSectionsToDepth,countFoldSections} from "@/lib/wave-section-batch";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
-import {openExternalUrl,isSafeExternalUrl} from "@/lib/external-links";
+import {openExternalUrl,normalizedSafeNoteLink} from "@/lib/external-links";
 
 export const Route = createFileRoute("/editor/$id")({
   head: () => ({ meta: [
@@ -286,7 +286,7 @@ function EditorPage() {
         const anchor=element?.closest("a[href]");
         if(!anchor)return false;
         const href=anchor.getAttribute("href");
-        if(!href || !isSafeExternalUrl(href))return false;
+        if(!href || !normalizedSafeNoteLink(href))return false;
         event.preventDefault();
         void openExternalUrl(href).catch(error=>{
           console.error("External browser failed",error);
