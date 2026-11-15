@@ -9,6 +9,7 @@ Object.defineProperty(globalThis,"localStorage",{configurable:true,value:{
  setItem:(key:string,value:string)=>{saved.set(key,value);},
  removeItem:(key:string)=>{saved.delete(key);}
 }});
+Object.defineProperty(globalThis,"window",{configurable:true,value:{localStorage:globalThis.localStorage}});
 const store=await import("../src/lib/folders-store");
 assert.deepEqual(store.exportFolderBackup().folders,[]);
 const before=JSON.stringify([...saved.entries()]);
