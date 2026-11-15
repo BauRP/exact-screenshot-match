@@ -142,15 +142,17 @@ function hydrate() {
   if (hydrated || typeof window === "undefined") return;
   hydrated = true;
   try {
-    customFolders=parseSavedFolders(localStorage.getItem(FOLDERS_KEY));
-    hiddenSystem=parseHiddenFolders(localStorage.getItem(HIDDEN_KEY));
+    // A mocked WebView/window may expose storage only through window.
+    // Use the same explicit source as the notes store for hydration.
+    customFolders=parseSavedFolders(window.localStorage.getItem(FOLDERS_KEY));
+    hiddenSystem=parseHiddenFolders(window.localStorage.getItem(HIDDEN_KEY));
   } catch {
     // Leave malformed localStorage intact, let the user recover the original
     // backup, and forbid all writes that could overwrite damaged bytes.
     customFolders=[];hiddenSystem=[];folderStorageError="Invalid folder metadata";
   }
   try {
-    const a=localStorage.getItem(ACTIVE_KEY);
+    const a=window.localStorage.getItem(ACTIVE_KEY);
     const visible=[...SYSTEM_FOLDERS.filter(f=>!hiddenSystem.includes(f.id)),...customFolders];
     activeId=a&&visible.some(f=>f.id===a)?a:"all";
   }catch{activeId="all";}
