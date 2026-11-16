@@ -12,6 +12,7 @@ import { exportFolderBackup, restoreFolderBackup, rollbackFolderBackup, type Fol
 import { equalDocumentBytes, hasDifferentSavedContent, recoveredVersionId, restoredNoteTitle } from "./backup-restore-plan";
 import {verifyBackupArchiveStructure} from "./backup-archive-guard";
 import {archivedNoteMedia,localMediaDiffers} from "./backup-media-conflicts";
+import {rewriteNoteAttachmentIds} from "./note-attachment-refs";
 
 const MAX_ARCHIVE_BYTES = 100 * 1024 * 1024;
 const MAX_ENTRY_BYTES = 100 * 1024 * 1024;
@@ -313,25 +314,17 @@ export async function restoreFullBackup(file: File): Promise<number> {
   // Clone every newly restored audio attachment with its own ID. Never
   // reassign an existing/orphan ID and never overwrite a stored recording.
   const newNotes=incoming.map(({note,sourceId})=>{
-    let body=note.body;
-    for(const id of audioIdsInHtml(body)){
-      let replacement=rewritten.get(id);
-      if(!replacement){
-        replacement=crypto.randomUUID();
-        rewritten.set(id,replacement);
-      }
-      body=body.split("audiodb:"+id).join("audiodb:"+replacement);
+    // Share the same cloned binary file among newly restored notes that
+    // referenced the same source ID. Never mutate unrelated visible text,
+    // hidden answers, or a longer ID with the same prefix.
+    for(const id of audioIdsInHtml(note.body)){
+      if(!rewritten.has(id))rewritten.set(id,crypto.randomUUID());
     }
-    for(const id of imageIdsInHtml(body)){
-      let replacement=rewrittenImages.get(id);
-      if(!replacement){
-        replacement=crypto.randomUUID();
-        rewrittenImages.set(id,replacement);
-      }
-      body=body.split('data-image-id="'+id+'"').join('data-image-id="'+replacement+'"');
-      body=body.split("data-image-id='"+id+"'").join("data-image-id='"+replacement+"'");
+    for(const id of imageIdsInHtml(note.body)){
+      if(!rewrittenImages.has(id))rewrittenImages.set(id,crypto.randomUUID());
     }
-    return {sourceId,note:{...note,body}};
+    return {sourceId,note:{...note,
+      body:rewriteNoteAttachmentIds(note.body,rewritten,rewrittenImages)}};
   });
   try {
     for (const {note,sourceId} of newNotes) {

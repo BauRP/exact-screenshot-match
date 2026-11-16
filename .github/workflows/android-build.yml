@@ -163,6 +163,9 @@ jobs:
       - name: Verify single-file Wave Notes transfer without overwrites
         run: bun scripts/test-wave-transfer.ts
 
+      - name: Protect attachment links during note transfer and ZIP recovery
+        run: bun scripts/test-wave-attachment-reference-integrity.ts
+
       - name: Verify subtree-scope for recurring and one-time reminders
         run: bun scripts/test-wave-nested-reminder-scope.ts
 

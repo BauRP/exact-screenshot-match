@@ -9,6 +9,7 @@ import {loadPdfFile,saveNewPdfFile,deletePdfFile} from "./pdf-files";
 import {createNote,type Note} from "./notes-store";
 import {readableText} from "./note-search";
 import {imageIdsInHtml,loadImageFile,saveNewImageFile,deleteImageFile,imageBlobFromBytes} from "./image-files";
+import {rewriteNoteAttachmentIds} from "./note-attachment-refs";
 
 const LIMIT=80*1024*1024;
 const ID=/^[a-zA-Z0-9_-]{1,128}$/;
@@ -151,22 +152,24 @@ export async function shareWaveNote(note:Note):Promise<void>{
 export async function receiveWaveNote(file:File,folderId:string):Promise<Note>{
  const files=await unpack(file),p=parseManifest(files);
  const generatedAudio:string[]=[];const generatedImages:string[]=[];let generatedPdf:string|null=null;
+ const audioMap=new Map<string,string>(),imageMap=new Map<string,string>();
  try{
-  let body=p.note.body;
   for(const id of p.audioIds){
    const fresh=crypto.randomUUID();
    await saveNewAudioFile(fresh,new Blob([files["audio/"+id+".blob"].slice().buffer]));
    generatedAudio.push(fresh);
-   body=body.split("audiodb:"+id).join("audiodb:"+fresh);
+   audioMap.set(id,fresh);
   }
   for(const imageId of p.imageIds||[]){
    const fresh=crypto.randomUUID();
    const data=files["images/"+imageId+".blob"];
    await saveNewImageFile(fresh,imageBlobFromBytes(data));
    generatedImages.push(fresh);
-   body=body.split('data-image-id="'+imageId+'"').join('data-image-id="'+fresh+'"');
-   body=body.split("data-image-id='"+imageId+"'").join("data-image-id='"+fresh+"'");
+   imageMap.set(imageId,fresh);
   }
+  // Rewrite actual attachment attributes in one pass, not ordinary note text.
+  // Short source IDs must never corrupt IDs with a common prefix.
+  const body=rewriteNoteAttachmentIds(p.note.body,audioMap,imageMap);
   const id=crypto.randomUUID();
   if(p.hasPdf){
    generatedPdf=id;

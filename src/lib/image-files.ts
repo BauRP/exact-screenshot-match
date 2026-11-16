@@ -4,6 +4,7 @@
  */
 import {createIndexedDbOpener} from "./indexeddb-open";
 import {runIndexedDbTransaction} from "./indexeddb-transaction";
+import {noteAttachmentIds} from "./note-attachment-refs";
 
 const DB_NAME="wave.note.images.v1";
 const STORE="images";
@@ -46,10 +47,9 @@ export async function deleteImageFile(id:string):Promise<void>{
  validate(id);
  await operation("readwrite",store=>store.delete(id));
 }
-/** Only references in serialized image nodes count as live attachments. */
+/** Only genuine image-node attributes are saved, not pasted examples. */
 export function imageIdsInHtml(html:string):string[]{
- const ids=[...html.matchAll(/data-image-id=["']([a-zA-Z0-9_-]{1,128})["']/g)].map(m=>m[1]);
- return [...new Set(ids)];
+ return noteAttachmentIds(html).image;
 }
 
 /** Verify the actual bytes, rather than trusting MIME or extension in an imported ZIP. */

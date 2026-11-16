@@ -5,6 +5,7 @@
  */
 import {createIndexedDbOpener} from "./indexeddb-open";
 import {runIndexedDbTransaction} from "./indexeddb-transaction";
+import {noteAttachmentIds} from "./note-attachment-refs";
 
 const DB_NAME = "sn.audio.v1";
 const STORE = "recordings";
@@ -52,8 +53,7 @@ export async function deleteAudioFile(id: string): Promise<void> {
   await operate("readwrite", (store) => store.delete(id));
 }
 
-/** Return local audio IDs referenced by note markup (not legacy data URLs). */
+/** Return only actual audio attributes, not sample IDs in prose or titles. */
 export function audioIdsInHtml(html: string): string[] {
-  const matches = html.matchAll(/audiodb:([a-zA-Z0-9_-]+)/g);
-  return [...new Set(Array.from(matches, (match) => match[1]))];
+  return noteAttachmentIds(html).audio;
 }
