@@ -118,7 +118,7 @@ assert.ok(canvas.includes("if(!editable||!active||gesture.current!==null||!futur
 let indexedReads=0;
 const points=new Proxy(Array.from({length:500},(_,i)=>[100+i/10,100+i/10] as InkPoint),{
  get(target,key,receiver){
-  if(typeof key==="string"&&/^\\d+$/.test(key))indexedReads++;
+  if(typeof key==="string"&&/^\d+$/.test(key))indexedReads++;
   return Reflect.get(target,key,receiver);
  }
 });
