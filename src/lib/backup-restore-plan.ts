@@ -1,4 +1,5 @@
 import type {Note} from "./notes-store";
+import {MEDIA_CHUNK_BYTES,yieldToWebView} from "./backup-byte-work";
 
 /** Only saved content matters. Timestamps, pin and folder selection do not
  * represent a different version of the user's note.
