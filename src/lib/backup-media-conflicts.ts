@@ -3,7 +3,7 @@
  * were damaged or changed. Restoring must then preserve BOTH versions. */
 import {audioIdsInHtml} from "./audio-files";
 import {imageIdsInHtml} from "./image-files";
-import {equalDocumentBytes} from "./backup-restore-plan";
+import {equalBlobBytesCooperative} from "./backup-byte-work";
 export type ArchivedNoteMedia={kind:"audio"|"image";id:string;bytes:Uint8Array};
 export function archivedNoteMedia(
  html:string,files:Record<string,Uint8Array>,
@@ -30,8 +30,7 @@ export async function localMediaDiffers(
 ):Promise<boolean>{
  for(const item of attachments){
   const blob=await (item.kind==="audio"?loadAudio(item.id):loadImage(item.id));
-  if(!blob||blob.size!==item.bytes.byteLength)return true;
-  if(!equalDocumentBytes(await blob.arrayBuffer(),item.bytes))return true;
+  if(!await equalBlobBytesCooperative(blob,item.bytes))return true;
  }
  return false;
 }

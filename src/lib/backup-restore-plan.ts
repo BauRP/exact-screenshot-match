@@ -33,36 +33,64 @@ export function equalDocumentBytes(a:ArrayBuffer|null,b:Uint8Array):boolean {
  * participate. Two independent 32-bit FNV streams make accidental collisions
  * vastly less likely. Never use this fingerprint for security or encryption.
  */
-export function recoveredVersionId(
- backedUp:Note,pdfBytes?:Uint8Array,
- media?:readonly {kind:"audio"|"image";id:string;bytes:Uint8Array}[],
-):string {
-  const source=JSON.stringify({id:backedUp.id,content:savedContent(backedUp)});
-  let a=0x811c9dc5,b=0x9e3779b9;
-  const feed=(v:number)=>{
-    a=Math.imul(a^(v&255),0x01000193)>>>0;
-    b=Math.imul(b^(v&255),0x01000193)>>>0;
-    b=Math.imul(b^((v>>>8)&255),0x01000193)>>>0;
-  };
-  for(let i=0;i<source.length;i++)feed(source.charCodeAt(i));
-  if(pdfBytes){
-    feed(pdfBytes.byteLength);
-    for(const value of pdfBytes)feed(value);
-  }
-  // Preserve legacy recovery identifiers for notes without media; for notes
-  // with attachments, include the type/ID/length and actual bytes. This
-  // distinguishes two photo or audio versions that contain identical HTML.
-  if(media?.length){
-    for(const item of [...media].sort((x,y)=>x.kind.localeCompare(y.kind)||x.id.localeCompare(y.id))){
-      feed(item.kind==="audio"?1:2);
-      feed(item.id.length);
-      for(let i=0;i<item.id.length;i++)feed(item.id.charCodeAt(i));
-      feed(item.bytes.byteLength);
-      for(const byte of item.bytes)feed(byte);
-    }
-  }
-  return "restored-"+a.toString(16).padStart(8,"0")+"-"+b.toString(16).padStart(8,"0");
+type VersionMedia={kind:"audio"|"image";id:string;bytes:Uint8Array};
+/** Existing FNV state: do not alter the byte order or legacy recovery IDs. */
+function versionHasher(backedUp:Note){
+ const source=JSON.stringify({id:backedUp.id,content:savedContent(backedUp)});
+ let a=0x811c9dc5,b=0x9e3779b9;
+ const feed=(v:number)=>{
+  a=Math.imul(a^(v&255),0x01000193)>>>0;
+  b=Math.imul(b^(v&255),0x01000193)>>>0;
+  b=Math.imul(b^((v>>>8)&255),0x01000193)>>>0;
+ };
+ for(let i=0;i<source.length;i++)feed(source.charCodeAt(i));
+ return {feed,finish:()=> "restored-"+a.toString(16).padStart(8,"0")+"-"+b.toString(16).padStart(8,"0")};
 }
+function sortedVersionMedia(media?:readonly VersionMedia[]):VersionMedia[]{
+ return media?.length?[...media].sort((a,b)=>a.kind.localeCompare(b.kind)||a.id.localeCompare(b.id)):[];
+}
+/** Synchronous reference API retained for existing callers and stable IDs. */
+export function recoveredVersionId(
+ backedUp:Note,pdfBytes?:Uint8Array,media?:readonly VersionMedia[],
+):string{
+ const hash=versionHasher(backedUp),feed=hash.feed;
+ if(pdfBytes){
+  feed(pdfBytes.byteLength);
+  for(const byte of pdfBytes)feed(byte);
+ }
+ for(const item of sortedVersionMedia(media)){
+  feed(item.kind==="audio"?1:2);feed(item.id.length);
+  for(let i=0;i<item.id.length;i++)feed(item.id.charCodeAt(i));
+  feed(item.bytes.byteLength);
+  for(const byte of item.bytes)feed(byte);
+ }
+ return hash.finish();
+}
+/** Same version IDs as the synchronous API, but long PDF/photo/audio bytes
+ * are hashed cooperatively so a large recovery never blocks WebView input. */
+export async function recoveredVersionIdCooperative(
+ backedUp:Note,pdfBytes?:Uint8Array,media?:readonly VersionMedia[],
+):Promise<string>{
+ const hash=versionHasher(backedUp),feed=hash.feed;
+ const feedBytes=async(bytes:Uint8Array)=>{
+  for(let start=0;start<bytes.byteLength;start+=MEDIA_CHUNK_BYTES){
+   const end=Math.min(start+MEDIA_CHUNK_BYTES,bytes.byteLength);
+   for(let i=start;i<end;i++)feed(bytes[i]);
+   if(end<bytes.byteLength)await yieldToWebView();
+  }
+ };
+ if(pdfBytes){feed(pdfBytes.byteLength);await feedBytes(pdfBytes);}
+ for(const item of sortedVersionMedia(media)){
+  feed(item.kind==="audio"?1:2);feed(item.id.length);
+  for(let i=0;i<item.id.length;i++)feed(item.id.charCodeAt(i));
+  feed(item.bytes.byteLength);
+  await feedBytes(item.bytes);
+  // Many small attachments still need to allow time for the interface.
+  await yieldToWebView();
+ }
+ return hash.finish();
+}
+
 export function restoredNoteTitle(title:string):string {
   const suffix=" (восстановленная)";
   return title.endsWith(suffix)?title:title+suffix;

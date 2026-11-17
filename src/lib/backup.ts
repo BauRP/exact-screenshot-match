@@ -9,7 +9,8 @@ import { imageIdsInHtml, loadImageFile, saveNewImageFile, deleteImageFile, image
 import { loadPdfFile, saveNewPdfFile, deletePdfFile } from "./pdf-files";
 import { exportNotes, importBackupNotes, type Note } from "./notes-store";
 import { exportFolderBackup, restoreFolderBackup, rollbackFolderBackup, type Folder } from "./folders-store";
-import { equalDocumentBytes, hasDifferentSavedContent, recoveredVersionId, restoredNoteTitle } from "./backup-restore-plan";
+import { hasDifferentSavedContent, recoveredVersionIdCooperative, restoredNoteTitle } from "./backup-restore-plan";
+import {equalArrayBufferBytesCooperative} from "./backup-byte-work";
 import {verifyBackupArchiveStructure} from "./backup-archive-guard";
 import {archivedNoteMedia,localMediaDiffers} from "./backup-media-conflicts";
 import {rewriteNoteAttachmentIds} from "./note-attachment-refs";
@@ -283,7 +284,7 @@ export async function restoreFullBackup(file: File): Promise<number> {
     const sourcePdf=saved.kind==="pdf"?entries["pdf/"+saved.id+".pdf"]:undefined;
     if(current && !changed && sourcePdf){
       // Identical metadata can hide different PDF document bytes.
-      changed=!equalDocumentBytes(
+      changed=!await equalArrayBufferBytesCooperative(
         current.kind==="pdf"?await loadPdfFile(saved.id):null,
         sourcePdf);
     }
@@ -292,7 +293,7 @@ export async function restoreFullBackup(file: File): Promise<number> {
       changed=await localMediaDiffers(noteMedia,loadAudioFile,loadImageFile);
     }
     if(current && !changed)continue;
-    const destination=current?recoveredVersionId(saved,sourcePdf,noteMedia):saved.id;
+    const destination=current?await recoveredVersionIdCooperative(saved,sourcePdf,noteMedia):saved.id;
     // A previously restored copy is never overwritten or re-imported,
     // even if the user subsequently edited that recovered copy.
     if(occupied.has(destination))continue;

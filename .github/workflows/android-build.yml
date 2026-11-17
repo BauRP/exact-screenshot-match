@@ -427,6 +427,9 @@ jobs:
       - name: Preserve distinct audio and photo versions when backup text is unchanged
         run: bun scripts/test-wave-backup-media-versions.ts
 
+      - name: Compare and fingerprint large backup media without blocking WebView
+        run: bun scripts/test-wave-backup-cooperative-media.ts
+
       - name: Verify backup triggers only on committed edits
         run: bun scripts/test-backup-save-triggers.ts
 
