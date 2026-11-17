@@ -62,10 +62,33 @@ function segmentDistance(p:InkPoint,a:InkPoint,b:InkPoint):number{
  const t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/squared));
  return Math.hypot(p[0]-a[0]-dx*t,p[1]-a[1]-dy*t);
 }
+/** Immutable ink objects remain stable across pointer moves. Cache only their
+ * geometry so fast eraser swipes on drawings with 120 x 500 points do not scan
+ * 60,000 line segments for each irrelevant pointer event.
+ * The editor always creates new stroke objects when points change. */
+type InkBounds={points:InkPoint[];minX:number;maxX:number;minY:number;maxY:number};
+const inkBoundsCache=new WeakMap<InkStroke,InkBounds>();
+function inkBounds(stroke:InkStroke):InkBounds{
+ const found=inkBoundsCache.get(stroke);
+ if(found?.points===stroke.points)return found;
+ let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+ for(const [x,y] of stroke.points){
+  minX=Math.min(minX,x);maxX=Math.max(maxX,x);
+  minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+ }
+ const bounds={points:stroke.points,minX,maxX,minY,maxY};
+ inkBoundsCache.set(stroke,bounds);
+ return bounds;
+}
+function boundsTouches(b:InkBounds,minX:number,maxX:number,minY:number,maxY:number,margin:number):boolean{
+ return b.maxX+margin>=minX&&b.minX-margin<=maxX&&
+  b.maxY+margin>=minY&&b.minY-margin<=maxY;
+}
 export function inkStrokeAt(strokes:InkStroke[],point:InkPoint,radius=22):number{
  for(let i=strokes.length-1;i>=0;i--){
   const stroke=strokes[i],points=stroke.points;
   const threshold=radius+stroke.width/2;
+  if(!boundsTouches(inkBounds(stroke),point[0],point[0],point[1],point[1],threshold))continue;
   if(points.length===1&&Math.hypot(point[0]-points[0][0],point[1]-points[0][1])<=threshold)return i;
   for(let j=1;j<points.length;j++){
    if(segmentDistance(point,points[j-1],points[j])<=threshold)return i;
@@ -90,8 +113,11 @@ function segmentCrosses(a:InkPoint,b:InkPoint,c:InkPoint,d:InkPoint):boolean {
  * must remove EVERY crossing stroke, not just the topmost one. */
 export function inkStrokeIndicesAlong(strokes:InkStroke[],from:InkPoint,to:InkPoint,radius=22):number[]{
  const hits:number[]=[];
+ const minX=Math.min(from[0],to[0]),maxX=Math.max(from[0],to[0]);
+ const minY=Math.min(from[1],to[1]),maxY=Math.max(from[1],to[1]);
  for(let i=0;i<strokes.length;i++){
   const stroke=strokes[i],points=stroke.points,threshold=radius+stroke.width/2;
+  if(!boundsTouches(inkBounds(stroke),minX,maxX,minY,maxY,threshold))continue;
   if(points.length===1){
    if(segmentDistance(points[0],from,to)<=threshold)hits.push(i);
    continue;

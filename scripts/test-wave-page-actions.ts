@@ -212,3 +212,31 @@ assert.equal(styledState.doc.child(2).attrs.textDirection,"rtl");
 assert.equal(styledState.doc.child(4).firstChild?.marks[0].type.name,"strong");
 assert.ok(styledState.doc.textContent.includes("still here"));
 assert.equal(styledState.doc.check(),undefined);
+
+// Moving a page should move the user's cursor and selection with that page,
+// not leave the cursor on whatever page inherits the original screen position.
+let following=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
+ p("intro"),page("A"),p("alpha"),page("B"),p("beta"),page("C"),p("gamma")
+])});
+let moves=0;
+const followingEditor={isEditable:true,isDestroyed:false,get state(){return following;},
+ view:{dispatch(tr:any){moves++;following=following.apply(tr);}}} as any;
+const pageB=topLevelPageRanges(following.doc)[2];
+following=following.apply(following.tr.setSelection(TextSelection.create(following.doc,pageB.bodyStart+2)));
+assert.equal(following.selection.$from.parent.textContent,"beta");
+assert.equal(moveCurrentPage(followingEditor,"up"),true);
+assert.equal(following.selection.$from.parent.textContent,"beta","Caret must follow page B upwards");
+assert.equal(noteCurrentPage(following.doc,following.selection.from),2);
+assert.equal(moveCurrentPage(followingEditor,"down"),true);
+assert.equal(following.selection.$from.parent.textContent,"beta","Caret must follow page B downwards");
+assert.equal(noteCurrentPage(following.doc,following.selection.from),3);
+assert.equal(moves,2);
+assert.equal(following.doc.textContent,"introalphabetagamma");
+assert.equal(following.doc.check(),undefined);
+const selectedPageB=topLevelPageRanges(following.doc)[2].start;
+following=following.apply(following.tr.setSelection(NodeSelection.create(following.doc,selectedPageB)));
+assert.equal(moveCurrentPage(followingEditor,"up"),true);
+assert.ok(following.selection instanceof NodeSelection,"Selected page divider remains selected");
+assert.equal((following.selection as NodeSelection).node.attrs.label,"B");
+assert.equal(noteCurrentPage(following.doc,following.selection.from),2);
+assert.equal(following.doc.check(),undefined);

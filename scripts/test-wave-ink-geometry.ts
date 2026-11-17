@@ -112,3 +112,27 @@ assert.ok(canvas.includes("gesture.current=null;lastEraserPoint.current=null;sha
 assert.ok(canvas.includes("if(!editable||!active||gesture.current!==null||current.current.length===0)return;"));
 assert.ok(canvas.includes("if(!editable||!active||gesture.current!==null||!past.current.length)return;"));
 assert.ok(canvas.includes("if(!editable||!active||gesture.current!==null||!future.current.length)return;"));
+
+// Many saved strokes can be far from the eraser. A cached bounding box must
+// short-circuit their segments on subsequent moves and never hide a real hit.
+let indexedReads=0;
+const points=new Proxy(Array.from({length:500},(_,i)=>[100+i/10,100+i/10] as InkPoint),{
+ get(target,key,receiver){
+  if(typeof key==="string"&&/^\\d+$/.test(key))indexedReads++;
+  return Reflect.get(target,key,receiver);
+ }
+});
+const dense:InkStroke={tool:"pen",color:"#161b22",width:4,points};
+assert.deepEqual(inkStrokeIndicesAlong([dense],[900,800],[950,850],8),[]);
+const initialReads=indexedReads;
+assert.ok(initialReads>=500,"First eraser pass computes bounds");
+for(let i=0;i<100;i++)assert.deepEqual(inkStrokeIndicesAlong([dense],[900,i],[920,i+1],8),[]);
+assert.equal(indexedReads,initialReads,"Far-away eraser movement never rescans cached stroke points");
+assert.deepEqual(inkStrokeIndicesAlong([dense],[100,100],[140,140],8),[0],
+ "Bounds must not remove a genuine continuous eraser hit");
+const newPosition={...dense,points:[[700,700],[800,800]] as InkPoint[]};
+assert.deepEqual(inkStrokeIndicesAlong([newPosition],[700,700],[800,800],3),[0],
+ "Fresh stroke geometry invalidates the cached bounds");
+assert.deepEqual(inkStrokeIndicesAlong([newPosition],[100,100],[140,140],8),[]);
+assert.equal(inkStrokeAt([dense],[140,140],4),0,"Tap hit-testing respects cached bounds");
+assert.equal(inkStrokeAt([dense],[900,900],4),-1);

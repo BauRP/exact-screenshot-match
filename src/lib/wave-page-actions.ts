@@ -1,6 +1,6 @@
 import {Fragment,type Node as PMNode} from "@tiptap/pm/model";
 import type {Editor} from "@tiptap/react";
-import {TextSelection,type Selection} from "@tiptap/pm/state";
+import {NodeSelection,TextSelection,Selection} from "@tiptap/pm/state";
 
 /** A page consists of its divider and all following top-level blocks up to
  * the next divider. Nested dividers are intentionally not rearranged:
@@ -68,7 +68,22 @@ export function moveCurrentPage(editor:Editor,direction:"up"|"down"):boolean{
  const replacement=doc.content.cut(right.start,right.end).append(doc.content.cut(left.start,left.end));
  const $from=doc.resolve(left.start),$to=doc.resolve(right.end);
  if($from.parent!==doc||$to.parent!==doc||!doc.canReplace($from.index(),$to.index(),replacement))return false;
- editor.view.dispatch(editor.state.tr.replaceWith(left.start,right.end,replacement).scrollIntoView());
+ const tr=editor.state.tr.replaceWith(left.start,right.end,replacement);
+ // A ProseMirror ReplaceStep maps the old selection to the replaced boundary.
+ // Keep the cursor or selected node inside the MOVED page instead. Otherwise
+ // a second tap on Move can unexpectedly move a different page.
+ const original=pages[index];
+ const movedStart=direction==="down"?left.start+(right.end-right.start):left.start;
+ const shift=movedStart-original.start;
+ const anchor=selection.anchor+shift,head=selection.head+shift;
+ if(selection instanceof NodeSelection){
+  tr.setSelection(NodeSelection.create(tr.doc,selection.from+shift));
+ }else if(selection instanceof TextSelection){
+  tr.setSelection(TextSelection.create(tr.doc,anchor,head));
+ }else{
+  tr.setSelection(Selection.near(tr.doc.resolve(selection.from+shift)));
+ }
+ editor.view.dispatch(tr.scrollIntoView());
  return true;
 }
 
