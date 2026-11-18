@@ -1,6 +1,6 @@
 import {strict as assert} from "node:assert";
 import {readFileSync} from "node:fs";
-import {paginateFolderNotes,validFolderNotePageSize,readFolderNotePageSize,saveFolderNotePageSize} from "../src/lib/folder-note-pages";
+import {paginateFolderNotes,validFolderNotePageSize,readFolderNotePageSize,saveFolderNotePageSize,readRememberedFolderPage,rememberFolderPage} from "../src/lib/folder-note-pages";
 const notes=Array.from({length:30},(_,i)=>({id:"n"+i,body:"private-"+i}));
 const first=paginateFolderNotes(notes,1);
 assert.deepEqual(first.items.map(n=>n.id),notes.slice(0,12).map(n=>n.id));
@@ -31,7 +31,17 @@ const ui=readFileSync("src/routes/index.tsx","utf8");
 for(const marker of ["paginateFolderNotes(filteredNotes,folderPage,folderPageSize)","onPageChange={changeFolderPage}","notes={pagedNotes.items}","Страницы раздела","Страница", "Сколько заметок на странице","setFolderPage(1)"]){
  assert.ok(ui.includes(marker),marker);
 }
-assert.ok(ui.includes("useEffect(()=>{setFolderPage(1);},[activeFolder,sort,searchOpen,searchTerm,searchFilter,searchAllFolders]);"));
+assert.ok(ui.includes("readRememberedFolderPage(activeFolder,sort,folderPageSize)"));
+assert.ok(ui.includes("rememberFolderPage(activeFolder,sort,folderPageSize,page)"));
 assert.ok(ui.includes('aria-label="Перейти на страницу раздела"'));
 assert.ok(ui.includes("Number.isSafeInteger(next)"));
 console.log("Folder pages: deterministic order, bounds, filters, storage and navigation wiring verified");
+
+assert.equal(readRememberedFolderPage("folder-a","manual",12),1);
+assert.equal(rememberFolderPage("folder-a","manual",12,3),3);
+assert.equal(readRememberedFolderPage("folder-a","manual",12),3);
+assert.equal(readRememberedFolderPage("folder-b","manual",12),1,"Other folder must not inherit page");
+assert.equal(readRememberedFolderPage("folder-a","date",12),1,"Different sort must not inherit page");
+assert.equal(readRememberedFolderPage("folder-a","manual",24),1,"Other page size must not inherit page");
+assert.equal(rememberFolderPage("folder-a","manual",12,-10),1);
+assert.equal(readRememberedFolderPage("folder-a","manual",12),1);

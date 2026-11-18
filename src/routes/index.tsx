@@ -52,7 +52,7 @@ import { Input } from "@/components/ui/input";
 import {Sheet,SheetContent,SheetHeader,SheetTitle} from "@/components/ui/sheet";
 import {noteCountsByFolder} from "@/lib/folder-tree-counts";
 import {folderNavigationRows,folderDisplayPath} from "@/lib/folder-navigation";
-import {paginateFolderNotes,readFolderNotePageSize,saveFolderNotePageSize,FOLDER_NOTE_PAGE_SIZES,type FolderNotePageSize} from "@/lib/folder-note-pages";
+import {paginateFolderNotes,readFolderNotePageSize,saveFolderNotePageSize,readRememberedFolderPage,rememberFolderPage,FOLDER_NOTE_PAGE_SIZES,type FolderNotePageSize} from "@/lib/folder-note-pages";
 import {
   addFolder,
   deleteFolder,
@@ -152,10 +152,15 @@ function Index() {
   const [searchFilter,setSearchFilter]=useState<NoteSearchFilter>("all");
   // Folder pages only affect the visible slice. All selected notes, search
   // results and saved media remain untouched when browsing pages.
-  const [folderPage,setFolderPage]=useState(1);
   const [folderPageSize,setFolderPageSize]=useState<FolderNotePageSize>(readFolderNotePageSize);
+  const [folderPage,setFolderPage]=useState(()=>readRememberedFolderPage(activeFolder,sort,readFolderNotePageSize()));
   const notesViewportRef=useRef<HTMLElement|null>(null);
-  useEffect(()=>{setFolderPage(1);},[activeFolder,sort,searchOpen,searchTerm,searchFilter,searchAllFolders]);
+  // Returning from the editor and switching folders restores only the page
+  // number, never a stale slice or saved note data.
+  useEffect(()=>{
+    setFolderPage(searchOpen?1:readRememberedFolderPage(activeFolder,sort,folderPageSize));
+  },[activeFolder,sort,folderPageSize,searchOpen]);
+  useEffect(()=>{if(searchOpen)setFolderPage(1);},[searchTerm,searchFilter,searchAllFolders,searchOpen]);
   // Refresh due-state while the list stays open; no polling or network traffic.
   const [reminderMinute,setReminderMinute]=useState(()=>Math.floor(Date.now()/60000));
   useEffect(()=>{
@@ -281,12 +286,16 @@ function Index() {
 
   const pagedNotes=useMemo(()=>paginateFolderNotes(filteredNotes,folderPage,folderPageSize),[filteredNotes,folderPage,folderPageSize]);
   const changeFolderPage=(next:number)=>{
-    setFolderPage(next);
+    const page=Number.isSafeInteger(next)?Math.max(1,Math.min(next,pagedNotes.pageCount)):pagedNotes.page;
+    setFolderPage(page);
+    if(!searchOpen)rememberFolderPage(activeFolder,sort,folderPageSize,page);
     notesViewportRef.current?.scrollTo({top:0,behavior:"auto"});
   };
   const changeFolderPageSize=(value:FolderNotePageSize)=>{
-    setFolderPageSize(saveFolderNotePageSize(value));
+    const size=saveFolderNotePageSize(value);
+    setFolderPageSize(size);
     setFolderPage(1);
+    if(!searchOpen)rememberFolderPage(activeFolder,sort,size,1);
     notesViewportRef.current?.scrollTo({top:0,behavior:"auto"});
   };
 

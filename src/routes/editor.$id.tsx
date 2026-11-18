@@ -190,6 +190,7 @@ function EditorPage() {
   const toolVisible=(tool:EditorTool)=>!prefs.hiddenToolbar.includes(tool);
   const [slashText,setSlashText]=useState<string|null>(null);
   const [slashActive,setSlashActive]=useState(0);
+  const [quickTaskCount,setQuickTaskCount]=useState(3);
   const [pageRename,setPageRename]=useState<{pos:number;label:string}|null>(null);
   useEffect(()=>{setSlashActive(0);},[slashText]);
 
@@ -1062,10 +1063,18 @@ function EditorPage() {
                    className="rounded-md border border-border px-2 py-2 text-xs"
                    onClick={()=>{if(!editor||!insertUncheckedChecklistAfter(editor))toast("Установите курсор внутри задачи");}}>Пункт после +</button>
                </div>
-              <button type="button" onMouseDown={event=>event.preventDefault()}
-                aria-label="Добавить три пустых задачи после текущей"
-                onClick={()=>{if(!editor||!insertUncheckedChecklistRowsAfter(editor,3))toast("Установите курсор внутри задачи");}}
-                className="mt-1 w-full rounded-md border border-border px-2 py-2 text-xs">Добавить три пункта +</button>
+              <div className="mt-1 flex items-center gap-2">
+                <label className="text-xs text-muted-foreground" htmlFor="wave-quick-tasks">Новых задач</label>
+                <select id="wave-quick-tasks" aria-label="Количество новых задач" value={quickTaskCount}
+                  onChange={event=>setQuickTaskCount(Number(event.target.value))}
+                  className="min-w-0 rounded-md border border-border bg-background p-2 text-xs">
+                  {[1,3,5,10].map(amount=><option key={amount} value={amount}>{amount}</option>)}
+                </select>
+                <button type="button" onMouseDown={event=>event.preventDefault()}
+                  aria-label="Добавить несколько пустых задач после текущей"
+                  onClick={()=>{if(!editor||!insertUncheckedChecklistRowsAfter(editor,quickTaskCount))toast("Установите курсор внутри задачи");}}
+                  className="flex-1 rounded-md border border-border px-2 py-2 text-xs">Добавить пункты +</button>
+              </div>
               <div className="mt-2 grid grid-cols-1 gap-1 border-t border-border pt-2">
                 <p className="px-2 text-xs font-semibold">Преобразование без потери текста</p>
                 <button type="button" onMouseDown={event=>event.preventDefault()}
@@ -1227,6 +1236,20 @@ function EditorPage() {
               const current=String(editor.state.doc.nodeAt(found.pos)?.attrs.label||"");
               setPageRename({pos:found.pos,label:current});
             }}>Название страницы</button>}
+          {pagePositions.length>1&&<input type="number" min={1} max={pagePositions.length}
+            step={1} defaultValue={currentPage} key={currentPage}
+            aria-label="Перейти к странице заметки по номеру"
+            title="Номер страницы, Enter для перехода"
+            className="w-16 rounded-md border border-border bg-background p-1 text-center text-xs"
+            onKeyDown={event=>{if(event.key==="Enter"){event.preventDefault();event.currentTarget.blur();}}}
+            onBlur={event=>{
+              const number=Number(event.currentTarget.value);
+              if(Number.isSafeInteger(number)&&number>=1&&number<=pagePositions.length){
+                const pos=pagePositions[number-1];
+                if(number!==currentPage&&pos!==undefined)
+                  editor.chain().focus().setTextSelection(Math.min(pos,editor.state.doc.content.size)).run();
+              }else event.currentTarget.value=String(currentPage);
+            }}/>}
           {pagePositions.length>1&&<select aria-label="Выбрать страницу" value={String(currentPage)}
             onChange={event=>{const index=Number(event.target.value)-1;const pos=pagePositions[index];if(pos!==undefined)editor.chain().focus().setTextSelection(Math.min(pos,editor.state.doc.content.size)).run();}}
             className="max-w-32 rounded-md border border-border bg-background p-1 text-xs">

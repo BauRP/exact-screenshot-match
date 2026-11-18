@@ -240,3 +240,28 @@ assert.ok(following.selection instanceof NodeSelection,"Selected page divider re
 assert.equal((following.selection as NodeSelection).node.attrs.label,"B");
 assert.equal(noteCurrentPage(following.doc,following.selection.from),2);
 assert.equal(following.doc.check(),undefined);
+
+// Duplicating an explicit page relocates the caret into the copy. Repeating
+// duplicates the copy, not an unrelated original page.
+let duplicateState=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
+ p("intro"),page("marked"),p("original"),page("tail"),p("tail body")
+])});
+const dupEditor={isEditable:true,isDestroyed:false,get state(){return duplicateState;},
+ view:{dispatch(tr:any){duplicateState=duplicateState.apply(tr);}}} as any;
+let dupRanges=topLevelPageRanges(duplicateState.doc);
+duplicateState=duplicateState.apply(duplicateState.tr.setSelection(TextSelection.create(
+ duplicateState.doc,dupRanges[1].bodyStart+3
+)));
+assert.equal(duplicateCurrentPage(dupEditor),true);
+assert.equal(duplicateState.selection.$from.parent.textContent,"original");
+assert.equal(noteCurrentPage(duplicateState.doc,duplicateState.selection.from),3);
+assert.equal(duplicateCurrentPage(dupEditor),true);
+assert.equal(noteCurrentPage(duplicateState.doc,duplicateState.selection.from),4);
+assert.equal(topLevelPageRanges(duplicateState.doc).length,5);
+assert.equal(duplicateState.doc.check(),undefined);
+const sourcePages=topLevelPageRanges(duplicateState.doc);
+duplicateState=duplicateState.apply(duplicateState.tr.setSelection(NodeSelection.create(duplicateState.doc,sourcePages[1].start)));
+assert.equal(duplicateCurrentPage(dupEditor),true);
+assert.ok(duplicateState.selection instanceof NodeSelection);
+assert.equal((duplicateState.selection as NodeSelection).node.type.name,"wavePageBreak");
+assert.ok(String((duplicateState.selection as NodeSelection).node.attrs.label).includes("копия"));

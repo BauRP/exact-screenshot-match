@@ -48,7 +48,16 @@ export function duplicateCurrentPage(editor:Editor):boolean{
  const copied=Fragment.from(marker).append(body);
  const at=doc.resolve(page.end);
  if(at.parent!==doc||!doc.canReplace(at.index(),at.index(),copied))return false;
- editor.view.dispatch(editor.state.tr.replaceWith(page.end,page.end,copied).scrollIntoView());
+ const tr=editor.state.tr.replaceWith(page.end,page.end,copied);
+ // Focus the duplicate, not the old original. A second duplicate should
+ // operate on the new page. Preserve the relative caret or selected divider.
+ const delta=page.end+marker.nodeSize-page.bodyStart;
+ if(selection instanceof NodeSelection&&i>0&&selection.from===page.start)
+  tr.setSelection(NodeSelection.create(tr.doc,page.end));
+ else if(selection instanceof TextSelection&&selection.from>=page.bodyStart&&selection.to<=page.end)
+  tr.setSelection(TextSelection.create(tr.doc,selection.anchor+delta,selection.head+delta));
+ else tr.setSelection(Selection.near(tr.doc.resolve(Math.min(page.end+marker.nodeSize+1,tr.doc.content.size))));
+ editor.view.dispatch(tr.scrollIntoView());
  return true;
 }
 /** Reorder pages after the initial page without rebuilding individual blocks
