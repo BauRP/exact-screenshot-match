@@ -57,10 +57,10 @@ export function serializeInk(strokes:InkStroke[]):string{
 }
 /** Reversible transformations of vector ink, never touching image files.
  * Fresh coordinate arrays preserve hit-test caching and undo correctness. */
-export type InkTransform="flip-x"|"flip-y"|"rotate-cw";
+export type InkTransform="flip-x"|"flip-y"|"rotate-cw"|"rotate-ccw";
 export function transformInkStrokes(strokes:readonly InkStroke[],op:InkTransform):InkStroke[]{
  return strokes.map(stroke=>({...stroke,points:stroke.points.map(([x,y]):InkPoint=>
-  op==="flip-x"?[1000-x,y]:op==="flip-y"?[x,1000-y]:[1000-y,x]
+  op==="flip-x"?[1000-x,y]:op==="flip-y"?[x,1000-y]:op==="rotate-ccw"?[y,1000-x]:[1000-y,x]
  )}));
 }
 /** Hit-test a whole line segment; the previous point-only eraser missed long strokes. */

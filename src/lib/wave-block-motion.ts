@@ -241,7 +241,13 @@ export function duplicateSelectedWaveBlock(editor:Editor):boolean{
   const nodes=parent.content.cut(waveChildOffset(parent,range.start),waveChildOffset(parent,range.end));
   if(nodes.content.some(node=>node.type.name==="wavePageBreak"))return false;
   if(!parent.canReplace(range.end,range.end,nodes))return false;
-  view.dispatch(state.tr.insert(range.to,nodes).scrollIntoView());
+  const tr=state.tr.insert(range.to,nodes);
+  const sel=state.selection;
+  if(sel instanceof TextSelection){
+   const delta=range.to-range.from;
+   tr.setSelection(TextSelection.create(tr.doc,sel.anchor+delta,sel.head+delta));
+  }
+  view.dispatch(tr.scrollIntoView());
   return true;
  }
  const pos=selectedWaveBlockPos(editor);
@@ -252,7 +258,14 @@ export function duplicateSelectedWaveBlock(editor:Editor):boolean{
  // A page divider is a document boundary, not an ordinary duplicable block.
  if(node.type.name==="wavePageBreak")return false;
  if(!parent.canReplace(index+1,index+1,Fragment.from(node)))return false;
- editor.view.dispatch(editor.state.tr.insert(pos+node.nodeSize,node).scrollIntoView());
+ const {state,view}=editor;
+ const tr=state.tr.insert(pos+node.nodeSize,node);
+ const sel=state.selection;
+ if(sel instanceof NodeSelection&&sel.from===pos)
+  tr.setSelection(NodeSelection.create(tr.doc,pos+node.nodeSize));
+ else if(sel instanceof TextSelection&&sel.from>=pos&&sel.to<=pos+node.nodeSize)
+  tr.setSelection(TextSelection.create(tr.doc,sel.anchor+node.nodeSize,sel.head+node.nodeSize));
+ view.dispatch(tr.scrollIntoView());
  return true;
 }
 
@@ -302,7 +315,14 @@ export function duplicateContainingWaveSection(editor:Editor):boolean{
  if(index>=parent.childCount||waveChildOffset(parent,index)!==$pos.parentOffset)return false;
  const node=parent.child(index);
  if(node.type.name!=="waveFold"||!parent.canReplace(index+1,index+1,Fragment.from(node)))return false;
- editor.view.dispatch(editor.state.tr.insert(pos+node.nodeSize,node).scrollIntoView());
+ const {state,view}=editor;
+ const tr=state.tr.insert(pos+node.nodeSize,node);
+ const sel=state.selection;
+ if(sel instanceof NodeSelection&&sel.from===pos)
+  tr.setSelection(NodeSelection.create(tr.doc,pos+node.nodeSize));
+ else if(sel instanceof TextSelection&&sel.from>=pos&&sel.to<=pos+node.nodeSize)
+  tr.setSelection(TextSelection.create(tr.doc,sel.anchor+node.nodeSize,sel.head+node.nodeSize));
+ view.dispatch(tr.scrollIntoView());
  return true;
 }
 

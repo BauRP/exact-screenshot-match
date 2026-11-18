@@ -157,3 +157,27 @@ assert.equal(pageSectionEdits,0);
 assert.equal(JSON.stringify(pageSections.doc.toJSON()),savedPageSections);
 assert.equal(pageSections.doc.check(),undefined);
 console.log("Nested and multi-block selections never mutate unrelated blocks or page boundaries");
+
+let duplicateState=EditorState.create({schema,doc:schema.nodes.doc.create(null,[p("first"),p("second")])});
+let duplicateEdits=0;
+const duplicateEditor={isEditable:true,isDestroyed:false,get state(){return duplicateState;},
+ view:{dispatch(tr:any){duplicateEdits++;duplicateState=duplicateState.apply(tr);}}} as any;
+duplicateState=duplicateState.apply(duplicateState.tr.setSelection(TextSelection.create(duplicateState.doc,2)));
+assert.equal(duplicateSelectedWaveBlock(duplicateEditor),true);
+assert.equal(duplicateState.doc.childCount,3);
+assert.equal(duplicateState.selection.$from.parent.textContent,"first");
+assert.ok(duplicateState.selection.from>=duplicateState.doc.child(0).nodeSize);
+assert.equal(duplicateSelectedWaveBlock(duplicateEditor),true);
+assert.equal(duplicateState.doc.childCount,4);
+assert.equal(duplicateEdits,2);
+let duplicateSectionState=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
+ schema.nodes.waveFold.create(null,[p("inside")]),p("outside")
+])});
+const duplicateSectionEditor={isEditable:true,isDestroyed:false,get state(){return duplicateSectionState;},
+ view:{dispatch(tr:any){duplicateSectionState=duplicateSectionState.apply(tr);}}} as any;
+duplicateSectionState=duplicateSectionState.apply(duplicateSectionState.tr.setSelection(TextSelection.create(duplicateSectionState.doc,3)));
+assert.equal(duplicateContainingWaveSection(duplicateSectionEditor),true);
+assert.equal(duplicateSectionState.doc.childCount,3);
+assert.equal(duplicateSectionState.selection.$from.parent.textContent,"inside");
+assert.ok(duplicateSectionState.selection.from>duplicateSectionState.doc.child(0).nodeSize);
+assert.equal(duplicateSectionState.doc.check(),undefined);

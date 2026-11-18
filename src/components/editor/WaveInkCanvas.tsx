@@ -213,6 +213,10 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
      <button type="button" aria-label="Повернуть линии на 90 градусов" title="Повернуть только линии"
        disabled={strokes.length===0} onClick={()=>transformAll("rotate-cw")}
        className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">⟳ 90°</button>
+     <button type="button" aria-label="Повернуть линии на 90 градусов против часовой стрелки"
+       title="Повернуть нарисованные линии влево с возможностью отмены"
+       disabled={strokes.length===0} onClick={()=>transformAll("rotate-ccw")}
+       className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">⟲ 90°</button>
      <button type="button" aria-label="Очистить рисунок" title="Очистить рисунок (можно отменить)"
        disabled={strokes.length===0} onClick={clear}
        className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">Очистить</button>

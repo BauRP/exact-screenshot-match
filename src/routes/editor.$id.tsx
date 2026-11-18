@@ -1186,6 +1186,15 @@ function EditorPage() {
               const changed=setWaveTextDirection(editor,"auto","document");
               if(changed)toast.success("Направление обновлено в "+changed+" блоках");
             }}>Все RTL</button>
+          <button style={{order:10+prefs.toolbarOrder.indexOf("direction")}} type="button"
+            aria-label="Автоматическое направление текста внутри раздела"
+            title="Определить направление только внутри текущего вложенного раздела"
+            onMouseDown={event=>event.preventDefault()}
+            className="grid h-8 shrink-0 place-items-center rounded-full px-2 text-xs font-semibold hover:bg-secondary"
+            onClick={()=>{if(!editor)return;
+              const count=setWaveTextDirection(editor,"auto","section");
+              if(count)toast.success("Направление в разделе обновлено: "+count);
+              else toast("Установите курсор внутри раздела");}}>RTL раздела</button>
           </>}
           {editor&&toolVisible("formatting")&&(
             <div style={{order:10+prefs.toolbarOrder.indexOf("formatting")}}

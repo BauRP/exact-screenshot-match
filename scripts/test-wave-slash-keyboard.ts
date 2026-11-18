@@ -20,3 +20,10 @@ for(const token of ["matchingSlashCommands(blockChoices,slashText)","onKeyDownCa
 assert.ok(!editor.includes("window.prompt("),"Page labels should use an in-app dialog");
 assert.ok(editor.includes("aria-label=\"Название страницы\""));
 console.log("Slash commands keyboard support and in-app page naming checked");
+
+const ranked=[{id:"other",label:"Предварительный список"},
+ {id:"checklist",label:"Список дел",keywords:["задача"]},
+ {id:"list",label:"Список избранных",keywords:["список"]}];
+assert.deepEqual(matchingSlashCommands(ranked,"список").map(x=>x.id),["list","checklist","other"]);
+assert.deepEqual(matchingSlashCommands(ranked,"пред").map(x=>x.id),["other"]);
+assert.deepEqual(matchingSlashCommands(ranked,"список избранных").map(x=>x.id),["list"]);

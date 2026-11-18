@@ -49,7 +49,7 @@ export function visibleTextForDirection(node:PMNode):string{
  return text;
 }
 export type WaveDirectionMode="ltr"|"rtl"|"auto";
-export type WaveDirectionScope="selection"|"document"|"page";
+export type WaveDirectionScope="selection"|"document"|"page"|"section";
 export function setWaveTextDirection(editor:Editor,mode:WaveDirectionMode,scope:WaveDirectionScope="selection"):number{
  if(!editor.isEditable||editor.isDestroyed)return 0;
  const {doc,selection}=editor.state;
@@ -67,6 +67,20 @@ export function setWaveTextDirection(editor:Editor,mode:WaveDirectionMode,scope:
  };
  if(scope==="document"){
   doc.descendants((node,pos)=>{inspect(node,pos);});
+ }else if(scope==="section"){
+  // Update only the innermost enclosing section; a selection spanning
+  // unrelated sections cannot silently edit just its first half.
+  const {$from,$to}=selection;
+  for(let depth=$from.depth;depth>0;depth--){
+   const section=$from.node(depth);
+   if(section.type.name!=="waveFold")continue;
+   if(!selection.empty&&($to.depth<depth||$to.node(depth)!==section))return 0;
+   const start=$from.before(depth)+1;
+   section.descendants((node,offset)=>{
+    if(node.isTextblock)inspect(node,start+offset);
+   });
+   break;
+  }
  }else if(scope==="page"){
   const pages=topLevelPageRanges(doc);
   const indexAt=(pos:number)=>{

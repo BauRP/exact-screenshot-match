@@ -148,3 +148,8 @@ assert.deepEqual(rotated,originalStrokes);
 assert.deepEqual(parseInk(serializeInk(transformInkStrokes(originalStrokes,"rotate-cw"))).length,3);
 assert.ok(canvas.includes('onClick={()=>transformAll("flip-x")}'));
 assert.ok(canvas.includes('onClick={()=>transformAll("rotate-cw")}'));
+
+const rotatedLeft=transformInkStrokes(originalStrokes,"rotate-ccw");
+assert.deepEqual(transformInkStrokes(rotatedLeft,"rotate-cw"),originalStrokes);
+assert.deepEqual(parseInk(serializeInk(rotatedLeft)),rotatedLeft);
+assert.ok(canvas.includes('onClick={()=>transformAll("rotate-ccw")}'));

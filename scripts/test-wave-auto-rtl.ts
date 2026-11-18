@@ -177,3 +177,30 @@ assert.equal(setWaveTextDirection(noVisibleEditor,"ltr","document"),2,
  "Explicit manual direction still works on hidden and empty paragraphs");
 assert.equal(noVisibleEdits,1);
 assert.equal(noVisibleState.doc.child(0).attrs.textDirection,"ltr");
+
+const sectionSchema=new Schema({nodes:{
+ doc:{content:"block+"},paragraph:{group:"block",content:"inline*",attrs:{textDirection:{default:"ltr"}}},
+ waveFold:{group:"block",content:"block+"},text:{group:"inline"}
+},marks:{strong:{},waveTape:{}}});
+const sectionParagraph=(text:string)=>sectionSchema.nodes.paragraph.create(null,sectionSchema.text(text));
+let sectionState=EditorState.create({schema:sectionSchema,doc:sectionSchema.nodes.doc.create(null,[
+ sectionParagraph("English outside"),
+ sectionSchema.nodes.waveFold.create(null,[sectionParagraph("مرحبا"),sectionParagraph("שלום")]),
+ sectionParagraph("שלום outside")
+])});
+let sectionEdits=0;
+const sectionEditor={isEditable:true,isDestroyed:false,get state(){return sectionState;},
+ view:{dispatch(tr:any){sectionEdits++;sectionState=sectionState.apply(tr);}}} as any;
+const sectionStart=sectionState.doc.child(0).nodeSize;
+sectionState=sectionState.apply(sectionState.tr.setSelection(TextSelection.create(sectionState.doc,sectionStart+2)));
+assert.equal(setWaveTextDirection(sectionEditor,"auto","section"),2);
+assert.equal(sectionEdits,1);
+assert.equal(sectionState.doc.child(1).child(0).attrs.textDirection,"rtl");
+assert.equal(sectionState.doc.child(1).child(1).attrs.textDirection,"rtl");
+assert.equal(sectionState.doc.child(2).attrs.textDirection,"ltr");
+assert.equal(setWaveTextDirection(sectionEditor,"auto","section"),0);
+sectionState=sectionState.apply(sectionState.tr.setSelection(TextSelection.create(
+ sectionState.doc,sectionStart+2,sectionState.doc.content.size-2)));
+assert.equal(setWaveTextDirection(sectionEditor,"auto","section"),0);
+assert.equal(sectionEdits,1);
+assert.ok(editor.includes('setWaveTextDirection(editor,"auto","section")'));
