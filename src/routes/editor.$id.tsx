@@ -95,8 +95,8 @@ import {replaceOneInNote,replaceAllInNote} from "@/lib/wave-find-replace";
 import { readEditorPreferences,saveEditorPreferences,toolbarPreset,EDITOR_PREFS_CHANGED,type EditorTool } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
-import {setSelectedChecklistShape,setSelectedTasksDone,continueSelectedChecklistItem,insertUncheckedChecklistBefore,insertUncheckedChecklistAfter,convertSelectedChecklistBlocks,selectedSectionTaskCounts,setSelectedSectionTasksDone,currentPageTaskCounts,setCurrentPageTasksDone} from "@/lib/wave-checklist-actions";
-import {setAllFoldSections,setFoldSectionsToDepth,countFoldSections} from "@/lib/wave-section-batch";
+import {setSelectedChecklistShape,setSelectedTasksDone,continueSelectedChecklistItem,insertUncheckedChecklistBefore,insertUncheckedChecklistAfter,insertUncheckedChecklistRowsAfter,convertSelectedChecklistBlocks,selectedSectionTaskCounts,setSelectedSectionTasksDone,currentPageTaskCounts,setCurrentPageTasksDone} from "@/lib/wave-checklist-actions";
+import {setAllFoldSections,setFoldSectionsToDepth,setCurrentPageFoldSections,countFoldSections} from "@/lib/wave-section-batch";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
 import {openExternalUrl,normalizedSafeNoteLink} from "@/lib/external-links";
@@ -454,7 +454,7 @@ function EditorPage() {
     requestAnimationFrame(()=>editor.view.dom.querySelector(".wave-find-current")?.scrollIntoView({block:"nearest"}));
   };
 
-  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator"|"bullets"|"numbered"|"heading"|"checklist"|"page",callout:CalloutKind="important")=>{
+  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator"|"bullets"|"numbered"|"heading"|"heading1"|"heading3"|"paragraph"|"checklist"|"page",callout:CalloutKind="important")=>{
     if(!editor)return;
     const {$from}=editor.state.selection;
     const textBefore=$from.parent.textBetween(0,$from.parentOffset);
@@ -466,6 +466,9 @@ function EditorPage() {
     if(kind==="bullets"){chain.toggleBulletList().run();return;}
     if(kind==="numbered"){chain.toggleOrderedList().run();return;}
     if(kind==="heading"){chain.toggleHeading({level:2}).run();return;}
+    if(kind==="heading1"){chain.setHeading({level:1}).run();return;}
+    if(kind==="heading3"){chain.setHeading({level:3}).run();return;}
+    if(kind==="paragraph"){chain.setParagraph().run();return;}
     if(kind==="checklist"){chain.insertContent({type:"waveChecklistItem",attrs:{shape:checkShape,done:false},content:[{type:"text",text:" "}]}).run();return;}
     if(kind==="tape"){
       if(editor.state.selection.empty){toast("Сначала выделите слова, которые нужно скрыть");return;}
@@ -480,10 +483,13 @@ function EditorPage() {
     chain.insertContent(node).run();
   };
   const blockChoices=[
-    {id:"checklist",label:"Список дел",icon:"☐"},
+    {id:"checklist",label:"Список дел",icon:"☐",keywords:["задача","чеклист","галочка","task"]},
     {id:"bullets",label:"Маркированный список",icon:"•"},
     {id:"numbered",label:"Нумерованный список",icon:"1."},
-    {id:"heading",label:"Заголовок",icon:"H"},
+    {id:"heading",label:"Заголовок 2",icon:"H2",keywords:["подзаголовок","h2"]},
+    {id:"heading1",label:"Заголовок 1",icon:"H1",keywords:["главный","h1"]},
+    {id:"heading3",label:"Заголовок 3",icon:"H3",keywords:["мелкий","h3"]},
+    {id:"paragraph",label:"Обычный текст",icon:"¶",keywords:["абзац","paragraph","сбросить стиль"]},
     {id:"callout",label:"Важно",icon:"!"},
     {id:"tip",label:"Совет",icon:"✦"},
     {id:"warning",label:"Предупреждение",icon:"⚠"},
@@ -493,7 +499,7 @@ function EditorPage() {
     {id:"tape",label:"Скрыть выбранный ответ",icon:"▰"},
     {id:"date",label:"Вставить дату",icon:"◷"},
     {id:"separator",label:"Разделитель",icon:"—"},
-    {id:"page",label:"Новая страница",icon:"▤"},
+    {id:"page",label:"Новая страница",icon:"▤",keywords:["лист","разрыв","page"]},
   ] as const;
   const chooseBlock=(id:typeof blockChoices[number]["id"])=>{
     if(id==="callout")insertWaveBlock("callout","important");
@@ -1056,6 +1062,10 @@ function EditorPage() {
                    className="rounded-md border border-border px-2 py-2 text-xs"
                    onClick={()=>{if(!editor||!insertUncheckedChecklistAfter(editor))toast("Установите курсор внутри задачи");}}>Пункт после +</button>
                </div>
+              <button type="button" onMouseDown={event=>event.preventDefault()}
+                aria-label="Добавить три пустых задачи после текущей"
+                onClick={()=>{if(!editor||!insertUncheckedChecklistRowsAfter(editor,3))toast("Установите курсор внутри задачи");}}
+                className="mt-1 w-full rounded-md border border-border px-2 py-2 text-xs">Добавить три пункта +</button>
               <div className="mt-2 grid grid-cols-1 gap-1 border-t border-border pt-2">
                 <p className="px-2 text-xs font-semibold">Преобразование без потери текста</p>
                 <button type="button" onMouseDown={event=>event.preventDefault()}
@@ -1352,6 +1362,14 @@ function EditorPage() {
               className="rounded-md border px-2 py-1.5 text-xs">Уровень 1</button>
             <button type="button" onClick={()=>setFoldSectionsToDepth(editor,2)}
               className="rounded-md border px-2 py-1.5 text-xs">Уровень 2</button>
+            <button type="button" onClick={()=>setFoldSectionsToDepth(editor,3)}
+              className="rounded-md border px-2 py-1.5 text-xs">Уровень 3</button>
+            <button type="button" onMouseDown={event=>event.preventDefault()}
+              onClick={()=>setCurrentPageFoldSections(editor,false)}
+              className="rounded-md border px-2 py-1.5 text-xs">Раскрыть страницу</button>
+            <button type="button" onMouseDown={event=>event.preventDefault()}
+              onClick={()=>setCurrentPageFoldSections(editor,true)}
+              className="rounded-md border px-2 py-1.5 text-xs">Свернуть страницу</button>
           </div>}
           <div className="mb-2 flex gap-2 px-2">
             <input type="search" aria-label="Поиск по оглавлению" placeholder="Найти раздел…"

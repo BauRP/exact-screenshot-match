@@ -1,7 +1,7 @@
 /** Small, pure command matching for the editor's slash palette.
  * Search covers localized labels and stable command IDs. The editor
  * remains offline and no text typed into a note is sent anywhere. */
-export type SlashCommand={id:string;label:string};
+export type SlashCommand={id:string;label:string;keywords?:readonly string[]};
 export function matchingSlashCommands<T extends SlashCommand>(
  commands:readonly T[], query:string
 ):T[]{
@@ -10,7 +10,7 @@ export function matchingSlashCommands<T extends SlashCommand>(
  if(!phrase)return [...commands];
  const words=phrase.split(/\s+/);
  return commands.filter(item=>{
-  const search=(item.label+" "+item.id).normalize("NFKC").toLocaleLowerCase();
+  const search=[item.label,item.id,...(item.keywords??[])].join(" ").normalize("NFKC").toLocaleLowerCase();
   return words.every(word=>search.includes(word));
  });
 }

@@ -1,6 +1,6 @@
 import {strict as assert} from "node:assert";
 import {readFileSync} from "node:fs";
-import {appendInkPoint,ellipseInkPoints,inkStrokeAt,inkStrokeAlong,inkStrokeIndicesAlong,paintInk,parseInk,serializeInk,type InkStroke,type InkPoint} from "../src/lib/wave-ink";
+import {appendInkPoint,ellipseInkPoints,inkStrokeAt,inkStrokeAlong,inkStrokeIndicesAlong,paintInk,parseInk,serializeInk,transformInkStrokes,type InkStroke,type InkPoint} from "../src/lib/wave-ink";
 const line:InkStroke={tool:"pen",color:"#161b22",width:4,points:[[0,0],[1000,0]]};
 assert.equal(inkStrokeAt([line],[500,5],5),0);
 assert.equal(inkStrokeAt([line],[500,100],5),-1);
@@ -136,3 +136,15 @@ assert.deepEqual(inkStrokeIndicesAlong([newPosition],[700,700],[800,800],3),[0],
 assert.deepEqual(inkStrokeIndicesAlong([newPosition],[100,100],[140,140],8),[]);
 assert.equal(inkStrokeAt([dense],[140,140],4),0,"Tap hit-testing respects cached bounds");
 assert.equal(inkStrokeAt([dense],[900,900],4),-1);
+
+const originalStrokes=parseInk(serializeInk([line,box,oval]));
+const flipped=transformInkStrokes(originalStrokes,"flip-x");
+assert.deepEqual(flipped[0].points,[[1000,0],[0,0]]);
+assert.deepEqual(transformInkStrokes(flipped,"flip-x"),originalStrokes);
+assert.deepEqual(transformInkStrokes(transformInkStrokes(originalStrokes,"flip-y"),"flip-y"),originalStrokes);
+let rotated=originalStrokes;
+for(let i=0;i<4;i++)rotated=transformInkStrokes(rotated,"rotate-cw");
+assert.deepEqual(rotated,originalStrokes);
+assert.deepEqual(parseInk(serializeInk(transformInkStrokes(originalStrokes,"rotate-cw"))).length,3);
+assert.ok(canvas.includes('onClick={()=>transformAll("flip-x")}'));
+assert.ok(canvas.includes('onClick={()=>transformAll("rotate-cw")}'));

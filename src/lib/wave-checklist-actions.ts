@@ -183,6 +183,22 @@ export function insertUncheckedChecklistBefore(editor:Editor):boolean{
  return true;
 }
 
+/** Insert several unchecked tasks as a single undoable edit. Completion
+ * and formatting of the original item are never changed. */
+export function insertUncheckedChecklistRowsAfter(editor:Editor,count:number):boolean{
+ if(!editor.isEditable||editor.isDestroyed||!editor.state.selection.empty||
+    !Number.isSafeInteger(count)||count<1||count>10)return false;
+ const {state,view}=editor,{$from}=state.selection,row=$from.parent;
+ if(row.type.name!=="waveChecklistItem")return false;
+ const at=$from.after(),$at=state.doc.resolve(at);
+ const nodes=Fragment.fromArray(Array.from({length:count},()=>row.type.create({...row.attrs,done:false})));
+ if(!$at.parent.canReplace($at.index(),$at.index(),nodes))return false;
+ const tr=state.tr.insert(at,nodes);
+ if(!tr.doc.type.validContent(tr.doc.content))return false;
+ tr.setSelection(TextSelection.create(tr.doc,at+1));
+ view.dispatch(tr.scrollIntoView());
+ return true;
+}
 /** The section-scoped toolbar is meaningful only when the whole selection
  * belongs to the SAME innermost section. A range across two sections, from
  * a section into plain text or into a different nested section must not

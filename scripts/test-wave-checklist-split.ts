@@ -1,7 +1,7 @@
 import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection} from "@tiptap/pm/state";
-import {continueSelectedChecklistItem,insertUncheckedChecklistAfter,insertUncheckedChecklistBefore,toggleWaveChecklistAtPosition} from "../src/lib/wave-checklist-actions";
+import {continueSelectedChecklistItem,insertUncheckedChecklistAfter,insertUncheckedChecklistBefore,insertUncheckedChecklistRowsAfter,toggleWaveChecklistAtPosition} from "../src/lib/wave-checklist-actions";
 import {WaveChecklistItem} from "../src/lib/wave-checklist";
 const schema=new Schema({nodes:{doc:{content:"block+"},
  paragraph:{group:"block",content:"inline*",attrs:{textDirection:{default:"ltr"},textAlign:{default:"left"}}},
@@ -220,3 +220,25 @@ assert.equal(beforeState.doc.child(1).attrs.done,true);
 assert.equal(beforeState.doc.child(1).firstChild?.marks[0].type.name,"strong");
 assert.equal(beforeState.selection.$from.parentOffset,0);
 assert.equal(beforeState.doc.check(),undefined);
+
+let batch=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
+ schema.nodes.waveChecklistItem.create({shape:"diamond",done:true,textDirection:"rtl"},schema.text("Kept"))
+])});
+let batchEdits=0;
+const batchEditor={isEditable:true,isDestroyed:false,get state(){return batch;},
+ view:{dispatch(tr:any){batchEdits++;batch=batch.apply(tr);}}} as any;
+batch=batch.apply(batch.tr.setSelection(TextSelection.create(batch.doc,2)));
+assert.equal(insertUncheckedChecklistRowsAfter(batchEditor,3),true);
+assert.equal(batchEdits,1);
+assert.equal(batch.doc.childCount,4);
+assert.equal(batch.doc.child(0).textContent,"Kept");
+assert.equal(batch.doc.child(0).attrs.done,true);
+for(let i=1;i<4;i++){
+ assert.equal(batch.doc.child(i).attrs.done,false);
+ assert.equal(batch.doc.child(i).attrs.shape,"diamond");
+ assert.equal(batch.doc.child(i).attrs.textDirection,"rtl");
+}
+assert.equal(batch.selection.$from.parentOffset,0);
+assert.equal(batch.doc.check(),undefined);
+assert.equal(insertUncheckedChecklistRowsAfter(batchEditor,0),false);
+assert.equal(insertUncheckedChecklistRowsAfter(batchEditor,11),false);

@@ -1,4 +1,5 @@
 import type {Editor} from "@tiptap/react";
+import {topLevelPageRanges} from "./wave-page-actions";
 /** Expand/collapse all sections as a single undoable document transaction. */
 export function setAllFoldSections(editor:Editor,collapsed:boolean):number {
  if(!editor.isEditable||editor.isDestroyed)return 0;
@@ -19,6 +20,29 @@ export function countFoldSections(editor:Editor):number{
  return count;
 }
 
+/** Expand or collapse only the folds of the selected logical page.
+ * Ranges spanning multiple pages are rejected; one action is one Undo. */
+export function setCurrentPageFoldSections(editor:Editor,collapsed:boolean):number{
+ if(!editor.isEditable||editor.isDestroyed)return 0;
+ const {state,view}=editor,{doc,selection}=state,pages=topLevelPageRanges(doc);
+ const pageAt=(pos:number)=>{
+  let index=0;
+  for(let i=1;i<pages.length;i++)if(pos>=pages[i].start)index=i;
+  return index;
+ };
+ const index=pageAt(selection.from);
+ if(pageAt(selection.empty?selection.to:Math.max(selection.from,selection.to-1))!==index)return 0;
+ const {bodyStart,end}=pages[index];
+ let tr=state.tr,count=0;
+ doc.nodesBetween(bodyStart,end,(node,pos)=>{
+  if(node.type.name==="waveFold"&&node.attrs.collapsed!==collapsed){
+   tr=tr.setNodeMarkup(pos,undefined,{...node.attrs,collapsed});
+   count++;
+  }
+ });
+ if(count)view.dispatch(tr.scrollIntoView());
+ return count;
+}
 /** Show sections through the requested nesting depth in a single undoable
  * transaction. Collapsing deeper sections never deletes or rewrites their
  * contents, and their state survives save/reopen. */

@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from "react";
 import type {PointerEvent as ReactPointerEvent} from "react";
-import {appendInkPoint,ellipseInkPoints,inkStrokeIndicesAlong,parseInk,serializeInk,type InkPoint,type InkStroke} from "@/lib/wave-ink";
+import {appendInkPoint,ellipseInkPoints,inkStrokeIndicesAlong,parseInk,serializeInk,transformInkStrokes,type InkTransform,type InkPoint,type InkStroke} from "@/lib/wave-ink";
 
 /** Per-drawing undo/redo also works for ink layered over a photograph. */
 export function WaveInkCanvas({value,onChange,editable,active=false}:{
@@ -157,6 +157,14 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
   gestureChanged.current=false;
   if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);
  };
+ const transformAll=(operation:InkTransform)=>{
+   if(!editable||!active||gesture.current!==null||current.current.length===0)return;
+   const next=transformInkStrokes(current.current,operation);
+   past.current=[...past.current.slice(-29),current.current];
+   future.current=[];
+   replace(next);setHistoryVersion(v=>v+1);
+   emit(next);
+ };
  const clear=()=>{
    if(!editable||!active||gesture.current!==null||current.current.length===0)return;
    past.current=[...past.current.slice(-29),current.current];
@@ -196,6 +204,15 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
      {(["pen","marker","line","rectangle","ellipse","eraser"] as const).map(item=><button key={item} type="button" aria-pressed={tool===item}
        className={`rounded-lg px-2 py-1 text-xs ${tool===item?"bg-primary text-primary-foreground":"bg-secondary"}`}
        onClick={()=>setTool(item)}>{item==="pen"?"Ручка":item==="marker"?"Маркер":item==="line"?"Прямая":item==="rectangle"?"Прямоугольник":item==="ellipse"?"Овал":"Ластик"}</button>)}
+     <button type="button" aria-label="Отразить линии горизонтально" title="Отразить линии, не фотографию"
+       disabled={strokes.length===0} onClick={()=>transformAll("flip-x")}
+       className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">⇔</button>
+     <button type="button" aria-label="Отразить линии вертикально" title="Отразить линии, не фотографию"
+       disabled={strokes.length===0} onClick={()=>transformAll("flip-y")}
+       className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">⇕</button>
+     <button type="button" aria-label="Повернуть линии на 90 градусов" title="Повернуть только линии"
+       disabled={strokes.length===0} onClick={()=>transformAll("rotate-cw")}
+       className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">⟳ 90°</button>
      <button type="button" aria-label="Очистить рисунок" title="Очистить рисунок (можно отменить)"
        disabled={strokes.length===0} onClick={clear}
        className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">Очистить</button>

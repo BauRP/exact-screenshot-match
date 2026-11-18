@@ -55,6 +55,14 @@ export function serializeInk(strokes:InkStroke[]):string{
  if(text.length>120000||parseInk(text).length!==strokes.length)throw Error("Рисунок слишком большой или повреждён");
  return text;
 }
+/** Reversible transformations of vector ink, never touching image files.
+ * Fresh coordinate arrays preserve hit-test caching and undo correctness. */
+export type InkTransform="flip-x"|"flip-y"|"rotate-cw";
+export function transformInkStrokes(strokes:readonly InkStroke[],op:InkTransform):InkStroke[]{
+ return strokes.map(stroke=>({...stroke,points:stroke.points.map(([x,y]):InkPoint=>
+  op==="flip-x"?[1000-x,y]:op==="flip-y"?[x,1000-y]:[1000-y,x]
+ )}));
+}
 /** Hit-test a whole line segment; the previous point-only eraser missed long strokes. */
 function segmentDistance(p:InkPoint,a:InkPoint,b:InkPoint):number{
  const dx=b[0]-a[0],dy=b[1]-a[1],squared=dx*dx+dy*dy;

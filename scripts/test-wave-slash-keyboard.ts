@@ -5,6 +5,10 @@ const list=[{id:"checklist",label:"Список дел"},{id:"heading",label:"З
 assert.deepEqual(matchingSlashCommands(list,"список").map(x=>x.id),["checklist"]);
 assert.deepEqual(matchingSlashCommands(list,"  ЗАГОЛОВОК  ").map(x=>x.id),["heading"]);
 assert.deepEqual(matchingSlashCommands(list,"che").map(x=>x.id),["checklist"]);
+const aliases=[{id:"checklist",label:"Список дел",keywords:["задача","чеклист"]},
+ {id:"heading1",label:"Заголовок 1",keywords:["h1","главный"]}];
+assert.deepEqual(matchingSlashCommands(aliases,"задача").map(x=>x.id),["checklist"]);
+assert.deepEqual(matchingSlashCommands(aliases,"h1").map(x=>x.id),["heading1"]);
 assert.deepEqual(matchingSlashCommands(list,"СвоРАчиваемый Раздел").map(x=>x.id),["fold"]);
 assert.deepEqual(matchingSlashCommands(list,"нет совпадений"),[]);
 assert.equal(nextSlashIndex(4,0,-1),3);
