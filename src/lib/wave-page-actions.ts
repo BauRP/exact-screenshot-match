@@ -87,6 +87,30 @@ export function moveCurrentPage(editor:Editor,direction:"up"|"down"):boolean{
  return true;
 }
 
+/** Move the active named page directly to the first or last editable page.
+ * Initial undivided page remains fixed; all child nodes are preserved. */
+export function moveCurrentPageToEdge(editor:Editor,edge:"first"|"last"):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const {state,view}=editor,{doc,selection}=state,pages=topLevelPageRanges(doc);
+ if(pages.length<3)return false;
+ const i=singleSelectedPageIndex(pages,selection);
+ if(i===undefined||i<1||(edge==="first"&&i===1)||(edge==="last"&&i===pages.length-1))return false;
+ const page=pages[i],nodes=doc.content.cut(page.start,page.end);
+ if(nodes.firstChild?.type.name!=="wavePageBreak")return false;
+ let tr=state.tr.delete(page.start,page.end);
+ const at=edge==="first"?pages[1].start:tr.doc.content.size,$at=tr.doc.resolve(at);
+ if($at.parent!==tr.doc||!tr.doc.canReplace($at.index(),$at.index(),nodes))return false;
+ tr=tr.insert(at,nodes);
+ const delta=at-page.start;
+ if(selection instanceof NodeSelection)tr.setSelection(NodeSelection.create(tr.doc,selection.from+delta));
+ else if(selection instanceof TextSelection)
+  tr.setSelection(TextSelection.create(tr.doc,selection.anchor+delta,selection.head+delta));
+ else tr.setSelection(Selection.near(tr.doc.resolve(selection.from+delta)));
+ if(!tr.doc.type.validContent(tr.doc.content))return false;
+ view.dispatch(tr.scrollIntoView());
+ return true;
+}
+
 /** Insert a new, empty top-level page AFTER the active page without splitting
  * text blocks, images, audio, or nested sections. One undoable transaction. */
 export function insertBlankPageAfter(editor:Editor):boolean{
@@ -100,7 +124,9 @@ export function insertBlankPageAfter(editor:Editor):boolean{
  const content=Fragment.fromArray([divider.create(),paragraph.create()]);
  const resolved=doc.resolve(at);
  if(resolved.parent!==doc||!doc.canReplace(resolved.index(),resolved.index(),content))return false;
- editor.view.dispatch(editor.state.tr.insert(at,content).scrollIntoView());
+ const tr=editor.state.tr.insert(at,content);
+ tr.setSelection(TextSelection.create(tr.doc,at+divider.create().nodeSize+1));
+ editor.view.dispatch(tr.scrollIntoView());
  return true;
 }
 
@@ -119,7 +145,9 @@ export function insertBlankPageBefore(editor:Editor):boolean{
    [paragraph.create(),divider.create()]:[divider.create(),paragraph.create()]);
  const $at=doc.resolve(at);
  if($at.parent!==doc||!doc.canReplace($at.index(),$at.index(),content))return false;
- editor.view.dispatch(editor.state.tr.insert(at,content).scrollIntoView());
+ const tr=editor.state.tr.insert(at,content);
+ tr.setSelection(TextSelection.create(tr.doc,index===0?1:at+divider.create().nodeSize+1));
+ editor.view.dispatch(tr.scrollIntoView());
  return true;
 }
 

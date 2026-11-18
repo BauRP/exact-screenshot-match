@@ -37,6 +37,7 @@ export function directionForText(text:string):"ltr"|"rtl"{
  * discard bold/italic marks, attachment IDs, and saved page dividers. */
 import type {Editor} from "@tiptap/react";
 import type {Node as PMNode} from "@tiptap/pm/model";
+import {topLevelPageRanges} from "./wave-page-actions";
 /** Decide automatic text direction from VISIBLE content only. Secret Tape
  * answers stay saved and concealed, but cannot change a heading's direction. */
 export function visibleTextForDirection(node:PMNode):string{
@@ -48,7 +49,7 @@ export function visibleTextForDirection(node:PMNode):string{
  return text;
 }
 export type WaveDirectionMode="ltr"|"rtl"|"auto";
-export type WaveDirectionScope="selection"|"document";
+export type WaveDirectionScope="selection"|"document"|"page";
 export function setWaveTextDirection(editor:Editor,mode:WaveDirectionMode,scope:WaveDirectionScope="selection"):number{
  if(!editor.isEditable||editor.isDestroyed)return 0;
  const {doc,selection}=editor.state;
@@ -66,6 +67,19 @@ export function setWaveTextDirection(editor:Editor,mode:WaveDirectionMode,scope:
  };
  if(scope==="document"){
   doc.descendants((node,pos)=>{inspect(node,pos);});
+ }else if(scope==="page"){
+  const pages=topLevelPageRanges(doc);
+  const indexAt=(pos:number)=>{
+   let index=0;
+   for(let i=1;i<pages.length;i++)if(pos>=pages[i].start)index=i;
+   return index;
+  };
+  const index=indexAt(from);
+  if(indexAt(selection.empty?to:Math.max(from,to-1))!==index)return 0;
+  const page=pages[index];
+  doc.nodesBetween(page.bodyStart,page.end,(node,pos)=>{
+   if(node.isTextblock)inspect(node,pos);
+  });
  }else if(selection.empty){
   // With one caret there is exactly one editable textblock. Do not walk
   // thousands of unrelated paragraphs just to change its direction.

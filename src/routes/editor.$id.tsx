@@ -73,7 +73,7 @@ import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection,setWaveTextDirection} from "@/lib/wave-text-direction";
 import {collectNoteOutline,filterNoteOutline,type OutlineFilter,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
 import {moveSelectedWaveBlock,moveWaveBlocksToAdjacentPage,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
-import {duplicateCurrentPage,moveCurrentPage,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,splitPageAtCaret} from "@/lib/wave-page-actions";
+import {duplicateCurrentPage,moveCurrentPage,moveCurrentPageToEdge,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,splitPageAtCaret} from "@/lib/wave-page-actions";
 import {revealOutlinePosition} from "@/lib/wave-outline-navigation";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
@@ -92,7 +92,7 @@ import { useT } from "@/lib/i18n";
 import { APP_FONTS, fontNameFromCss } from "@/lib/app-fonts";
 import { InNoteSearch, noteSearchKey, findWords } from "@/lib/in-note-search";
 import {replaceOneInNote,replaceAllInNote} from "@/lib/wave-find-replace";
-import { readEditorPreferences,EDITOR_PREFS_CHANGED,type EditorTool } from "@/lib/editor-preferences";
+import { readEditorPreferences,saveEditorPreferences,toolbarPreset,EDITOR_PREFS_CHANGED,type EditorTool } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
 import {setSelectedChecklistShape,setSelectedTasksDone,continueSelectedChecklistItem,convertSelectedChecklistBlocks,selectedSectionTaskCounts,setSelectedSectionTasksDone,currentPageTaskCounts,setCurrentPageTasksDone} from "@/lib/wave-checklist-actions";
@@ -1246,6 +1246,21 @@ function EditorPage() {
           <button type="button" aria-label="Переместить страницу ниже" disabled={currentPage<=1||currentPage>=pagePositions.length}
             className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
             onClick={()=>moveCurrentPage(editor,"down")}>Стр. ↓</button>
+           <button type="button" aria-label="Переместить страницу в начало"
+             onMouseDown={event=>event.preventDefault()} disabled={currentPage<=2}
+             className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+             onClick={()=>{if(!moveCurrentPageToEdge(editor,"first"))toast("Не удалось переместить страницу");}}>Стр. ⇤</button>
+           <button type="button" aria-label="Переместить страницу в конец"
+             onMouseDown={event=>event.preventDefault()}
+             disabled={currentPage<=1||currentPage>=pagePositions.length}
+             className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+             onClick={()=>{if(!moveCurrentPageToEdge(editor,"last"))toast("Не удалось переместить страницу");}}>Стр. ⇥</button>
+           <button type="button" aria-label="Автоматическое направление текста текущей страницы"
+             onMouseDown={event=>event.preventDefault()}
+             className="rounded-md border px-2 py-1 text-xs"
+             onClick={()=>{const changed=setWaveTextDirection(editor,"auto","page");
+               if(changed)toast.success("Обновлено блоков на странице: "+changed);
+               else toast("Направление менять не нужно");}}>Авто RTL стр.</button>
             </div>
           </details>
           <details className="w-full sm:w-auto">
@@ -1297,6 +1312,22 @@ function EditorPage() {
           <button type="button" aria-label="Дублировать раздел" title="Дублировать раздел со всеми блоками" className="rounded-md border px-2 py-1 text-xs" onClick={()=>duplicateContainingWaveSection(editor)}>Раздел ⧉</button>
           <button type="button" aria-label="Вынести блок из раздела" title="Вынести блок из вложенного раздела" className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>liftWaveBlock(editor,()=>selectedWaveBlockPos(editor))}>↗</button>
+           <select aria-label="Профиль инструментов" defaultValue=""
+             className="rounded-md border border-border bg-background px-2 py-1 text-xs"
+             title="Выбрать кнопки для работы с текстом или медиа без изменения содержимого"
+             onChange={event=>{
+               const mode=event.target.value;
+               if(mode==="writing"||mode==="media"||mode==="all"){
+                 saveEditorPreferences(toolbarPreset(mode));
+                 toast.success("Панель инструментов обновлена");
+               }
+               event.target.value="";
+             }}>
+             <option value="" disabled>Панель…</option>
+             <option value="writing">Текст</option>
+             <option value="media">Фото и звук</option>
+             <option value="all">Все инструменты</option>
+           </select>
             </div>
           </details>
         </div>}

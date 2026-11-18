@@ -1,7 +1,17 @@
 import { Fragment, type Node as PMNode, type ResolvedPos } from "@tiptap/pm/model";
 import {topLevelPageRanges} from "./wave-page-actions";
+import {NodeSelection,TextSelection,type Selection,type Transaction} from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
 
+/** Keep the caret/selection inside relocated nodes, not on the block that
+ * later occupies the old position. Unrelated NodeView selections are ignored. */
+function retainMovedSelection(tr:Transaction,selection:Selection,from:number,to:number,at:number):void{
+ if(selection.from<from||selection.to>to)return;
+ const offset=at-from;
+ if(selection instanceof NodeSelection)tr.setSelection(NodeSelection.create(tr.doc,selection.from+offset));
+ else if(selection instanceof TextSelection)
+  tr.setSelection(TextSelection.create(tr.doc,selection.anchor+offset,selection.head+offset));
+}
 /** A Fragment has no offsetAt API; sum child sizes in the active schema. */
 export function waveChildOffset(parent:PMNode,index:number):number {
   let offset=0;
@@ -55,7 +65,10 @@ export function moveWaveBlock(
   if (from < 0 || to > doc.content.size ||
       !parent.canReplace(firstIndex, firstIndex + 2, replacement)) return false;
 
-  view.dispatch(state.tr.replaceWith(from, to, replacement).scrollIntoView());
+  const tr=state.tr.replaceWith(from,to,replacement);
+  retainMovedSelection(tr,state.selection,position,position+current.nodeSize,
+   position+(direction==="up"?-neighbor.nodeSize:neighbor.nodeSize));
+  view.dispatch(tr.scrollIntoView());
   return true;
 }
 
@@ -139,7 +152,10 @@ export function moveSelectedWaveBlock(editor:Editor,direction:"up"|"down"):boole
   const from=direction==="up"?range.from-neighbor.nodeSize:range.from;
   const to=direction==="up"?range.to:range.to+neighbor.nodeSize;
   if(from<0||to>doc.content.size)return false;
-  view.dispatch(state.tr.replaceWith(from,to,swapped).scrollIntoView());
+  const tr=state.tr.replaceWith(from,to,swapped);
+  retainMovedSelection(tr,state.selection,range.from,range.to,
+   range.from+(direction==="up"?-neighbor.nodeSize:neighbor.nodeSize));
+  view.dispatch(tr.scrollIntoView());
   return true;
  }
  const pos=selectedWaveBlockPos(editor);
@@ -332,6 +348,7 @@ export function moveWaveBlocksToAdjacentPage(editor:Editor,direction:"previous"|
  if($at.parent!==tr.doc||!tr.doc.canReplace($at.index(),$at.index(),content))return false;
  tr=tr.insert(mapped,content);
  if(!tr.doc.type.validContent(tr.doc.content))return false;
+ retainMovedSelection(tr,state.selection,from,to,mapped);
  view.dispatch(tr.scrollIntoView());
  return true;
 }
