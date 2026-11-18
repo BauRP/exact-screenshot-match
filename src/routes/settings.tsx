@@ -42,7 +42,7 @@ import {
   biometricAvailability,
 } from "@/lib/app-lock";
 import { pinIsValid } from "@/lib/pin-security";
-import { readEditorPreferences,saveEditorPreferences,TOOLBAR_TOOLS,moveToolbarTool,toolbarPreset } from "@/lib/editor-preferences";
+import { readEditorPreferences,saveEditorPreferences,TOOLBAR_TOOLS,moveToolbarTool,toolbarPreset,SPELLCHECK_LANGUAGES,validSpellcheckLanguage } from "@/lib/editor-preferences";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [
@@ -417,6 +417,15 @@ function SettingsPage() {
         <Section title="Редактор" eyebrow="04">
           <Row icon={<SpellCheck className="h-4 w-4"/>} title="Подчёркивать возможные ошибки" hint="Проверка средствами телефона, без автоматического исправления слов">
             <Toggle checked={editorPrefs.spellcheck} label="Проверка правописания" onChange={v=>changePref({spellcheck:v})}/>
+          </Row>
+          <div className="h-px bg-border"/>
+          <Row icon={<SpellCheck className="h-4 w-4"/>} title="Язык проверки текста"
+            hint="Работает без сервера. Подсказки зависят от словарей Android и WebView.">
+            <select aria-label="Язык проверки правописания" value={editorPrefs.spellcheckLanguage}
+              onChange={event=>changePref({spellcheckLanguage:validSpellcheckLanguage(event.target.value)})}
+              className="max-w-36 rounded-lg border border-border bg-background px-2 py-2 text-xs">
+              {SPELLCHECK_LANGUAGES.map(lang=><option key={lang.value} value={lang.value}>{lang.label}</option>)}
+            </select>
           </Row>
           <div className="h-px bg-border"/>
           <Row icon={<Search className="h-4 w-4"/>} title="Учитывать регистр в поиске" hint="Поиск только внутри открытой заметки">

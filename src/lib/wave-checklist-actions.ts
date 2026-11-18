@@ -169,6 +169,20 @@ export function insertUncheckedChecklistAfter(editor:Editor):boolean{
  return true;
 }
 
+/** Create an unchecked task immediately BEFORE the active task without
+ * touching the current task's content, shape, marks, direction or done state. */
+export function insertUncheckedChecklistBefore(editor:Editor):boolean{
+ if(!editor.isEditable||editor.isDestroyed||!editor.state.selection.empty)return false;
+ const {state,view}=editor,{$from}=state.selection,row=$from.parent;
+ if(row.type.name!=="waveChecklistItem")return false;
+ const at=$from.before(),$at=state.doc.resolve(at);
+ if(!$at.parent.canReplaceWith($at.index(),$at.index(),row.type))return false;
+ const tr=state.tr.insert(at,row.type.create({...row.attrs,done:false}));
+ tr.setSelection(TextSelection.create(tr.doc,at+1));
+ view.dispatch(tr.scrollIntoView());
+ return true;
+}
+
 /** The section-scoped toolbar is meaningful only when the whole selection
  * belongs to the SAME innermost section. A range across two sections, from
  * a section into plain text or into a different nested section must not

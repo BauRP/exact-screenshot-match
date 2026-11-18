@@ -5,6 +5,7 @@ import {loadImageFile} from "@/lib/image-files";
 import {WaveInkCanvas} from "@/components/editor/WaveInkCanvas";
 import {moveWaveBlock} from "@/lib/wave-block-motion";
 import {imageWidthForDrag} from "@/lib/wave-image-resize";
+import {copyWaveInk,pasteWaveInk} from "@/lib/wave-ink-transfer";
 
 declare module "@tiptap/core" {
  interface Commands<ReturnType> {
@@ -13,6 +14,7 @@ declare module "@tiptap/core" {
 }
 function ImageView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewProps){
  const [annotating,setAnnotating]=useState(false);
+ const [inkMessage,setInkMessage]=useState("");
  const id=String(node.attrs.imageId||"");
  // Historic notes can contain an out-of-range width; the preview and
  // slider must still stay inside the supported image size.
@@ -133,6 +135,15 @@ function ImageView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewProp
       <button type="button" onClick={()=>setAnnotating(v=>!v)} className="rounded-lg border border-border px-3 py-2 text-xs">
         {annotating?"Готово":"Рисовать поверх"}
       </button>
+      <button type="button" aria-label="Скопировать линии с фото"
+        className="rounded-lg border border-border px-3 py-2 text-xs"
+        onClick={()=>{const n=copyWaveInk(node.attrs.ink);setInkMessage(n?"Линий скопировано: "+n:"Нет линий для копирования");}}>Копировать линии</button>
+      <button type="button" aria-label="Добавить скопированные линии на фото"
+        className="rounded-lg border border-border px-3 py-2 text-xs"
+        onClick={()=>{const result=pasteWaveInk(node.attrs.ink);
+          if(result){updateAttributes({ink:result});setInkMessage("Линии добавлены");}
+          else setInkMessage("Нет скопированных линий или превышен предел рисунка");}}>Вставить линии</button>
+      {inkMessage&&<span role="status" className="text-xs text-muted-foreground">{inkMessage}</span>
       <button type="button" onClick={()=>moveWaveBlock(editor,getPos,"up")} aria-label="Поднять фото" className="rounded-lg border px-2 py-2 text-xs">↑</button>
       <button type="button" onClick={()=>moveWaveBlock(editor,getPos,"down")} aria-label="Опустить фото" className="rounded-lg border px-2 py-2 text-xs">↓</button>
       <button type="button" className="rounded-lg border border-border px-3 py-2 text-xs" onClick={deleteNode}>Удалить фото</button>

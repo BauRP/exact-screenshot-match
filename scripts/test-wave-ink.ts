@@ -1,5 +1,7 @@
 import {strict as assert} from "node:assert";
 import {readFileSync} from "node:fs";
+import {copyWaveInk,pasteWaveInk} from "../src/lib/wave-ink-transfer";
+import {serializeInk,parseInk} from "../src/lib/wave-ink";
 const ink=readFileSync("src/lib/wave-ink.ts","utf8");
 const canvas=readFileSync("src/components/editor/WaveInkCanvas.tsx","utf8");
 const drawing=readFileSync("src/components/editor/WaveDrawing.tsx","utf8");
@@ -29,3 +31,13 @@ assert.ok(canvasSource.includes('"Прямая"'));
 assert.ok(canvasSource.includes('tool==="rectangle"?[point,point,point,point,point]'));
 assert.ok(canvasSource.includes('mode.current==="rectangle"'));
 assert.ok(canvasSource.includes('"Прямоугольник"'));
+
+const ink1=serializeInk([{tool:"pen",color:"#161b22",width:3,points:[[0,0],[150,160]]}]);
+const ink2=serializeInk([{tool:"marker",color:"#2563eb",width:8,points:[[200,240]]}]);
+assert.equal(copyWaveInk(ink1),1);
+const combined=pasteWaveInk(ink2);
+assert.ok(combined);
+assert.equal(parseInk(combined).length,2);
+assert.equal(parseInk(ink2).length,1,"Original annotations are never overwritten");
+assert.ok(readFileSync("src/components/editor/WaveImage.tsx","utf8").includes("pasteWaveInk(node.attrs.ink)"));
+assert.ok(readFileSync("src/components/editor/WaveDrawing.tsx","utf8").includes("pasteWaveInk(strokes)"));

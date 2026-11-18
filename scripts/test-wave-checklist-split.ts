@@ -1,7 +1,7 @@
 import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection} from "@tiptap/pm/state";
-import {continueSelectedChecklistItem,insertUncheckedChecklistAfter,toggleWaveChecklistAtPosition} from "../src/lib/wave-checklist-actions";
+import {continueSelectedChecklistItem,insertUncheckedChecklistAfter,insertUncheckedChecklistBefore,toggleWaveChecklistAtPosition} from "../src/lib/wave-checklist-actions";
 import {WaveChecklistItem} from "../src/lib/wave-checklist";
 const schema=new Schema({nodes:{doc:{content:"block+"},
  paragraph:{group:"block",content:"inline*",attrs:{textDirection:{default:"ltr"},textAlign:{default:"left"}}},
@@ -200,3 +200,23 @@ assert.equal(continueSelectedChecklistItem(mandatoryEditor),false);
 assert.equal(mandatoryWrites,0,"No invalid transaction or Undo entry");
 assert.equal(JSON.stringify(mandatory.doc.toJSON()),savedMandatory);
 assert.equal(mandatory.doc.check(),undefined);
+
+let beforeState=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
+ schema.nodes.waveChecklistItem.create({shape:"diamond",done:true,textDirection:"rtl"},schema.text("Saved",[schema.marks.strong.create()])),
+ schema.nodes.waveChecklistItem.create(null,schema.text("After"))
+])});
+let beforeEdits=0;
+const beforeEditor={isEditable:true,isDestroyed:false,get state(){return beforeState;},
+ view:{dispatch(tr:any){beforeEdits++;beforeState=beforeState.apply(tr);}}} as any;
+beforeState=beforeState.apply(beforeState.tr.setSelection(TextSelection.create(beforeState.doc,3)));
+assert.equal(insertUncheckedChecklistBefore(beforeEditor),true);
+assert.equal(beforeEdits,1);
+assert.equal(beforeState.doc.childCount,3);
+assert.equal(beforeState.doc.child(0).attrs.done,false);
+assert.equal(beforeState.doc.child(0).attrs.shape,"diamond");
+assert.equal(beforeState.doc.child(0).attrs.textDirection,"rtl");
+assert.equal(beforeState.doc.child(1).textContent,"Saved");
+assert.equal(beforeState.doc.child(1).attrs.done,true);
+assert.equal(beforeState.doc.child(1).firstChild?.marks[0].type.name,"strong");
+assert.equal(beforeState.selection.$from.parentOffset,0);
+assert.equal(beforeState.doc.check(),undefined);

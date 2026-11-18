@@ -95,7 +95,7 @@ import {replaceOneInNote,replaceAllInNote} from "@/lib/wave-find-replace";
 import { readEditorPreferences,saveEditorPreferences,toolbarPreset,EDITOR_PREFS_CHANGED,type EditorTool } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
-import {setSelectedChecklistShape,setSelectedTasksDone,continueSelectedChecklistItem,convertSelectedChecklistBlocks,selectedSectionTaskCounts,setSelectedSectionTasksDone,currentPageTaskCounts,setCurrentPageTasksDone} from "@/lib/wave-checklist-actions";
+import {setSelectedChecklistShape,setSelectedTasksDone,continueSelectedChecklistItem,insertUncheckedChecklistBefore,insertUncheckedChecklistAfter,convertSelectedChecklistBlocks,selectedSectionTaskCounts,setSelectedSectionTasksDone,currentPageTaskCounts,setCurrentPageTasksDone} from "@/lib/wave-checklist-actions";
 import {setAllFoldSections,setFoldSectionsToDepth,countFoldSections} from "@/lib/wave-section-batch";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
@@ -393,13 +393,13 @@ function EditorPage() {
     if(!editor||editor.isDestroyed)return;
     const update=()=>{
       editor.view.dom.setAttribute("spellcheck",prefs.spellcheck?"true":"false");
-      editor.view.dom.setAttribute("lang",document.documentElement.lang||"ru");
+      editor.view.dom.setAttribute("lang",prefs.spellcheckLanguage==="auto"?(document.documentElement.lang||"ru"):prefs.spellcheckLanguage);
     };
     update();
     const observer=new MutationObserver(update);
     observer.observe(document.documentElement,{attributes:true,attributeFilter:["lang"]});
     return ()=>observer.disconnect();
-  },[editor,prefs.spellcheck]);
+  },[editor,prefs.spellcheck,prefs.spellcheckLanguage]);
 
   // Title, folder, star and background live in draft state only (see handleSave).
 
@@ -1045,7 +1045,17 @@ function EditorPage() {
                 aria-label="Продолжить текущий пункт списка" className="w-full rounded-md bg-secondary px-2 py-2 text-xs"
                 onClick={()=>{if(!editor||!continueSelectedChecklistItem(editor))toast("Установите курсор внутри задачи");}}>
                 Следующий пункт от курсора
-              </button>
+               </button>
+               <div className="mt-1 grid grid-cols-2 gap-1">
+                 <button type="button" onMouseDown={e=>e.preventDefault()}
+                   aria-label="Вставить пустую задачу перед текущей"
+                   className="rounded-md border border-border px-2 py-2 text-xs"
+                   onClick={()=>{if(!editor||!insertUncheckedChecklistBefore(editor))toast("Установите курсор внутри задачи");}}>Пункт перед +</button>
+                 <button type="button" onMouseDown={e=>e.preventDefault()}
+                   aria-label="Вставить пустую задачу после текущей"
+                   className="rounded-md border border-border px-2 py-2 text-xs"
+                   onClick={()=>{if(!editor||!insertUncheckedChecklistAfter(editor))toast("Установите курсор внутри задачи");}}>Пункт после +</button>
+               </div>
               <div className="mt-2 grid grid-cols-1 gap-1 border-t border-border pt-2">
                 <p className="px-2 text-xs font-semibold">Преобразование без потери текста</p>
                 <button type="button" onMouseDown={event=>event.preventDefault()}

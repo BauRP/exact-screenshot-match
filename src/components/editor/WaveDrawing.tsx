@@ -4,11 +4,13 @@ import {useState} from "react";
 import {WaveInkCanvas} from "@/components/editor/WaveInkCanvas";
 import {moveWaveBlock} from "@/lib/wave-block-motion";
 import {parseInk} from "@/lib/wave-ink";
+import {copyWaveInk,pasteWaveInk} from "@/lib/wave-ink-transfer";
 declare module "@tiptap/core"{
  interface Commands<ReturnType>{waveDrawing:{insertWaveDrawing:()=>ReturnType}}
 }
 function DrawingView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewProps){
  const [editing,setEditing]=useState(false);
+ const [inkMessage,setInkMessage]=useState("");
  const strokes=typeof node.attrs.strokes==="string"?node.attrs.strokes:"[]";
  return <NodeViewWrapper className="wave-drawing my-3" contentEditable={false}>
    <div className="rounded-xl border border-border bg-white p-2">
@@ -20,6 +22,15 @@ function DrawingView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewPr
       <button type="button" onClick={()=>setEditing(v=>!v)}
         aria-label={editing?"Завершить рисование":"Редактировать рисунок"}
         className="rounded-lg bg-secondary px-3 py-2 text-xs">{editing?"Готово":"Рисовать"}</button>
+      <button type="button" aria-label="Скопировать линии рисунка"
+        className="rounded-lg border px-3 py-2 text-xs"
+        onClick={()=>{const n=copyWaveInk(strokes);setInkMessage(n?"Линий скопировано: "+n:"Рисунок пустой");}}>Копировать линии</button>
+      <button type="button" aria-label="Вставить скопированные линии в рисунок"
+        className="rounded-lg border px-3 py-2 text-xs"
+        onClick={()=>{const result=pasteWaveInk(strokes);
+          if(result){updateAttributes({strokes:result});setInkMessage("Линии добавлены");}
+          else setInkMessage("Нет скопированных линий или превышен предел рисунка");}}>Вставить линии</button>
+      {inkMessage&&<span role="status" className="text-xs text-muted-foreground">{inkMessage}</span>}
       <button type="button" onClick={()=>moveWaveBlock(editor,getPos,"up")} aria-label="Поднять рисунок"
         className="rounded-lg border px-3 py-2 text-xs">↑</button>
       <button type="button" onClick={()=>moveWaveBlock(editor,getPos,"down")} aria-label="Опустить рисунок"

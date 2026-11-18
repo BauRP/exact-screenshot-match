@@ -32,4 +32,6 @@ for(const marker of ["paginateFolderNotes(filteredNotes,folderPage,folderPageSiz
  assert.ok(ui.includes(marker),marker);
 }
 assert.ok(ui.includes("useEffect(()=>{setFolderPage(1);},[activeFolder,sort,searchOpen,searchTerm,searchFilter,searchAllFolders]);"));
+assert.ok(ui.includes('aria-label="Перейти на страницу раздела"'));
+assert.ok(ui.includes("Number.isSafeInteger(next)"));
 console.log("Folder pages: deterministic order, bounds, filters, storage and navigation wiring verified");

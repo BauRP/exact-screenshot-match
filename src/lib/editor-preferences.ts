@@ -16,8 +16,19 @@ export const TOOLBAR_TOOLS=[
  {id:"pageActions",label:"Страницы и блоки"},
 ] as const;
 export type EditorTool=(typeof TOOLBAR_TOOLS)[number]["id"];
+export type SpellcheckLanguage="auto"|"ru"|"kk"|"en";
+export const SPELLCHECK_LANGUAGES=[
+ {value:"auto",label:"Как в приложении"},
+ {value:"ru",label:"Русский"},
+ {value:"kk",label:"Қазақша"},
+ {value:"en",label:"English"},
+] as const;
+export function validSpellcheckLanguage(input:unknown):SpellcheckLanguage{
+ return input==="ru"||input==="kk"||input==="en"?input:"auto";
+}
 export type EditorPreferences={
  spellcheck:boolean;
+ spellcheckLanguage:SpellcheckLanguage;
  caseSensitive:boolean;
  hiddenToolbar:EditorTool[];
  toolbarOrder:EditorTool[];
@@ -25,7 +36,7 @@ export type EditorPreferences={
 const KEY="wave.editor.preferences.v1";
 export const EDITOR_PREFS_CHANGED="wave-editor-preferences-changed";
 const ALL=new Set<string>(TOOLBAR_TOOLS.map(tool=>tool.id));
-const DEFAULT:EditorPreferences={spellcheck:true,caseSensitive:false,hiddenToolbar:[],toolbarOrder:TOOLBAR_TOOLS.map(tool=>tool.id)};
+const DEFAULT:EditorPreferences={spellcheck:true,spellcheckLanguage:"auto",caseSensitive:false,hiddenToolbar:[],toolbarOrder:TOOLBAR_TOOLS.map(tool=>tool.id)};
 export function validHiddenToolbar(input:unknown):EditorTool[]{
  if(!Array.isArray(input))return [];
  return [...new Set(input.filter((id):id is EditorTool=>typeof id==="string"&&ALL.has(id)))];
@@ -54,6 +65,7 @@ export function readEditorPreferences():EditorPreferences{
   const raw=JSON.parse(window.localStorage.getItem(KEY)||"null");
   return {
    spellcheck:typeof raw?.spellcheck==="boolean"?raw.spellcheck:true,
+   spellcheckLanguage:validSpellcheckLanguage(raw?.spellcheckLanguage),
    caseSensitive:typeof raw?.caseSensitive==="boolean"?raw.caseSensitive:false,
    hiddenToolbar:validHiddenToolbar(raw?.hiddenToolbar),
    toolbarOrder:validToolbarOrder(raw?.toolbarOrder),
@@ -64,6 +76,7 @@ export function saveEditorPreferences(patch:Partial<EditorPreferences>):EditorPr
  const base=readEditorPreferences();
  const next:EditorPreferences={
   spellcheck:typeof patch.spellcheck==="boolean"?patch.spellcheck:base.spellcheck,
+  spellcheckLanguage:patch.spellcheckLanguage===undefined?base.spellcheckLanguage:validSpellcheckLanguage(patch.spellcheckLanguage),
   caseSensitive:typeof patch.caseSensitive==="boolean"?patch.caseSensitive:base.caseSensitive,
   hiddenToolbar:patch.hiddenToolbar===undefined?base.hiddenToolbar:validHiddenToolbar(patch.hiddenToolbar),
   toolbarOrder:patch.toolbarOrder===undefined?base.toolbarOrder:validToolbarOrder(patch.toolbarOrder),

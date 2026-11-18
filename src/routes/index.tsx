@@ -1212,6 +1212,18 @@ function FolderPageControls({page,pageCount,from,to,total,size,onPageChange,onSi
        aria-label="Следующая страница раздела" disabled={page>=pageCount} onClick={()=>onPageChange(page+1)}>›</button>
      <button type="button" className="min-h-10 min-w-10 rounded-lg border px-2 disabled:opacity-30"
        aria-label="Последняя страница раздела" disabled={page>=pageCount} onClick={()=>onPageChange(pageCount)}>»</button>
+      <input type="number" min={1} max={pageCount} step={1} defaultValue={page} key={page}
+        aria-label="Перейти на страницу раздела" title="Введите номер страницы и нажмите Enter"
+        className="h-10 w-16 rounded-lg border border-border bg-background px-1 text-center text-xs"
+        onKeyDown={event=>{
+          if(event.key==="Enter"){event.preventDefault();event.currentTarget.blur();}
+        }}
+        onBlur={event=>{
+          const next=Number(event.currentTarget.value);
+          if(Number.isSafeInteger(next)&&next>=1&&next<=pageCount){
+            if(next!==page)onPageChange(next);
+          }else event.currentTarget.value=String(page);
+        }}/>
    </div>}
  </nav>;
 }
