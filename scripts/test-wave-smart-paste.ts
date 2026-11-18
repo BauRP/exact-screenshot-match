@@ -5,7 +5,10 @@ const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
 for(const name of ["safeBrowserClipboardHtml","SCRIPT","IFRAME","PICTURE","http:","https:","MAX_PASTE_HTML"])assert.ok(paste.includes(name),name);
 for(const name of ["PMDOMParser.fromSchema","parseSlice(container)","replaceSelection(slice)","safeBrowserClipboardHtml(html)"])assert.ok(editor.includes(name),name);
 for(const tag of ["TABLE","THEAD","TBODY","TR","TH","TD","TEMPLATE","SELECT","TEXTAREA"])assert.ok(paste.includes(`"${tag}"`),tag);
-assert.ok(editor.includes("if(!cleaned)return false;"));
+assert.ok(editor.includes("if(!cleaned)return pastePlain();"),
+ "Rejected HTML must not fall through to an unfiltered default rich paste");
+assert.ok(editor.includes("_view.state.tr.insertText(plain)"),
+ "When rejecting pasted HTML, retain ordinary text rather than silently losing it");
 assert.ok(editor.includes("if(!slice.content.size)return false;"));
 assert.ok(!paste.includes("fetch("));console.log("Offline safe rich clipboard importer wired");
 
