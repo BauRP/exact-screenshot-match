@@ -1,0 +1,26 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+import {clipboardTreeWithinBudget,MAX_PASTE_DEPTH,MAX_PASTE_NODES} from "../src/lib/wave-smart-paste";
+type FakeNode={childNodes:FakeNode[]};
+const n=(...childNodes:FakeNode[]):FakeNode=>({childNodes});
+const safe=(root:FakeNode)=>clipboardTreeWithinBudget(root as any);
+assert.equal(safe(n(n(),n(n()))),true);
+assert.equal(safe(n(...Array.from({length:MAX_PASTE_NODES},()=>n()))),false);
+assert.equal(safe(n(...Array.from({length:MAX_PASTE_NODES-1},()=>n()))),true);
+let deep=n();
+for(let i=0;i<MAX_PASTE_DEPTH;i++)deep=n(deep);
+assert.equal(safe(deep),true,"Exactly allowed depth remains pasteable");
+assert.equal(safe(n(deep)),false,"Excessively deep HTML must be rejected before recursion");
+const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
+const from=editor.indexOf('handlePaste(_view,event){');
+const to=editor.indexOf('handleDrop(_view,event){',from);
+assert.ok(from>=0&&to>from);
+const handler=editor.slice(from,to);
+assert.ok(handler.includes("const pastePlain=()"));
+assert.ok(handler.includes("_view.state.tr.insertText(plain)"));
+assert.ok(handler.includes("if(!cleaned)return pastePlain()"));
+assert.ok(handler.includes("return pastePlain();"),"Sanitizer errors are not given to default HTML paste");
+assert.ok(handler.includes("event.preventDefault()"));
+assert.ok(readFileSync("src/lib/wave-smart-paste.ts","utf8")
+ .includes('if(!clipboardTreeWithinBudget(source.body))return "";'));
+console.log("Pasted HTML complexity limit and safe plain-text fallback verified");

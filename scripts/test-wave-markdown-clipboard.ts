@@ -8,6 +8,11 @@ assert.ok(structuredMarkdownClipboardHtml("```js\n<script>\n```\n# heading").inc
 assert.ok(structuredMarkdownClipboardHtml("# Tasks\n- [x] Ready\n- [ ] Next").includes('data-done="true"'));
 assert.ok(structuredMarkdownClipboardHtml("# Tasks\n- [x] Ready\n- [ ] Next").includes('data-done="false"'));
 assert.equal(structuredMarkdownClipboardHtml("Normal plain text"),"");
+for(const source of [
+ "# Tasks\n- [ ]    ","# List\n-    ","# Numbers\n1.    ",
+ "# Nested\n- Root\n  -    "
+])assert.equal(structuredMarkdownClipboardHtml(source),"",
+ "Whitespace-only Markdown list entries must remain editable source text");
 assert.equal(structuredMarkdownClipboardHtml("# only one heading"),"");
 assert.equal(structuredMarkdownClipboardHtml("```\nunclosed"),"");
 const editor=readFileSync("src/routes/editor.$id.tsx","utf8");

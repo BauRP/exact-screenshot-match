@@ -49,3 +49,7 @@ for(const source of [
  "Zero-padded numbering must retain the user's original plain text");
 assert.equal(structuredPlainClipboardHtml("4. Fourth\n5. Fifth"),
  '<ol start="4"><li><p>Fourth</p></li><li><p>Fifth</p></li></ol>');
+for(const source of ["- Parent\n  -    \n- Next","- first\n-    ","1. First\n2.    ","- [x] Done\n- [ ]    "]){
+ assert.equal(structuredPlainClipboardHtml(source),"",
+  "Whitespace-only list entries must not become saved empty tasks: "+source);
+}

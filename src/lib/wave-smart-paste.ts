@@ -12,6 +12,24 @@ const allowed=new Set(["P","DIV","BR","H1","H2","H3","H4","H5","H6","UL","OL","L
 const forbidden=new Set(["SCRIPT","STYLE","IFRAME","OBJECT","EMBED","FORM","INPUT","META","LINK","SVG","MATH","VIDEO","AUDIO","NOSCRIPT","TEMPLATE","BUTTON","SELECT","TEXTAREA"]);
 const textBlock=new Set(["P","DIV","H1","H2","H3","H4","H5","H6","BLOCKQUOTE","PRE"]);
 export const MAX_PASTE_HTML=250_000;
+/** Bound both depth and node count BEFORE the recursive HTML sanitizer runs.
+ * Untrusted web clipboard content can contain thousands of nested elements. */
+export const MAX_PASTE_NODES=4096;
+export const MAX_PASTE_DEPTH=64;
+export function clipboardTreeWithinBudget(root:Pick<Node,"childNodes">):boolean{
+ const stack:{node:Pick<Node,"childNodes">;depth:number}[]=[{node:root,depth:0}];
+ let queued=1;
+ while(stack.length){
+  const {node,depth}=stack.pop()!;
+  if(depth>MAX_PASTE_DEPTH)return false;
+  const children=node.childNodes;
+  if(children.length>MAX_PASTE_NODES-queued)return false;
+  queued+=children.length;
+  for(let index=children.length-1;index>=0;index--)
+   stack.push({node:children[index],depth:depth+1});
+ }
+ return true;
+}
 
 /** Convert browser-normalized CSS colors into portable opaque hex markup.
  * WebView exposes even a copied "#rrggbb" as "rgb(r, g, b)" through
@@ -33,6 +51,7 @@ export function safeClipboardColor(value:string):string{
 export function safeBrowserClipboardHtml(html:string):string{
  if(typeof html!=="string"||!html.trim()||html.length>MAX_PASTE_HTML)return "";
  const source=new DOMParser().parseFromString(html,"text/html");
+ if(!clipboardTreeWithinBudget(source.body))return "";
  const target=document.implementation.createHTMLDocument("Wave Notes clipboard");
  const clean=(node:Node):Node=>{
   if(node.nodeType===Node.TEXT_NODE)return target.createTextNode(node.textContent||"");
@@ -133,7 +152,9 @@ function nestedPlainClipboardHtml(lines:readonly string[],renderInline?:(text:st
   const number=kind==="ol"?Number(match[2].slice(0,-1)):0;
   if(kind==="ol"&&(number<1||number>99999||
     /^0\d/.test(match[2])))return ""; // Leading zeros are significant text.
-  items.push({depth,kind,number,text:match[3].trim()});
+  const text=match[3].trim();
+  if(!text)return "";
+  items.push({depth,kind,number,text});
  }
  if(items[0]?.depth!==0||!items.some(item=>item.depth>0))return "";
  const escape=(s:string)=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;")
@@ -198,6 +219,11 @@ export function structuredPlainClipboardHtml(input:string):string{
  const isBulleted=bulletItems.every(Boolean)&&!checkboxItems.some(Boolean);
  const isNumbered=numberedItems.every(Boolean);
  if(!isCheckbox&&!isBulleted&&!isNumbered)return "";
+ // Whitespace-only labels are not intentional empty tasks. Do not silently
+ // convert them to saved blank checklist rows or renumbered list elements.
+ if(isCheckbox&&checkboxItems.some(m=>!m?.[2].trim()))return "";
+ if(isBulleted&&bulletItems.some(m=>!m?.[1].trim()))return "";
+ if(isNumbered&&numberedItems.some(m=>!m?.[2].trim()))return "";
  const escape=(text:string)=>text.replace(/&/g,"&amp;").replace(/</g,"&lt;")
   .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
  if(isCheckbox)return checkboxItems.map(m=>
@@ -285,6 +311,7 @@ export function structuredMarkdownClipboardHtml(input:string):string{
      /^[ \t]*\t(?:[-*•–]|\d{1,5}[.)])\s+/.test(line))return "";
   const h=heading.exec(line),q=quote.exec(line),check=checkbox.exec(line),u=unordered.exec(line),o=ordered.exec(line);
   if(check){
+   if(!check[2].trim())return "";
    close();
    html+='<div data-type="wave-check-item" data-done="'+(check[1].toLowerCase()==="x"?"true":"false")+
      '" data-shape="square"'+clipboardRtlAttribute(check[2])+'>'+safeMarkdownInline(check[2])+"</div>";
@@ -307,10 +334,12 @@ export function structuredMarkdownClipboardHtml(input:string):string{
    }
   }
   if(u){
+   if(!u[1].trim())return "";
    if(listType!=="ul"){close();html+="<ul>";listType="ul";}
    html+="<li><p"+clipboardRtlAttribute(u[1])+">"+safeMarkdownInline(u[1])+"</p></li>";meaningful++;continue;
   }
   if(o){
+   if(!o[2].trim())return "";
    // Do not discard zero-padded list markers copied from Markdown.
    if(/^0\d/.test(o[1]))return "";
    const num=Number(o[1]);

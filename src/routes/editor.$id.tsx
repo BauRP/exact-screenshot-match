@@ -313,18 +313,28 @@ function EditorPage() {
             return true;
           }catch{return false;}
         }
-        const cleaned=safeBrowserClipboardHtml(html);
-        // If HTML is rejected or cannot be represented, allow the editor to
-        // paste text/plain normally. Never silently discard clipboard text.
-        if(!cleaned)return false;
+        // If rich HTML is unsafe, never let ProseMirror's default HTML
+        // handler bypass our sanitizer. Insert only clipboard text/plain.
+        const pastePlain=()=>{
+          event.preventDefault();
+          const plain=event.clipboardData?.getData("text/plain")||"";
+          if(plain.length>0&&plain.length<=250_000)
+            _view.dispatch(_view.state.tr.insertText(plain).scrollIntoView());
+          else toast.error("Не удалось безопасно вставить HTML. Скопируйте обычный текст.");
+          return true;
+        };
         try{
+          const cleaned=safeBrowserClipboardHtml(html);
+          if(!cleaned)return pastePlain();
           const container=document.createElement("div");container.innerHTML=cleaned;
           const slice=PMDOMParser.fromSchema(_view.state.schema).parseSlice(container);
-          if(!slice.content.size)return false;
+          if(!slice.content.size)return pastePlain();
           event.preventDefault();
           _view.dispatch(_view.state.tr.replaceSelection(slice).scrollIntoView());
           return true;
-        }catch{return false;}
+        }catch{
+          return pastePlain();
+        }
       },
       handleDrop(_view,event){
         const file=droppedImage(event);
