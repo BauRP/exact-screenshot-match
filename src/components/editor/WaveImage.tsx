@@ -143,7 +143,7 @@ function ImageView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewProp
         onClick={()=>{const result=pasteWaveInk(node.attrs.ink);
           if(result){updateAttributes({ink:result});setInkMessage("Линии добавлены");}
           else setInkMessage("Нет скопированных линий или превышен предел рисунка");}}>Вставить линии</button>
-      {inkMessage&&<span role="status" className="text-xs text-muted-foreground">{inkMessage}</span>
+      {inkMessage&&<span role="status" className="text-xs text-muted-foreground">{inkMessage}</span>}
       <button type="button" onClick={()=>moveWaveBlock(editor,getPos,"up")} aria-label="Поднять фото" className="rounded-lg border px-2 py-2 text-xs">↑</button>
       <button type="button" onClick={()=>moveWaveBlock(editor,getPos,"down")} aria-label="Опустить фото" className="rounded-lg border px-2 py-2 text-xs">↓</button>
       <button type="button" className="rounded-lg border border-border px-3 py-2 text-xs" onClick={deleteNode}>Удалить фото</button>
