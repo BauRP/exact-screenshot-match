@@ -73,7 +73,7 @@ import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection,setWaveTextDirection} from "@/lib/wave-text-direction";
 import {collectNoteOutline,filterNoteOutline,type OutlineFilter,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
 import {moveSelectedWaveBlock,moveWaveBlocksToAdjacentPage,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
-import {duplicateCurrentPage,moveCurrentPage,moveCurrentPageToEdge,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,splitPageAtCaret} from "@/lib/wave-page-actions";
+import {duplicateCurrentPage,moveCurrentPage,moveCurrentPageToEdge,moveCurrentPageToIndex,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,splitPageAtCaret} from "@/lib/wave-page-actions";
 import {revealOutlinePosition} from "@/lib/wave-outline-navigation";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
@@ -95,7 +95,7 @@ import {replaceOneInNote,replaceAllInNote} from "@/lib/wave-find-replace";
 import { readEditorPreferences,saveEditorPreferences,toolbarPreset,EDITOR_PREFS_CHANGED,type EditorTool } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
-import {setSelectedChecklistShape,setSelectedTasksDone,continueSelectedChecklistItem,insertUncheckedChecklistBefore,insertUncheckedChecklistAfter,insertUncheckedChecklistRowsAfter,convertSelectedChecklistBlocks,selectedSectionTaskCounts,setSelectedSectionTasksDone,currentPageTaskCounts,setCurrentPageTasksDone} from "@/lib/wave-checklist-actions";
+import {setSelectedChecklistShape,setSelectedTasksDone,continueSelectedChecklistItem,insertUncheckedChecklistBefore,insertUncheckedChecklistAfter,insertUncheckedChecklistRowsAfter,insertUncheckedChecklistRowsBefore,convertSelectedChecklistBlocks,selectedSectionTaskCounts,setSelectedSectionTasksDone,currentPageTaskCounts,setCurrentPageTasksDone} from "@/lib/wave-checklist-actions";
 import {setAllFoldSections,setFoldSectionsToDepth,setCurrentPageFoldSections,countFoldSections} from "@/lib/wave-section-batch";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
@@ -191,6 +191,7 @@ function EditorPage() {
   const [slashText,setSlashText]=useState<string|null>(null);
   const [slashActive,setSlashActive]=useState(0);
   const [quickTaskCount,setQuickTaskCount]=useState(3);
+  const [targetPageNumber,setTargetPageNumber]=useState(2);
   const [pageRename,setPageRename]=useState<{pos:number;label:string}|null>(null);
   useEffect(()=>{setSlashActive(0);},[slashText]);
 
@@ -740,8 +741,12 @@ function EditorPage() {
       return;
     }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder==="undefined") {alert("Микрофон недоступен");return;}
+    // Prevent simultaneous permission dialogs and duplicate audio streams.
+    startingAudioRef.current=true;setStartingAudio(true);
+    let acquired:MediaStream|null=null;
     try {
       const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      acquired=stream;
       if(!imageSessionRef.current){stream.getTracks().forEach(track=>track.stop());return;}
       streamRef.current=stream;
       const rec=new MediaRecorder(stream);
@@ -752,11 +757,19 @@ function EditorPage() {
       rec.onstop=async()=>{
         try {await attachAudio(new Blob(chunksRef.current,{type:rec.mimeType||"audio/webm"}));settleRecordingRef.current?.resolve();}
         catch(err){settleRecordingRef.current?.reject(err);if(imageSessionRef.current)alert("Не удалось сохранить аудио");}
-        finally{recordingWriteRef.current=null;settleRecordingRef.current=null;stream.getTracks().forEach(t=>t.stop());streamRef.current=null;}
+        finally{recordingWriteRef.current=null;settleRecordingRef.current=null;stream.getTracks().forEach(t=>t.stop());streamRef.current=null;recorderRef.current=null;}
       };
-      rec.onerror=()=>{settleRecordingRef.current?.reject(new Error("Ошибка аудиозаписи"));recordingWriteRef.current=null;settleRecordingRef.current=null;stream.getTracks().forEach(t=>t.stop());setRecording(false);};
+      rec.onerror=()=>{rec.onstop=null;recorderRef.current=null;settleRecordingRef.current?.reject(new Error("Ошибка аудиозаписи"));recordingWriteRef.current=null;settleRecordingRef.current=null;stream.getTracks().forEach(t=>t.stop());streamRef.current=null;setRecording(false);};
       rec.start();recorderRef.current=rec;setRecording(true);
-    }catch(err){console.error(err);alert("Не удалось получить доступ к микрофону");}
+    }catch(err){
+      acquired?.getTracks().forEach(track=>track.stop());
+      if(streamRef.current===acquired)streamRef.current=null;
+      settleRecordingRef.current?.reject(err);
+      settleRecordingRef.current=null;recordingWriteRef.current=null;
+      recorderRef.current=null;setRecording(false);
+      console.error(err);
+      if(imageSessionRef.current)alert("Не удалось получить доступ к микрофону");
+    }finally{startingAudioRef.current=false;setStartingAudio(false);}
   };
   const stopRecording=()=>{
     if(nativeRecordingRef.current){
@@ -1073,7 +1086,11 @@ function EditorPage() {
                 <button type="button" onMouseDown={event=>event.preventDefault()}
                   aria-label="Добавить несколько пустых задач после текущей"
                   onClick={()=>{if(!editor||!insertUncheckedChecklistRowsAfter(editor,quickTaskCount))toast("Установите курсор внутри задачи");}}
-                  className="flex-1 rounded-md border border-border px-2 py-2 text-xs">Добавить пункты +</button>
+                  className="flex-1 rounded-md border border-border px-2 py-2 text-xs">После +</button>
+                <button type="button" onMouseDown={event=>event.preventDefault()}
+                  aria-label="Добавить несколько пустых задач перед текущей"
+                  onClick={()=>{if(!editor||!insertUncheckedChecklistRowsBefore(editor,quickTaskCount))toast("Установите курсор внутри задачи");}}
+                  className="flex-1 rounded-md border border-border px-2 py-2 text-xs">Перед +</button>
               </div>
               <div className="mt-2 grid grid-cols-1 gap-1 border-t border-border pt-2">
                 <p className="px-2 text-xs font-semibold">Преобразование без потери текста</p>
@@ -1307,6 +1324,18 @@ function EditorPage() {
              disabled={currentPage<=1||currentPage>=pagePositions.length}
              className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
              onClick={()=>{if(!moveCurrentPageToEdge(editor,"last"))toast("Не удалось переместить страницу");}}>Стр. ⇥</button>
+           <label className="inline-flex items-center gap-1 text-xs">
+             <span>Переместить на</span>
+             <input type="number" min={2} max={pagePositions.length} step={1}
+               aria-label="Номер страницы для перемещения" value={targetPageNumber}
+               onChange={event=>setTargetPageNumber(Number(event.target.value))}
+               className="w-14 rounded-md border border-border bg-background px-1 py-1 text-center"/>
+           </label>
+           <button type="button" aria-label="Переместить страницу на указанный номер"
+             disabled={currentPage<=1||!Number.isSafeInteger(targetPageNumber)||targetPageNumber<2||targetPageNumber>pagePositions.length||targetPageNumber===currentPage}
+             className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+             onMouseDown={event=>event.preventDefault()}
+             onClick={()=>{if(!moveCurrentPageToIndex(editor,targetPageNumber-1))toast("Выберите страницу от 2 до "+pagePositions.length);}}>Переместить</button>
            <button type="button" aria-label="Автоматическое направление текста текущей страницы"
              onMouseDown={event=>event.preventDefault()}
              className="rounded-md border px-2 py-1 text-xs"

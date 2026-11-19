@@ -199,6 +199,24 @@ export function insertUncheckedChecklistRowsAfter(editor:Editor,count:number):bo
  view.dispatch(tr.scrollIntoView());
  return true;
 }
+/** Add several unchecked rows before the current row in ONE transaction.
+ * Existing completed text and formatting remain untouched. Bounds and
+ * schema validation match batch insertion after the current task. */
+export function insertUncheckedChecklistRowsBefore(editor:Editor,count:number):boolean{
+ if(!editor.isEditable||editor.isDestroyed||!editor.state.selection.empty||
+    !Number.isSafeInteger(count)||count<1||count>10)return false;
+ const {state,view}=editor,{$from}=state.selection,row=$from.parent;
+ if(row.type.name!=="waveChecklistItem")return false;
+ const at=$from.before(),$at=state.doc.resolve(at);
+ const rows=Fragment.fromArray(Array.from({length:count},()=>row.type.create({...row.attrs,done:false})));
+ if(!$at.parent.canReplace($at.index(),$at.index(),rows))return false;
+ const tr=state.tr.insert(at,rows);
+ if(!tr.doc.type.validContent(tr.doc.content))return false;
+ tr.setSelection(TextSelection.create(tr.doc,at+1));
+ view.dispatch(tr.scrollIntoView());
+ return true;
+}
+
 /** The section-scoped toolbar is meaningful only when the whole selection
  * belongs to the SAME innermost section. A range across two sections, from
  * a section into plain text or into a different nested section must not

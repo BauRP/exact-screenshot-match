@@ -120,6 +120,38 @@ export function moveCurrentPageToEdge(editor:Editor,edge:"first"|"last"):boolean
  return true;
 }
 
+/** Move a named page directly to any existing page position. The first
+ * divider-free page stays fixed. Keep the entire original subtree, including
+ * media IDs and inline marks; one transaction preserves Undo history.
+ * Refuse selections spanning pages instead of moving only their first half. */
+export function moveCurrentPageToIndex(editor:Editor,targetIndex:number):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const {state,view}=editor,{doc,selection}=state;
+ const pages=topLevelPageRanges(doc),sourceIndex=singleSelectedPageIndex(pages,selection);
+ if(pages.length<3||sourceIndex===undefined||sourceIndex<1||
+    !Number.isSafeInteger(targetIndex)||targetIndex<1||targetIndex>=pages.length||
+    targetIndex===sourceIndex)return false;
+ const source=pages[sourceIndex];
+ const moving=doc.content.cut(source.start,source.end);
+ if(moving.firstChild?.type.name!=="wavePageBreak")return false;
+ let tr=state.tr.delete(source.start,source.end);
+ const remaining=topLevelPageRanges(tr.doc);
+ const at=targetIndex===pages.length-1?tr.doc.content.size:remaining[targetIndex]?.start;
+ if(at===undefined)return false;
+ const $at=tr.doc.resolve(at);
+ if($at.parent!==tr.doc||!tr.doc.canReplace($at.index(),$at.index(),moving))return false;
+ tr=tr.insert(at,moving);
+ const offset=at-source.start;
+ if(selection instanceof NodeSelection)
+  tr.setSelection(NodeSelection.create(tr.doc,selection.from+offset));
+ else if(selection instanceof TextSelection)
+  tr.setSelection(TextSelection.create(tr.doc,selection.anchor+offset,selection.head+offset));
+ else tr.setSelection(Selection.near(tr.doc.resolve(selection.from+offset)));
+ if(!tr.doc.type.validContent(tr.doc.content))return false;
+ view.dispatch(tr.scrollIntoView());
+ return true;
+}
+
 /** Insert a new, empty top-level page AFTER the active page without splitting
  * text blocks, images, audio, or nested sections. One undoable transaction. */
 export function insertBlankPageAfter(editor:Editor):boolean{

@@ -1,7 +1,7 @@
 import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection} from "@tiptap/pm/state";
-import {continueSelectedChecklistItem,insertUncheckedChecklistAfter,insertUncheckedChecklistBefore,insertUncheckedChecklistRowsAfter,toggleWaveChecklistAtPosition} from "../src/lib/wave-checklist-actions";
+import {continueSelectedChecklistItem,insertUncheckedChecklistAfter,insertUncheckedChecklistBefore,insertUncheckedChecklistRowsAfter,insertUncheckedChecklistRowsBefore,toggleWaveChecklistAtPosition} from "../src/lib/wave-checklist-actions";
 import {WaveChecklistItem} from "../src/lib/wave-checklist";
 const schema=new Schema({nodes:{doc:{content:"block+"},
  paragraph:{group:"block",content:"inline*",attrs:{textDirection:{default:"ltr"},textAlign:{default:"left"}}},
@@ -242,3 +242,29 @@ assert.equal(batch.selection.$from.parentOffset,0);
 assert.equal(batch.doc.check(),undefined);
 assert.equal(insertUncheckedChecklistRowsAfter(batchEditor,0),false);
 assert.equal(insertUncheckedChecklistRowsAfter(batchEditor,11),false);
+
+let beforeBatch=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
+ schema.nodes.waveChecklistItem.create({shape:"diamond",done:true,textDirection:"rtl"},schema.text("Unchanged",[schema.marks.strong.create()])),
+ schema.nodes.waveChecklistItem.create({done:false},schema.text("Following"))
+])});
+let beforeBatchEdits=0;
+const beforeBatchEditor={isEditable:true,isDestroyed:false,get state(){return beforeBatch;},
+ view:{dispatch(tr:any){beforeBatchEdits++;beforeBatch=beforeBatch.apply(tr);}}} as any;
+beforeBatch=beforeBatch.apply(beforeBatch.tr.setSelection(TextSelection.create(beforeBatch.doc,3)));
+assert.equal(insertUncheckedChecklistRowsBefore(beforeBatchEditor,5),true);
+assert.equal(beforeBatchEdits,1);
+assert.equal(beforeBatch.doc.childCount,7);
+for(let i=0;i<5;i++){
+ assert.equal(beforeBatch.doc.child(i).attrs.done,false);
+ assert.equal(beforeBatch.doc.child(i).attrs.shape,"diamond");
+ assert.equal(beforeBatch.doc.child(i).attrs.textDirection,"rtl");
+}
+assert.equal(beforeBatch.doc.child(5).textContent,"Unchanged");
+assert.equal(beforeBatch.doc.child(5).attrs.done,true);
+assert.equal(beforeBatch.doc.child(5).firstChild?.marks[0].type.name,"strong");
+assert.equal(beforeBatch.doc.child(6).textContent,"Following");
+assert.equal(beforeBatch.selection.$from.parentOffset,0);
+assert.equal(insertUncheckedChecklistRowsBefore(beforeBatchEditor,11),false);
+assert.equal(insertUncheckedChecklistRowsBefore(beforeBatchEditor,0),false);
+assert.equal(beforeBatchEdits,1);
+assert.equal(beforeBatch.doc.check(),undefined);

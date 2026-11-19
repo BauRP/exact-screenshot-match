@@ -44,3 +44,9 @@ assert.ok(native.includes("rec.prepare();"));
 assert.ok(native.includes("rec.start();"));
 assert.ok(native.includes("}catch(Exception standardFailure){\n   clean();"),
  "The failed recorder and its temporary file must be released before retry");
+
+assert.ok(editor.includes("startingAudioRef.current=true;setStartingAudio(true);"),
+ "Web microphone start must lock before asking for permission");
+assert.ok(editor.includes("acquired?.getTracks().forEach(track=>track.stop())"));
+assert.ok(editor.includes("}finally{startingAudioRef.current=false;setStartingAudio(false);}"));
+assert.ok(editor.includes("rec.onstop=null;recorderRef.current=null"));

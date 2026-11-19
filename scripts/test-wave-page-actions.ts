@@ -2,7 +2,7 @@ import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection,NodeSelection} from "@tiptap/pm/state";
 import {noteCurrentPage} from "../src/lib/note-outline";
-import {duplicateCurrentPage,moveCurrentPage,topLevelPageRanges,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,isEmptyPageBody,splitPageAtCaret} from "../src/lib/wave-page-actions";
+import {duplicateCurrentPage,moveCurrentPage,moveCurrentPageToIndex,topLevelPageRanges,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,isEmptyPageBody,splitPageAtCaret} from "../src/lib/wave-page-actions";
 const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},wavePageBreak:{group:"block",atom:true,attrs:{label:{default:""}}},waveFold:{group:"block",content:"block+"},text:{group:"inline"}},marks:{}});
 const p=(s:string)=>schema.nodes.paragraph.create(null,schema.text(s));
 const page=(s:string)=>schema.nodes.wavePageBreak.create({label:s});
@@ -265,3 +265,25 @@ assert.equal(duplicateCurrentPage(dupEditor),true);
 assert.ok(duplicateState.selection instanceof NodeSelection);
 assert.equal((duplicateState.selection as NodeSelection).node.type.name,"wavePageBreak");
 assert.ok(String((duplicateState.selection as NodeSelection).node.attrs.label).includes("копия"));
+
+// Move named pages to an arbitrary position while keeping selections inside.
+let jumpState=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
+ p("intro"),page("A"),p("alpha"),page("B"),p("beta"),page("C"),p("gamma")
+])});
+let jumpEdits=0;
+const jumpEditor={isEditable:true,isDestroyed:false,get state(){return jumpState;},
+ view:{dispatch(tr:any){jumpEdits++;jumpState=jumpState.apply(tr);}}} as any;
+const jumpB=topLevelPageRanges(jumpState.doc)[2];
+jumpState=jumpState.apply(jumpState.tr.setSelection(TextSelection.create(jumpState.doc,jumpB.bodyStart+2)));
+assert.equal(moveCurrentPageToIndex(jumpEditor,1),true);
+assert.equal(jumpEdits,1);
+assert.deepEqual(topLevelPageRanges(jumpState.doc).slice(1).map(p=>jumpState.doc.nodeAt(p.start)?.attrs.label),["B","A","C"]);
+assert.equal(jumpState.selection.$from.parent.textContent,"beta");
+assert.equal(noteCurrentPage(jumpState.doc,jumpState.selection.from),2);
+assert.equal(moveCurrentPageToIndex(jumpEditor,3),true);
+assert.deepEqual(topLevelPageRanges(jumpState.doc).slice(1).map(p=>jumpState.doc.nodeAt(p.start)?.attrs.label),["A","C","B"]);
+assert.equal(jumpState.selection.$from.parent.textContent,"beta");
+assert.equal(noteCurrentPage(jumpState.doc,jumpState.selection.from),4);
+for(const invalid of [0,4,3])assert.equal(moveCurrentPageToIndex(jumpEditor,invalid),false);
+assert.equal(jumpEdits,2);
+assert.equal(jumpState.doc.check(),undefined);
