@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from "react";
 import type {PointerEvent as ReactPointerEvent} from "react";
-import {appendInkPoint,ellipseInkPoints,inkStrokeIndicesAlong,parseInk,serializeInk,transformInkStrokes,type InkTransform,type InkPoint,type InkStroke} from "@/lib/wave-ink";
+import {appendInkPoint,arrowInkPoints,ellipseInkPoints,inkStrokeIndicesAlong,parseInk,serializeInk,transformInkStrokes,type InkTransform,type InkPoint,type InkStroke} from "@/lib/wave-ink";
 
 /** Per-drawing undo/redo also works for ink layered over a photograph. */
 export function WaveInkCanvas({value,onChange,editable,active=false}:{
@@ -18,9 +18,9 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
  const gestureBefore=useRef<{strokes:InkStroke[];past:InkStroke[][];future:InkStroke[][]}|null>(null);
  const lastEraserPoint=useRef<InkPoint|null>(null);
  const shapeStart=useRef<InkPoint|null>(null);
- const mode=useRef<"pen"|"marker"|"line"|"rectangle"|"ellipse"|"eraser">("pen");
+ const mode=useRef<"pen"|"marker"|"line"|"arrow"|"rectangle"|"ellipse"|"eraser">("pen");
  const lastEmitted=useRef<string|null>(null);
- const [tool,setTool]=useState<"pen"|"marker"|"line"|"rectangle"|"ellipse"|"eraser">("pen");
+ const [tool,setTool]=useState<"pen"|"marker"|"line"|"arrow"|"rectangle"|"ellipse"|"eraser">("pen");
  const [color,setColor]=useState("#161b22");
  const [size,setSize]=useState(4);
  const [eraserRadius,setEraserRadius]=useState(16);
@@ -96,7 +96,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
   if(tool==="eraser")erase(point);
   else{
    markChanged();
-   replace([...current.current,{tool,color,width:size,points:tool==="line"?[point,point]:tool==="rectangle"?[point,point,point,point,point]:tool==="ellipse"?ellipseInkPoints(point,point):[point]}]);
+   replace([...current.current,{tool,color,width:size,points:tool==="line"?[point,point]:tool==="arrow"?arrowInkPoints(point,point):tool==="rectangle"?[point,point,point,point,point]:tool==="ellipse"?ellipseInkPoints(point,point):[point]}]);
   }
  };
  const move=(e:ReactPointerEvent<SVGSVGElement>)=>{
@@ -109,6 +109,11 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
    if(mode.current==="line"){
      if(last.points.length!==2)return;
      replace([...previous.slice(0,-1),{...last,points:[last.points[0],point]}]);
+     return;
+   }
+   if(mode.current==="arrow"){
+     if(last.points.length!==5)return;
+     replace([...previous.slice(0,-1),{...last,points:arrowInkPoints(shapeStart.current??last.points[0],point)}]);
      return;
    }
    if(mode.current==="ellipse"){
@@ -201,9 +206,9 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
          strokeWidth={stroke.width} strokeLinecap="round" strokeLinejoin="round" opacity={stroke.tool==="marker"?.4:1}/>)}
    </svg>
    {editable&&active&&<div className="absolute bottom-2 left-2 right-2 flex flex-wrap items-center gap-1 rounded-xl border border-border bg-card/95 p-2 shadow-lg">
-     {(["pen","marker","line","rectangle","ellipse","eraser"] as const).map(item=><button key={item} type="button" aria-pressed={tool===item}
+     {(["pen","marker","line","arrow","rectangle","ellipse","eraser"] as const).map(item=><button key={item} type="button" aria-pressed={tool===item}
        className={`rounded-lg px-2 py-1 text-xs ${tool===item?"bg-primary text-primary-foreground":"bg-secondary"}`}
-       onClick={()=>setTool(item)}>{item==="pen"?"Ручка":item==="marker"?"Маркер":item==="line"?"Прямая":item==="rectangle"?"Прямоугольник":item==="ellipse"?"Овал":"Ластик"}</button>)}
+       onClick={()=>setTool(item)}>{item==="pen"?"Ручка":item==="marker"?"Маркер":item==="line"?"Прямая":item==="arrow"?"Стрелка":item==="rectangle"?"Прямоугольник":item==="ellipse"?"Овал":"Ластик"}</button>)}
      <button type="button" aria-label="Отразить линии горизонтально" title="Отразить линии, не фотографию"
        disabled={strokes.length===0} onClick={()=>transformAll("flip-x")}
        className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">⇔</button>

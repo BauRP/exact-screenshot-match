@@ -1,6 +1,6 @@
 /** Offline vector ink with bounded markup, no server, base64 or binary files. */
 export type InkPoint=[number,number];
-export type InkStroke={tool:"pen"|"marker"|"line"|"rectangle"|"ellipse";color:string;width:number;points:InkPoint[]};
+export type InkStroke={tool:"pen"|"marker"|"line"|"arrow"|"rectangle"|"ellipse";color:string;width:number;points:InkPoint[]};
 /** Long freehand strokes must not silently stop at the 500-point storage
  * limit. Sample older points while preserving both ends and each new point. */
 export function appendInkPoint(points:readonly InkPoint[],point:InkPoint):InkPoint[]{
@@ -23,6 +23,19 @@ export function ellipseInkPoints(from:InkPoint,to:InkPoint):InkPoint[]{
  pts[32]=pts[0];
  return pts;
 }
+/** A vector arrow is saved as one stroke, so eraser, rotation, sharing
+ * and Undo work exactly like a regular line. Repeating the tip prevents
+ * a diagonal line joining the two arrowhead wings. */
+export function arrowInkPoints(from:InkPoint,to:InkPoint):InkPoint[]{
+ const dx=to[0]-from[0],dy=to[1]-from[1],distance=Math.hypot(dx,dy);
+ if(!distance)return [from,to,to,to,to];
+ const ux=dx/distance,uy=dy/distance,head=Math.min(80,distance*0.3);
+ const wing=(sign:number):InkPoint=>[
+  Math.round(Math.max(0,Math.min(1000,to[0]-head*ux+sign*head*0.55*uy))),
+  Math.round(Math.max(0,Math.min(1000,to[1]-head*uy-sign*head*0.55*ux)))
+ ];
+ return [from,to,wing(1),to,wing(-1)];
+}
 const COLORS=new Set(["#161b22","#e11d48","#2563eb","#16a34a","#f8fafc","#f59e0b","#7c3aed","#0d9488","#ca8a04","#64748b","#f97316","#be185d"]);
 export function parseInk(encoded:unknown):InkStroke[]{
  if(typeof encoded!=="string"||encoded.length>120000)return [];
@@ -33,11 +46,12 @@ export function parseInk(encoded:unknown):InkStroke[]{
  for(const raw of parsed){
   if(!raw||typeof raw!=="object")return [];
   const item=raw as Record<string,unknown>;
-  if(item.tool!=="pen"&&item.tool!=="marker"&&item.tool!=="line"&&item.tool!=="rectangle"&&item.tool!=="ellipse")return [];
+  if(item.tool!=="pen"&&item.tool!=="marker"&&item.tool!=="line"&&item.tool!=="arrow"&&item.tool!=="rectangle"&&item.tool!=="ellipse")return [];
   if(typeof item.color!=="string"||!COLORS.has(item.color))return [];
   if(typeof item.width!=="number"||!Number.isFinite(item.width)||item.width<1||item.width>28)return [];
   if(!Array.isArray(item.points)||item.points.length===0||item.points.length>500||
      (item.tool==="line"&&item.points.length!==2)||
+     (item.tool==="arrow"&&item.points.length!==5)||
      (item.tool==="rectangle"&&item.points.length!==5)||
      (item.tool==="ellipse"&&item.points.length!==33))return [];
   const points:InkPoint[]=[];

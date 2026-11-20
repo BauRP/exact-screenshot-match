@@ -1,6 +1,6 @@
 import {strict as assert} from "node:assert";
 import {readFileSync} from "node:fs";
-import {appendInkPoint,ellipseInkPoints,inkStrokeAt,inkStrokeAlong,inkStrokeIndicesAlong,paintInk,parseInk,serializeInk,transformInkStrokes,type InkStroke,type InkPoint} from "../src/lib/wave-ink";
+import {appendInkPoint,arrowInkPoints,ellipseInkPoints,inkStrokeAt,inkStrokeAlong,inkStrokeIndicesAlong,paintInk,parseInk,serializeInk,transformInkStrokes,type InkStroke,type InkPoint} from "../src/lib/wave-ink";
 const line:InkStroke={tool:"pen",color:"#161b22",width:4,points:[[0,0],[1000,0]]};
 assert.equal(inkStrokeAt([line],[500,5],5),0);
 assert.equal(inkStrokeAt([line],[500,100],5),-1);
@@ -153,3 +153,20 @@ const rotatedLeft=transformInkStrokes(originalStrokes,"rotate-ccw");
 assert.deepEqual(transformInkStrokes(rotatedLeft,"rotate-cw"),originalStrokes);
 assert.deepEqual(parseInk(serializeInk(rotatedLeft)),rotatedLeft);
 assert.ok(canvas.includes('onClick={()=>transformAll("rotate-ccw")}'));
+
+
+// Arrow annotations are saved like other ink strokes and work on photos too.
+const arrowPts=arrowInkPoints([100,100],[850,700]);
+assert.equal(arrowPts.length,5);
+assert.deepEqual(arrowPts[0],[100,100]);
+assert.deepEqual(arrowPts[1],[850,700]);
+assert.deepEqual(arrowPts[3],[850,700]);
+const arrow:InkStroke={tool:"arrow",color:"#e11d48",width:6,points:arrowPts};
+assert.deepEqual(parseInk(serializeInk([arrow])),[arrow]);
+assert.equal(inkStrokeAt([arrow],[850,700],6),0);
+assert.equal(inkStrokeAlong([arrow],[450,350],[465,390],15),0);
+assert.deepEqual(parseInk(JSON.stringify([{...arrow,points:[[100,100],[850,700]]}])),[]);
+assert.equal(arrowInkPoints([450,450],[450,450]).length,5);
+assert.ok(canvas.includes('item==="arrow"?"Стрелка"'),"Arrow in both ink editors");
+assert.ok(canvas.includes("arrowInkPoints(shapeStart.current??last.points[0],point)"),
+ "Arrow tip must follow the Android pointer coordinate");
