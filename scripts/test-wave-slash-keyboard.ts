@@ -27,3 +27,20 @@ const ranked=[{id:"other",label:"Предварительный список"},
 assert.deepEqual(matchingSlashCommands(ranked,"список").map(x=>x.id),["list","checklist","other"]);
 assert.deepEqual(matchingSlashCommands(ranked,"пред").map(x=>x.id),["other"]);
 assert.deepEqual(matchingSlashCommands(ranked,"список избранных").map(x=>x.id),["list"]);
+
+
+// Media insertion is a first-class slash action, not only a toolbar button.
+for(const command of ['id:"gallery"','id:"camera"','id:"drawing"']){
+ assert.ok(editor.includes(command),command);
+}
+assert.ok(editor.includes('if(kind==="gallery"){chain.run();addImage();return;}'));
+assert.ok(editor.includes('if(kind==="camera"){chain.run();addCameraImage();return;}'));
+assert.ok(editor.includes('if(kind==="drawing"){chain.insertWaveDrawing().run();return;}'));
+assert.ok(editor.includes('if(kind==="tape"&&editor.state.selection.empty)'),
+ "Tape must not delete the slash query when the selection is empty");
+const media=[{id:"gallery",label:"Фотография из галереи",keywords:["фото","картинка"]},
+ {id:"camera",label:"Сфотографировать",keywords:["камера","снимок"]},
+ {id:"drawing",label:"Рисунок",keywords:["рисовать","полотно"]}];
+assert.deepEqual(matchingSlashCommands(media,"камера").map(item=>item.id),["camera"]);
+assert.deepEqual(matchingSlashCommands(media,"рисовать").map(item=>item.id),["drawing"]);
+assert.deepEqual(matchingSlashCommands(media,"фото").map(item=>item.id),["gallery"]);

@@ -100,6 +100,7 @@ import {setAllFoldSections,setFoldSectionsToDepth,setCurrentPageFoldSections,cou
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
 import {openExternalUrl,normalizedSafeNoteLink} from "@/lib/external-links";
+import {hasMeaningfulNoteContent} from "@/lib/note-content";
 
 export const Route = createFileRoute("/editor/$id")({
   head: () => ({ meta: [
@@ -456,8 +457,15 @@ function EditorPage() {
     requestAnimationFrame(()=>editor.view.dom.querySelector(".wave-find-current")?.scrollIntoView({block:"nearest"}));
   };
 
-  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator"|"bullets"|"numbered"|"heading"|"heading1"|"heading3"|"paragraph"|"checklist"|"page",callout:CalloutKind="important")=>{
+  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator"|"bullets"|"numbered"|"heading"|"heading1"|"heading3"|"paragraph"|"checklist"|"page"|"gallery"|"camera"|"drawing",callout:CalloutKind="important")=>{
     if(!editor)return;
+    // Do not consume a slash query if the command cannot apply. In
+    // particular the Tape command needs a real text selection.
+    if(kind==="tape"&&editor.state.selection.empty){
+      setSlashText(null);
+      toast("Сначала выделите слова, которые нужно скрыть");
+      return;
+    }
     const {$from}=editor.state.selection;
     const textBefore=$from.parent.textBetween(0,$from.parentOffset);
     const slashLength=/^\/[\p{L}\p{N} -]{0,22}$/u.test(textBefore)?textBefore.length:0;
@@ -472,13 +480,15 @@ function EditorPage() {
     if(kind==="heading3"){chain.setHeading({level:3}).run();return;}
     if(kind==="paragraph"){chain.setParagraph().run();return;}
     if(kind==="checklist"){chain.insertContent({type:"waveChecklistItem",attrs:{shape:checkShape,done:false},content:[{type:"text",text:" "}]}).run();return;}
-    if(kind==="tape"){
-      if(editor.state.selection.empty){toast("Сначала выделите слова, которые нужно скрыть");return;}
-      chain.setMark("waveTape").run();return;
-    }
+    if(kind==="tape"){chain.setMark("waveTape").run();return;}
     if(kind==="date"){chain.insertContent(new Date().toLocaleDateString("ru-RU")).run();return;}
     if(kind==="separator"){chain.setHorizontalRule().run();return;}
     if(kind==="page"){chain.insertWavePageBreak().run();return;}
+    if(kind==="drawing"){chain.insertWaveDrawing().run();return;}
+    // Finish deleting the / command before opening Android's picker.
+    // Both actions reuse the working media-import path and its rollback.
+    if(kind==="gallery"){chain.run();addImage();return;}
+    if(kind==="camera"){chain.run();addCameraImage();return;}
     const node=kind==="fold"
       ? {type:"waveFold",attrs:{title:"Новый раздел",collapsed:false},content:[{type:"paragraph"}]}
       : {type:"waveCallout",attrs:{kind:callout},content:[{type:"paragraph"}]};
@@ -498,6 +508,9 @@ function EditorPage() {
     {id:"info",label:"Информация",icon:"i"},
     {id:"quote",label:"Цитата",icon:"❝"},
     {id:"fold",label:"Сворачиваемый раздел",icon:"▸"},
+    {id:"gallery",label:"Фотография из галереи",icon:"▧",keywords:["фото","картинка","изображение","image"]},
+    {id:"camera",label:"Сфотографировать",icon:"◉",keywords:["камера","снимок","фото"]},
+    {id:"drawing",label:"Рисунок",icon:"✎",keywords:["рисовать","полотно","маркер"]},
     {id:"tape",label:"Скрыть выбранный ответ",icon:"▰"},
     {id:"date",label:"Вставить дату",icon:"◷"},
     {id:"separator",label:"Разделитель",icon:"—"},
@@ -554,6 +567,13 @@ function EditorPage() {
         reminderRepeat:reminderRepeat==="none"?undefined:reminderRepeat,
       });
       committedNoteRef.current=true;
+      // The conflict copy is durable now. Reclaim session attachments
+      // removed from the editor before copying; do not leak binary blobs.
+      await cleanupNewAudio(audioIdsInHtml(body));
+      const retainedImages=new Set(imageIdsInHtml(body));
+      await Promise.allSettled([...createdImageIdsRef.current]
+        .filter(imageId=>!retainedImages.has(imageId)).map(imageId=>deleteImageFile(imageId)));
+      createdImageIdsRef.current.clear();
       toast.success("Черновик сохранён отдельной заметкой");
       navigate({to:"/"});
     }catch(error){toast.error(error instanceof Error?error.message:"Не удалось сохранить копию");}
@@ -577,6 +597,9 @@ function EditorPage() {
     const hasImages=imageIdsInHtml(body).length>0;
     const hasAudio=audioIdsInHtml(body).length>0;
     const hasDrawing=body.includes("data-wave-drawing");
+    // A blank checklist, page break or other deliberately inserted object
+    // is meaningful content even when editor.getText() is whitespace.
+    const hasStructure=!!editor&&hasMeaningfulNoteContent(editor.state.doc);
     const typedTitle = title.trim();
     const reminderValue=reminderAt?parseReminderInput(reminderAt):undefined;
     if(reminderAt&&reminderValue===undefined)throw new Error("Укажите правильную дату и время напоминания");
@@ -589,7 +612,8 @@ function EditorPage() {
       // A note that was opened and left blank is cancelled entirely.
       // A recording-only note is not empty. Previously its audio would be
       // discarded even after successfully attaching and saving the Blob.
-      if (!typedTitle && !plain && !hasImages && !hasDrawing && !hasAudio) {
+      if (!typedTitle && !plain && !hasImages && !hasDrawing && !hasAudio &&
+          !hasStructure && reminderValue===undefined && !pinned) {
         await cleanupNewAudio();
         await Promise.allSettled([...createdImageIdsRef.current].map(id=>deleteImageFile(id)));
         createdImageIdsRef.current.clear();

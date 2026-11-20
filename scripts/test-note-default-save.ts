@@ -54,3 +54,13 @@ console.log("New note yellow, dark ink/caret, old note and PDF preservation, and
 assert.ok(editor.includes("const hasAudio=audioIdsInHtml(body).length>0;"));
 assert.ok(editor.includes("!hasDrawing && !hasAudio"));
 assert.ok(editor.includes("const body = editor?.getHTML() ?? \"\";"));
+
+
+// A newly created blank checklist or page must not vanish on Save.
+assert.ok(editor.includes("hasMeaningfulNoteContent(editor.state.doc)"));
+assert.ok(editor.includes("!hasStructure && reminderValue===undefined && !pinned"),
+ "A note with only a saved reminder or a pin is intentional");
+assert.ok(editor.includes("await cleanupNewAudio(audioIdsInHtml(body));"),
+ "Conflict recovery must release unreferenced audio after saving a copy");
+assert.ok(editor.includes("const retainedImages=new Set(imageIdsInHtml(body));"),
+ "Conflict recovery must release unused image blobs after saving a copy");
