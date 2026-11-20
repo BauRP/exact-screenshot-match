@@ -16,15 +16,19 @@ export const TOOLBAR_TOOLS=[
  {id:"pageActions",label:"Страницы и блоки"},
 ] as const;
 export type EditorTool=(typeof TOOLBAR_TOOLS)[number]["id"];
-export type SpellcheckLanguage="auto"|"ru"|"kk"|"en";
+export type SpellcheckLanguage="auto"|"ru"|"kk"|"en"|"ar"|"he"|"fa"|"ur";
 export const SPELLCHECK_LANGUAGES=[
  {value:"auto",label:"Как в приложении"},
  {value:"ru",label:"Русский"},
  {value:"kk",label:"Қазақша"},
  {value:"en",label:"English"},
+ {value:"ar",label:"العربية"},
+ {value:"he",label:"עברית"},
+ {value:"fa",label:"فارسی"},
+ {value:"ur",label:"اردو"},
 ] as const;
 export function validSpellcheckLanguage(input:unknown):SpellcheckLanguage{
- return input==="ru"||input==="kk"||input==="en"?input:"auto";
+ return input==="ru"||input==="kk"||input==="en"||input==="ar"||input==="he"||input==="fa"||input==="ur"?input:"auto";
 }
 export type EditorPreferences={
  spellcheck:boolean;

@@ -12,3 +12,7 @@ assert.equal(filterNoteOutline(items,"", "all").length,3);
 const ui=readFileSync("src/routes/editor.$id.tsx","utf8");
 for(const x of ["Поиск по оглавлению","Тип элемента оглавления","filterNoteOutline(collectNoteOutline(editor.state.doc),outlineQuery,outlineFilter)"])assert.ok(ui.includes(x),x);
 console.log("Offline outline filters and editor integration passed");
+
+assert.equal(filterNoteOutline([{pos:42,depth:2,title:"Ёлка и заметки",type:"fold"}],"елка")[0]?.pos,42,
+ "Russian Ё and Е should find the same outline heading");
+assert.deepEqual(filterNoteOutline(items,"  РАБОЧИЙ   ПЛАН  ","heading").map(i=>i.pos),[0]);

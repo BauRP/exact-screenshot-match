@@ -14,7 +14,12 @@ const liveSpellcheck=readFileSync("src/routes/editor.$id.tsx","utf8");
 assert.ok(liveSpellcheck.includes('editor.view.dom.setAttribute("spellcheck",prefs.spellcheck?"true":"false")'));
 assert.ok(liveSpellcheck.includes("observer.observe(document.documentElement"));
 
-for(const lang of ["ru","kk","en"] as const)assert.equal(validSpellcheckLanguage(lang),lang);
+for(const lang of ["ru","kk","en","ar","he","fa","ur"] as const)assert.equal(validSpellcheckLanguage(lang),lang);
 assert.equal(validSpellcheckLanguage("xx"),"auto");
 assert.ok(editor.includes('prefs.spellcheckLanguage==="auto"'));
 assert.ok(settings.includes('aria-label="Язык проверки правописания"'));
+
+// Spellcheck uses OS dictionaries; selecting a script does not enable
+// a proprietary dictionary or automatic word replacement.
+for(const script of ["العربية","עברית","فارسی","اردو"])
+ assert.ok(pref.includes(script),"Language must be visible in the existing picker");

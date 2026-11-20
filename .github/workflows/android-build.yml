@@ -89,7 +89,9 @@ jobs:
         run: node scripts/test-wave-feedback-relay.mjs
 
       - name: Verify yellow new-note defaults and Save button
-        run: bun scripts/test-note-default-save.ts
+        run: |
+          bun scripts/test-note-default-save.ts
+          bun scripts/test-wave-note-content.ts
 
       - name: Verify premium Android intro and timeout safeguards
         run: bun scripts/test-launch-intro.ts
