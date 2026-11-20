@@ -275,6 +275,49 @@ function persistNotes(nextNotes: Note[]) {
   }
 }
 
+/** Two keys form one user action: the new manual ranks AND the selected
+ * manual sort. Never tell the user "saved" if only one key was written.
+ * In particular a quota/security error on sn.sort.v1 must not leave
+ * silently reordered notes on disk with the old active sorting mode. */
+function persistManualOrder(nextNotes:Note[]):void{
+ try{
+  if(!isBrowserStorageAvailable())throw new Error("Local notes storage is unavailable");
+  const storage=window.localStorage;
+  const oldNotes=storage.getItem(NOTES_KEY);
+  if(oldNotes!==lastStoredNotesRaw)throw new Error(
+   "Notes changed in another window or after a restore. Reopen the app before saving.");
+  const oldSort=storage.getItem(SORT_KEY);
+  const serialized=JSON.stringify(nextNotes);
+  try{
+   storage.setItem(NOTES_KEY,serialized);
+   storage.setItem(SORT_KEY,"manual");
+  }catch(error){
+   let rollbackFailed=false;
+   // Some storage implementations throw after writing. Read back before
+   // restoring each key, and restore both independently if necessary.
+   for(const [key,previous] of [[SORT_KEY,oldSort],[NOTES_KEY,oldNotes]] as const){
+    try{
+     if(storage.getItem(key)===previous)continue;
+     if(previous===null)storage.removeItem(key);
+     else storage.setItem(key,previous);
+    }catch(rollbackError){
+     rollbackFailed=true;
+     console.error("Manual note ordering rollback failed",key,rollbackError);
+    }
+   }
+   if(rollbackFailed)throw new Error(
+    "Manual ordering could not be rolled back. Reopen the app before changing notes.",{cause:error});
+   throw error;
+  }
+  lastStoredNotesRaw=serialized;
+  markBackupDirty();
+ }catch(error){
+  const message=error instanceof Error?error.message:"Storage write failed";
+  commit({status:"error",error:message});
+  throw new Error("Unable to save notes: "+message);
+ }
+}
+
 function persistPreference(key: string, value: string) {
   if (!isBrowserStorageAvailable()) throw new Error("Preferences storage is unavailable");
   try {
@@ -490,7 +533,8 @@ export function moveNoteBefore(sourceId:string,targetId:string):boolean{
  ordered.splice(ordered.findIndex(x=>x.id===targetId),0,moving);
  const ranks=new Map(ordered.map((note,k)=>[note.id,k]));
  const next=state.notes.map(note=>({...note,manualOrder:ranks.get(note.id)}));
- persistNotes(next);commit({notes:next,sort:"manual",status:"ready"});persistPreference(SORT_KEY,"manual");
+ persistManualOrder(next);
+ commit({notes:next,sort:"manual",status:"ready",error:null});
  return true;
 }
 /** Move a multi-selection to the start or end of its OWN folder and pin
@@ -520,9 +564,8 @@ export function moveSelectedNotesToEdge(noteIds:readonly string[],edge:"top"|"bo
  }
  if(!changed)return 0;
  const next=state.notes.map(note=>({...note,manualOrder:ranks.get(note.id)}));
- persistNotes(next);
+ persistManualOrder(next);
  commit({notes:next,sort:"manual",hydrated:true,status:"ready",error:null});
- persistPreference(SORT_KEY,"manual");
  return changed;
 }
 
