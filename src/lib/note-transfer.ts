@@ -24,7 +24,7 @@ export function transferAudioMime(bytes:Uint8Array,declared?:string):string{
  if(bytes.length>=4&&bytes[0]===0x1a&&bytes[1]===0x45&&bytes[2]===0xdf&&bytes[3]===0xa3)return "audio/webm";
  if(bytes.length>=4&&String.fromCharCode(...bytes.slice(0,4))==="OggS")return "audio/ogg";
  if(bytes.length>=12&&String.fromCharCode(...bytes.slice(0,4))==="RIFF"&&String.fromCharCode(...bytes.slice(8,12))==="WAVE")return "audio/wav";
- return safeAudioMime(declared)?declared:"application/octet-stream";
+ return safeAudioMime(declared)?declared:"";
 }
 
 async function pack(files:Record<string,Uint8Array>):Promise<Uint8Array>{

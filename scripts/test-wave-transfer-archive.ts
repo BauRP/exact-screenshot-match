@@ -36,6 +36,7 @@ await rejected({audioTypes:{"other":"text/html"}},{},"unsafe MIME");
 assert.equal(transferAudioMime(new Uint8Array([0,0,0,20,102,116,121,112,0,0,0,0])),"audio/mp4");
 assert.equal(transferAudioMime(new Uint8Array([0x1a,0x45,0xdf,0xa3])),"audio/webm");
 assert.equal(transferAudioMime(strToU8("random"),"audio/webm;codecs=opus"),"audio/webm;codecs=opus");
-assert.equal(transferAudioMime(strToU8("random"),"text/html"),"application/octet-stream");
+assert.equal(transferAudioMime(strToU8("random"),"text/html"),"",
+ "Older unknown recordings must keep their original empty Blob type for browser sniffing");
 const tooManyAudio=Array.from({length:51},(_,i)=>'<div data-audio="audiodb:a'+i+'"></div>').join("");
 await assert.rejects(makeWaveNote({...base.note,body:tooManyAudio} as Note),/предел формата/);
