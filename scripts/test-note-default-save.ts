@@ -48,3 +48,9 @@ assert.match(editor,/h-11 w-11/);
 assert.match(editor,/aria-label=\{t\("save"\)\}/);
 assert.match(editor,/toast\.success\(t\("saved"\)/);
 console.log("New note yellow, dark ink/caret, old note and PDF preservation, and Save affordance passed.");
+
+
+// Regression: creating a note with only recorded audio must preserve it.
+assert.ok(editor.includes("const hasAudio=audioIdsInHtml(body).length>0;"));
+assert.ok(editor.includes("!hasDrawing && !hasAudio"));
+assert.ok(editor.includes("const body = editor?.getHTML() ?? \"\";"));
