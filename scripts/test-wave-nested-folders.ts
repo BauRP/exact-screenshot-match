@@ -37,3 +37,23 @@ assert.ok(home.includes('aria-label="Дерево папок"'));
 assert.ok(home.includes('className="flex max-w-[min(22rem,90vw)]'));
 assert.ok(home.includes('setDrawerOpen(false)'));
 assert.ok(home.includes("setNativeAdDialogBlocked(drawerOpen ||"));
+
+// Import order may not match hierarchy order. Traversals must preserve every
+// folder, stay stable with orphan/cyclic records and handle 1000 deep levels.
+const shuffled:Folder[]=[
+ {id:"missing-child",name:"Orphan",parentId:"missing"},
+ {id:"root",name:"Root"},
+ {id:"leaf",name:"Leaf",parentId:"branch"},
+ {id:"branch",name:"Branch",parentId:"root"},
+ {id:"sibling",name:"Sibling",parentId:"root"},
+ {id:"cycle-a",name:"Cycle A",parentId:"cycle-b"},
+ {id:"cycle-b",name:"Cycle B",parentId:"cycle-a"},
+];
+assert.deepEqual(orderedFolderTree(shuffled).map(f=>f.id),
+ ["root","branch","leaf","sibling","missing-child","cycle-a","cycle-b"]);
+assert.deepEqual([...descendantFolderIds(shuffled,"root")],["root","branch","sibling","leaf"]);
+const deep:Folder[]=Array.from({length:1000},(_,i)=>({
+ id:"deep"+i,name:"Level "+i,...(i===0?{}:{parentId:"deep"+(i-1)})
+}));
+assert.equal(orderedFolderTree(deep).length,1000);
+assert.equal(descendantFolderIds(deep,"deep0").size,1000);

@@ -23,14 +23,23 @@ export const SYSTEM_FOLDERS: Folder[] = [
 export function folderParent(folder:Folder):string{
  return folder.parentId&&folder.parentId!==folder.id?folder.parentId:"all";
 }
+/** Collect descendants in one traversal, even with deeply nested or cyclic
+ * imported folders. Avoid re-scanning the whole list for every hierarchy level. */
 export function descendantFolderIds(folders:readonly Folder[],parentId:string):Set<string>{
+ const children=new Map<string,string[]>();
+ for(const folder of folders){
+  const parent=folderParent(folder);
+  const list=children.get(parent)??[];
+  list.push(folder.id);
+  children.set(parent,list);
+ }
  const found=new Set<string>([parentId]);
- let changed=true;
- while(changed){
-  changed=false;
-  for(const folder of folders){
-   if(found.has(folder.id))continue;
-   if(found.has(folderParent(folder))){found.add(folder.id);changed=true;}
+ const pending=[parentId];
+ for(let i=0;i<pending.length;i++){
+  for(const id of children.get(pending[i])??[]){
+   if(found.has(id))continue;
+   found.add(id);
+   pending.push(id);
   }
  }
  return found;
@@ -55,15 +64,30 @@ export function canNestFolder(folders:readonly Folder[],id:string,parentId:strin
 /** Flatten the hierarchy in display order, protecting imported data from
  * accidentally creating infinitely nested or invisible folders. */
 export function orderedFolderTree(folders:readonly Folder[]):Folder[]{
+ const children=new Map<string,Folder[]>();
+ for(const folder of folders){
+  const parent=folderParent(folder);
+  const siblings=children.get(parent)??[];
+  siblings.push(folder);
+  children.set(parent,siblings);
+ }
  const result:Folder[]=[],visited=new Set<string>();
- const visit=(parentId:string)=>{
-  for(const folder of folders){
-   if(visited.has(folder.id)||folderParent(folder)!==parentId)continue;
-   visited.add(folder.id);result.push(folder);visit(folder.id);
-  }
- };
- visit("all");
- for(const folder of folders)if(!visited.has(folder.id)){visited.add(folder.id);result.push(folder);}
+ // Explicit stack prevents recursion limits on very deep imported folders.
+ const stack=[...(children.get("all")??[])].reverse();
+ while(stack.length){
+  const folder=stack.pop()!;
+  if(visited.has(folder.id))continue;
+  visited.add(folder.id);
+  result.push(folder);
+  const nested=children.get(folder.id)??[];
+  for(let i=nested.length-1;i>=0;i--)stack.push(nested[i]);
+ }
+ // Preserve legacy handling for orphans and broken cyclic backups: expose
+ // each unvisited row in its original order instead of losing the folder.
+ for(const folder of folders)if(!visited.has(folder.id)){
+  visited.add(folder.id);
+  result.push(folder);
+ }
  return result;
 }
 
@@ -175,8 +199,9 @@ export function useFolders(): Folder[] {
 let cachedList: Folder[] = SYSTEM_FOLDERS;
 let cachedKey = "";
 function snapshot(): Folder[] {
-  const key =
-    customFolders.map((f) => f.id + f.name + (f.parentId??"")).join("|") + "#" + hiddenSystem.join(",");
+  // Field concatenation could collide after a folder rename + reparent,
+  // leaving the React drawer on a stale tree even though storage was saved.
+  const key = JSON.stringify([customFolders,hiddenSystem]);
   if (key !== cachedKey) {
     cachedList = [
       ...SYSTEM_FOLDERS.filter(f=>f.id==="all"),

@@ -13,7 +13,19 @@ import {rewriteNoteAttachmentIds} from "./note-attachment-refs";
 
 const LIMIT=80*1024*1024;
 const ID=/^[a-zA-Z0-9_-]{1,128}$/;
-type Envelope={format:"wave-notes-single";version:1;createdAt:number;originId:string;note:Note;audioIds:string[];imageIds?:string[];hasPdf:boolean};
+type Envelope={format:"wave-notes-single";version:1;createdAt:number;originId:string;note:Note;audioIds:string[];audioTypes?:Record<string,string>;imageIds?:string[];hasPdf:boolean};
+const AUDIO_MIME=/^audio\/(?:mp4|webm|ogg|wav|aac|3gpp)(?:;\s*codecs=[a-z0-9.,-]+)?$/i;
+const safeAudioMime=(value:unknown):value is string=>typeof value==="string"&&value.length<=100&&AUDIO_MIME.test(value);
+/** Restore playback type on imported recordings. Older .wnote archives have
+ * no MIME metadata; recognise common audio headers instead of saving every
+ * recording as an unknown application/octet-stream Blob. */
+export function transferAudioMime(bytes:Uint8Array,declared?:string):string{
+ if(bytes.length>=12&&String.fromCharCode(...bytes.slice(4,8))==="ftyp")return "audio/mp4";
+ if(bytes.length>=4&&bytes[0]===0x1a&&bytes[1]===0x45&&bytes[2]===0xdf&&bytes[3]===0xa3)return "audio/webm";
+ if(bytes.length>=4&&String.fromCharCode(...bytes.slice(0,4))==="OggS")return "audio/ogg";
+ if(bytes.length>=12&&String.fromCharCode(...bytes.slice(0,4))==="RIFF"&&String.fromCharCode(...bytes.slice(8,12))==="WAVE")return "audio/wav";
+ return safeAudioMime(declared)?declared:"application/octet-stream";
+}
 
 async function pack(files:Record<string,Uint8Array>):Promise<Uint8Array>{
  return new Promise((resolve,reject)=>zip(files,{level:0},(err,output)=>err?reject(err):resolve(output)));
@@ -46,7 +58,10 @@ function parseManifest(files:Record<string,Uint8Array>):Envelope{
  if(p.format!=="wave-notes-single"||p.version!==1||!n||!ID.test(p.originId||"")||!ID.test(n.id)||
     typeof n.title!=="string"||n.title.length>250||typeof n.body!=="string"||n.body.length>2_000_000||
     !Array.isArray(p.audioIds)||p.audioIds.length>50||typeof p.hasPdf!=="boolean"||
-    p.audioIds.some(id=>!ID.test(id))||
+    (n.kind!==undefined&&n.kind!=="note"&&n.kind!=="pdf")||
+    p.audioIds.some(id=>typeof id!=="string"||!ID.test(id))||
+    (p.audioTypes!==undefined&&(!p.audioTypes||typeof p.audioTypes!=="object"||Array.isArray(p.audioTypes)||
+      Object.entries(p.audioTypes).some(([id,mime])=>!p.audioIds!.includes(id)||!safeAudioMime(mime))))||
     (p.imageIds!==undefined&&(!Array.isArray(p.imageIds)||p.imageIds.length>50||p.imageIds.some(id=>typeof id!=="string"||!ID.test(id)))))throw Error("Недопустимые данные заметки");
  // Refuse ambiguous, duplicated and unexpected archive members before writing
  // any binary attachment to IndexedDB. A .wnote is not a general ZIP importer.
@@ -106,26 +121,43 @@ export async function inspectWaveFile(file:File):Promise<{title:string;originId:
 export async function makeWaveNote(note:Note):Promise<Blob>{
  const audioIds=audioIdsInHtml(note.body);
  const imageIds=imageIdsInHtml(note.body);
- const files:Record<string,Uint8Array>={};
+ if(!ID.test(note.id)||(note.originId!==undefined&&!ID.test(note.originId))||
+    note.title.length>250||note.body.length>2_000_000||
+    audioIds.length>50||imageIds.length>50)
+  throw Error("Заметка или число вложений превышает предел формата .wnote");
+ const files:Record<string,Uint8Array>={},audioTypes:Record<string,string>={};
+ let totalBytes=0;
+ const add=(path:string,bytes:Uint8Array)=>{
+  if(bytes.byteLength>LIMIT-totalBytes)throw Error("Вложения заметки превышают 80 МБ");
+  totalBytes+=bytes.byteLength;
+  files[path]=bytes;
+ };
  for(const id of audioIds){
   const blob=await loadAudioFile(id);
   if(!blob)throw Error("Не найдена прикреплённая аудиозапись");
-  files["audio/"+id+".blob"]=new Uint8Array(await blob.arrayBuffer());
+  if(blob.size>LIMIT-totalBytes)throw Error("Аудиовложения превышают 80 МБ");
+  add("audio/"+id+".blob",new Uint8Array(await blob.arrayBuffer()));
+  if(safeAudioMime(blob.type))audioTypes[id]=blob.type;
  }
  for(const id of imageIds){
   const blob=await loadImageFile(id);
   if(!blob)throw Error("Не найдена прикреплённая фотография");
-  files["images/"+id+".blob"]=new Uint8Array(await blob.arrayBuffer());
+  if(blob.size>LIMIT-totalBytes)throw Error("Фотографии превышают 80 МБ");
+  add("images/"+id+".blob",new Uint8Array(await blob.arrayBuffer()));
  }
  if(note.kind==="pdf"){
   const data=await loadPdfFile(note.id);
   if(!data)throw Error("Исходный PDF не найден");
-  files["document.pdf"]=new Uint8Array(data);
+  if(data.byteLength>LIMIT-totalBytes)throw Error("PDF превышает 80 МБ");
+  add("document.pdf",new Uint8Array(data));
  }
  const originId=note.originId&&ID.test(note.originId)?note.originId:note.id;
- files["manifest.json"]=strToU8(JSON.stringify({
-  format:"wave-notes-single",version:1,createdAt:Date.now(),originId,note,audioIds,imageIds,hasPdf:note.kind==="pdf"
+ const manifest=strToU8(JSON.stringify({
+  format:"wave-notes-single",version:1,createdAt:Date.now(),originId,note,audioIds,
+  audioTypes,imageIds,hasPdf:note.kind==="pdf"
  } satisfies Envelope));
+ if(manifest.byteLength>1024*1024)throw Error("Текст заметки превышает предел обмена .wnote");
+ add("manifest.json",manifest);
  const binary=await pack(files);
  if(binary.byteLength>LIMIT)throw Error("Размер заметки превышает 80 МБ");
  return new Blob([binary.slice().buffer],{type:"application/octet-stream"});
@@ -156,7 +188,8 @@ export async function receiveWaveNote(file:File,folderId:string):Promise<Note>{
  try{
   for(const id of p.audioIds){
    const fresh=crypto.randomUUID();
-   await saveNewAudioFile(fresh,new Blob([files["audio/"+id+".blob"].slice().buffer]));
+   const bytes=files["audio/"+id+".blob"];
+   await saveNewAudioFile(fresh,new Blob([bytes.slice().buffer],{type:transferAudioMime(bytes,p.audioTypes?.[id])}));
    generatedAudio.push(fresh);
    audioMap.set(id,fresh);
   }

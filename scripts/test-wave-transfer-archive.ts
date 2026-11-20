@@ -1,6 +1,7 @@
 import {strict as assert} from "node:assert";
 import {zipSync,strToU8} from "fflate";
-import {inspectWaveFile} from "../src/lib/note-transfer";
+import {inspectWaveFile,makeWaveNote,transferAudioMime} from "../src/lib/note-transfer";
+import type {Note} from "../src/lib/notes-store";
 
 const base={
  format:"wave-notes-single",version:1,originId:"original",
@@ -28,3 +29,13 @@ const validPdf=strToU8("%PDF-1.7\\n1 0 obj\\n<<>>\\nendobj\\n%%EOF");
 const checked=await inspectWaveFile(make({note:pdfNote,hasPdf:true},{"document.pdf":validPdf}));
 assert.equal(checked.containsPdf,true);
 assert.equal(checked.kind,"pdf");
+
+await rejected({note:{...base.note,kind:"unexpected"}},{},"unknown note kind");
+await rejected({audioTypes:{"other":"audio/mp4"}},{},"MIME for undeclared audio");
+await rejected({audioTypes:{"other":"text/html"}},{},"unsafe MIME");
+assert.equal(transferAudioMime(new Uint8Array([0,0,0,20,102,116,121,112,0,0,0,0])),"audio/mp4");
+assert.equal(transferAudioMime(new Uint8Array([0x1a,0x45,0xdf,0xa3])),"audio/webm");
+assert.equal(transferAudioMime(strToU8("random"),"audio/webm;codecs=opus"),"audio/webm;codecs=opus");
+assert.equal(transferAudioMime(strToU8("random"),"text/html"),"application/octet-stream");
+const tooManyAudio=Array.from({length:51},(_,i)=>'<div data-audio="audiodb:a'+i+'"></div>').join("");
+await assert.rejects(makeWaveNote({...base.note,body:tooManyAudio} as Note),/предел формата/);

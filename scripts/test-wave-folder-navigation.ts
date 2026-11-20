@@ -40,3 +40,16 @@ assert.deepEqual(folderNavigationRows(folders,new Set(),"ЛИЧНОЕ").map(r=>r
 const withYo=[{id:"all",name:"All"},{id:"x",name:"Ёжики"},{id:"y",name:"Планы",parentId:"x"}] as Folder[];
 assert.deepEqual(folderNavigationRows(withYo,new Set(["x"]),"ежики").map(r=>r.folder.id),
  ["all","x","y"],"Russian Ё and Е must match without changing folder names");
+
+// Search/collapse must remain stable when the stored order is not tree order.
+const unsorted:Folder[]=[
+ {id:"all",name:"Все"},
+ {id:"leaf",name:"Цель",parentId:"middle"},
+ {id:"top",name:"Документы"},
+ {id:"middle",name:"Вложено",parentId:"top"},
+];
+assert.deepEqual(folderNavigationRows(unsorted).map(r=>r.folder.id),["all","top","middle","leaf"]);
+assert.deepEqual(folderNavigationRows(unsorted,new Set(["top"]),"Цель").map(r=>r.folder.id),
+ ["all","top","middle","leaf"]);
+assert.equal(folderNavigationRows(unsorted).find(r=>r.folder.id==="leaf")?.path,
+ "Документы / Вложено / Цель");
