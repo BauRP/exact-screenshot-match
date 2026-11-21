@@ -23,8 +23,10 @@ export function folderNavigationRows(
  const ordered=orderedFolderTree(folders);
  const byId=new Map(folders.map(folder=>[folder.id,folder]));
  const parents=new Set(folders.filter(f=>f.id!==folderParent(f)).map(f=>folderParent(f)));
- const normalize=(s:string)=>s.normalize("NFKC").toLocaleLowerCase().replace(/ё/g,"е");
- const query=normalize(search.trim());
+ const normalize=(s:string)=>s.normalize("NFKC").toLocaleLowerCase().replace(/ё/g,"е")
+  .replace(/\s+/g," ").trim();
+ const query=normalize(search).slice(0,120);
+ const terms=query?query.split(" "):[];
  // Build each breadcrumb once using constant-time folder lookups. Repeated
  // linear ancestor searches were expensive in folders with many levels.
  const entries=ordered.map(folder=>{
@@ -45,7 +47,7 @@ export function folderNavigationRows(
  const show=new Set<string>();
  if(query){
   for(const {folder,ancestors,path} of entries){
-   if(!normalize(path).includes(query))continue;
+   if(!terms.every(term=>normalize(path).includes(term)))continue;
    show.add(folder.id);
    for(const ancestor of ancestors)show.add(ancestor.id);
   }

@@ -53,3 +53,6 @@ assert.deepEqual(folderNavigationRows(unsorted,new Set(["top"]),"Цель").map(
  ["all","top","middle","leaf"]);
 assert.equal(folderNavigationRows(unsorted).find(r=>r.folder.id==="leaf")?.path,
  "Документы / Вложено / Цель");
+
+assert.deepEqual(folderNavigationRows(folders,new Set(),"  Проекты  Android ").map(r=>r.folder.id),["all","work","a","b"]);
+assert.deepEqual(folderNavigationRows(folders,new Set(),"android проекты").map(r=>r.folder.id),["all","work","a","b"]);

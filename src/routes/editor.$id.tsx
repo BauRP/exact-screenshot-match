@@ -81,7 +81,7 @@ import {safeBrowserClipboardHtml,structuredPlainClipboardHtml,structuredMarkdown
 import {DOMParser as PMDOMParser} from "@tiptap/pm/model";
 import { useFolders, type Folder } from "@/lib/folders-store";
 import {folderNavigationRows} from "@/lib/folder-navigation";
-import {matchingSlashCommands,nextSlashIndex} from "@/lib/wave-slash-commands";
+import {matchingSlashCommands,nextSlashIndex,slashCommandAtCaret} from "@/lib/wave-slash-commands";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -357,7 +357,7 @@ function EditorPage() {
       scheduleTick();
       const {$from}=currentEditor.state.selection;
       const before=$from.parent.textBetween(0,$from.parentOffset);
-      setSlashText(/^\/[\p{L}\p{N} -]{0,22}$/u.test(before) ? before.slice(1) : null);
+      setSlashText(slashCommandAtCaret(before)?.query??null);
     },
     onSelectionUpdate: ({ editor }) => {
       const { from, to } = editor.state.selection;
@@ -458,7 +458,7 @@ function EditorPage() {
     requestAnimationFrame(()=>editor.view.dom.querySelector(".wave-find-current")?.scrollIntoView({block:"nearest"}));
   };
 
-  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator"|"bullets"|"numbered"|"heading"|"heading1"|"heading3"|"paragraph"|"checklist"|"page"|"gallery"|"camera"|"drawing",callout:CalloutKind="important")=>{
+  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator"|"bullets"|"numbered"|"heading"|"heading1"|"heading3"|"paragraph"|"checklist"|"checklist3"|"checklist5"|"page"|"gallery"|"camera"|"drawing",callout:CalloutKind="important")=>{
     if(!editor)return;
     // Do not consume a slash query if the command cannot apply. In
     // particular the Tape command needs a real text selection.
@@ -469,7 +469,7 @@ function EditorPage() {
     }
     const {$from}=editor.state.selection;
     const textBefore=$from.parent.textBetween(0,$from.parentOffset);
-    const slashLength=/^\/[\p{L}\p{N} -]{0,22}$/u.test(textBefore)?textBefore.length:0;
+    const slashLength=slashText!==null?(slashCommandAtCaret(textBefore)?.length??0):0;
     let chain=editor.chain().focus();
     if(slashLength)chain=chain.deleteRange({from:$from.pos-slashLength,to:$from.pos});
     setSlashText(null);
@@ -481,6 +481,14 @@ function EditorPage() {
     if(kind==="heading3"){chain.setHeading({level:3}).run();return;}
     if(kind==="paragraph"){chain.setParagraph().run();return;}
     if(kind==="checklist"){chain.insertContent({type:"waveChecklistItem",attrs:{shape:checkShape,done:false},content:[{type:"text",text:" "}]}).run();return;}
+    if(kind==="checklist3"||kind==="checklist5"){
+      const count=kind==="checklist3"?3:5;
+      chain.insertContent(Array.from({length:count},()=>({
+        type:"waveChecklistItem",attrs:{shape:checkShape,done:false},
+        content:[{type:"text",text:" "}]
+      }))).run();
+      return;
+    }
     if(kind==="tape"){chain.setMark("waveTape").run();return;}
     if(kind==="date"){chain.insertContent(new Date().toLocaleDateString("ru-RU")).run();return;}
     if(kind==="separator"){chain.setHorizontalRule().run();return;}
@@ -497,6 +505,8 @@ function EditorPage() {
   };
   const blockChoices=[
     {id:"checklist",label:"Список дел",icon:"☐",keywords:["задача","чеклист","галочка","task"]},
+    {id:"checklist3",label:"Три задачи",icon:"☷",keywords:["3","три пункта","чеклист 3"]},
+    {id:"checklist5",label:"Пять задач",icon:"☷",keywords:["5","пять пунктов","чеклист 5"]},
     {id:"bullets",label:"Маркированный список",icon:"•"},
     {id:"numbered",label:"Нумерованный список",icon:"1."},
     {id:"heading",label:"Заголовок 2",icon:"H2",keywords:["подзаголовок","h2"]},

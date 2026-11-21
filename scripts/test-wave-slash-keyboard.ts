@@ -1,6 +1,6 @@
 import {strict as assert} from "node:assert";
 import {readFileSync} from "node:fs";
-import {matchingSlashCommands,nextSlashIndex} from "../src/lib/wave-slash-commands";
+import {matchingSlashCommands,nextSlashIndex,slashCommandAtCaret} from "../src/lib/wave-slash-commands";
 const list=[{id:"checklist",label:"Список дел"},{id:"heading",label:"Заголовок"},{id:"fold",label:"Сворачиваемый раздел"},{id:"date",label:"Дата"}];
 assert.deepEqual(matchingSlashCommands(list,"список").map(x=>x.id),["checklist"]);
 assert.deepEqual(matchingSlashCommands(list,"  ЗАГОЛОВОК  ").map(x=>x.id),["heading"]);
@@ -44,3 +44,16 @@ const media=[{id:"gallery",label:"Фотография из галереи",keyw
 assert.deepEqual(matchingSlashCommands(media,"камера").map(item=>item.id),["camera"]);
 assert.deepEqual(matchingSlashCommands(media,"рисовать").map(item=>item.id),["drawing"]);
 assert.deepEqual(matchingSlashCommands(media,"фото").map(item=>item.id),["gallery"]);
+
+assert.deepEqual(slashCommandAtCaret("/"),{query:"",length:1});
+assert.deepEqual(slashCommandAtCaret("Текст /задачи"),{query:"задачи",length:7});
+assert.deepEqual(slashCommandAtCaret("План\n/задачи"),null);
+assert.deepEqual(slashCommandAtCaret("План /заголовок"),{query:"заголовок",length:10});
+for(const invalid of ["https://example.com","a/b","text /задачи!","x/heading","//задача"]){
+ assert.equal(slashCommandAtCaret(invalid),null,invalid);
+}
+assert.deepEqual(matchingSlashCommands([{id:"x",label:"Ёлка"}],"елка").map(v=>v.id),["x"]);
+assert.ok(editor.includes("slashCommandAtCaret(before)?.query??null"));
+assert.ok(editor.includes("slashCommandAtCaret(textBefore)?.length"));
+assert.ok(editor.includes('id:"checklist3"'));
+assert.ok(editor.includes('id:"checklist5"'));
