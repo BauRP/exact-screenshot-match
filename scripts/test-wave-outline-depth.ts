@@ -1,0 +1,12 @@
+import {strict as assert} from "node:assert";
+import {Schema} from "@tiptap/pm/model";
+import {collectNoteOutline} from "../src/lib/note-outline";
+const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},waveFold:{group:"block",content:"block+",attrs:{title:{default:"Раздел"}}},text:{group:"inline"}},marks:{}});
+const paragraph=schema.nodes.paragraph.create(null,schema.text("Text"));
+const nested=schema.nodes.waveFold.create({title:"Внутренний"},[paragraph]);
+const outer=schema.nodes.waveFold.create({title:"Внешний"},[paragraph,nested]);
+const doc=schema.nodes.doc.create(null,[outer]);
+const parts=collectNoteOutline(doc).filter(v=>v.type==="fold");
+assert.deepEqual(parts.map(v=>v.title),["Внешний","Внутренний"]);
+assert.ok(parts[1].depth>parts[0].depth);
+console.log("Real nested outline indentation verified");

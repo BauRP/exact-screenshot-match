@@ -1,0 +1,20 @@
+import {strict as assert} from "node:assert";
+const storage=new Map<string,string>();let writes=0,fail=false;
+Object.defineProperty(globalThis,"window",{configurable:true,value:{localStorage:{getItem(k:string){return storage.get(k)??null},setItem(k:string,v:string){if(k==="sn.notes.v1"){if(fail)throw Error("quota");writes++}storage.set(k,v)}}}});
+const db=await import("../src/lib/notes-store");
+const a=db.createNote({title:"A",body:"A",folderId:"work"}),b=db.createNote({title:"B",body:"B",folderId:"work"}),c=db.createNote({title:"C",body:"C",folderId:"work"}),other=db.createNote({title:"Other",body:"other",folderId:"other"});
+db.setSort("alpha");
+const before=writes;
+assert.ok(db.moveSelectedNotesToEdge([c.id],"top")>0);
+assert.equal(writes,before+1);
+const work=db.useNotes; // state is tested through stored ranking, never call React hooks
+let saved=JSON.parse(storage.get("sn.notes.v1")!);
+assert.ok(saved.find((n:any)=>n.id===c.id).manualOrder<saved.find((n:any)=>n.id===a.id).manualOrder);
+assert.equal(saved.find((n:any)=>n.id===other.id).folderId,"other");
+const unchanged=writes;
+assert.equal(db.moveSelectedNotesToEdge([c.id],"top"),0);
+assert.equal(writes,unchanged);
+fail=true;const bytes=storage.get("sn.notes.v1");
+assert.throws(()=>db.moveSelectedNotesToEdge([c.id],"bottom"),/Unable to save notes/);
+assert.equal(storage.get("sn.notes.v1"),bytes);
+console.log("Selected note reordering is atomic and does not cross folder boundaries");

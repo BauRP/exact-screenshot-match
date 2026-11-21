@@ -1,0 +1,13 @@
+import {strict as assert} from "node:assert";
+import {snoozeReminderTime} from "../src/lib/note-reminders";
+import {readFileSync} from "node:fs";
+const now=new Date(2026,10,1,12,0,0).getTime();
+assert.equal(snoozeReminderTime("quarter",now)-now,15*60_000);
+assert.equal(snoozeReminderTime("hour",now)-now,60*60_000);
+assert.equal(snoozeReminderTime("threeHours",now)-now,3*60*60_000);
+const tomorrow=new Date(snoozeReminderTime("tomorrow",now));assert.equal(tomorrow.getDate(),2);assert.equal(tomorrow.getHours(),9);
+const three=new Date(snoozeReminderTime("threeDays",now));assert.equal(three.getDate(),4);assert.equal(three.getHours(),9);
+const week=new Date(snoozeReminderTime("week",now));assert.equal(week.getDate(),8);assert.equal(week.getHours(),9);
+const main=readFileSync("src/routes/index.tsx","utf8");
+for(const x of ["snoozeReminderTime(operation)","15 минут","Через 3 дня","Через неделю"])assert.ok(main.includes(x));
+console.log("Six offline reminder snooze choices verified");

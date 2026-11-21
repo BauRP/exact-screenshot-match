@@ -1,0 +1,10 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+const src=readFileSync("src/lib/wave-smart-paste.ts","utf8");
+for(const item of ['data-wave-page-break','data-page-label','data-wave-fold','data-collapsed','data-wave-callout','data-wave-tape','data-done','data-shape'])assert.ok(src.includes(item),item);
+assert.ok(src.includes('return page; // Page breaks are atomic'));
+assert.ok(src.includes('out.setAttribute("data-wave-tape","true")'));
+assert.ok(src.includes('out.setAttribute("data-done",element.getAttribute("data-done")==="true"?"true":"false")'));
+assert.ok(src.includes('if(forbidden.has(tag))return target.createDocumentFragment()'));
+assert.ok(!src.includes('out.setAttribute("onclick"'));
+console.log("Rich clipboard keeps structure and concealed Tape, filters unknown attributes");

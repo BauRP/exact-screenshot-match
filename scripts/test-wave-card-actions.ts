@@ -1,0 +1,15 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+const s=readFileSync("src/lib/notes-store.ts","utf8");
+const c=readFileSync("src/components/NoteCard.tsx","utf8");
+const h=readFileSync("src/routes/index.tsx","utf8");
+assert.ok(s.includes("cardColor?: string"));
+assert.ok(s.includes('cardColor: typeof input.cardColor === "string"'));
+assert.ok(c.includes("backgroundColor:cardBg"));
+assert.ok(c.includes("const muted = cardBg?"));
+assert.ok(h.includes('aria-label="Цвет карточки"'));
+assert.ok(h.includes('aria-label="Переместить в папку"'));
+assert.ok(h.includes("updateNote(note.id,{cardColor:color||undefined})"));
+assert.ok(h.includes("updateNote(note.id,{folderId:folder.id})"));
+assert.ok(!h.includes('aria-label="Найти в заметке"'));
+console.log("Card-only colors and existing-folder actions checked");

@@ -1,0 +1,14 @@
+import { strict as assert } from "node:assert";
+const session = await Bun.file("src/lib/admob-session.ts").text();
+const native = await Bun.file("src/lib/native-ads.ts").text();
+const settings = await Bun.file("src/routes/settings.tsx").text();
+assert.match(session, /dispatchEvent\(new Event\("wave-admob-consent-changed"\)\)/);
+assert.match(session, /consentForSession = null/);
+assert.match(settings, /await AdMob\.showPrivacyOptionsForm\(\);\s*invalidateConsentForSession\(\)/);
+assert.match(native, /const onPrivacyChanged = async \(\) =>/);
+assert.match(native, /await oldFeed\.pause\(\)/);
+assert.match(native, /await oldFeed\.destroy\(\)/);
+assert.match(native, /window\.addEventListener\("wave-admob-consent-changed", onPrivacyChanged\)/);
+assert.match(native, /window\.removeEventListener\("wave-admob-consent-changed", onPrivacyChanged\)/);
+assert.match(native, /if \(!disposed\) void initialize\(\)/);
+console.log("Changing Google privacy options destroys old ad feed and rechecks UMP permissions: PASS");

@@ -26,6 +26,9 @@ export function setTheme(theme: Theme) {
   }
   apply(theme);
   listeners.forEach((l) => l());
+  // Native Google ad templates draw outside the WebView; refresh their
+  // colors only when the actual theme changes.
+  if (typeof window !== "undefined") window.dispatchEvent(new Event("wave-admob-theme-changed"));
 }
 
 export function useTheme() {

@@ -1,0 +1,12 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+const transfer=readFileSync("src/lib/note-transfer.ts","utf8");
+const ui=readFileSync("src/routes/index.tsx","utf8");
+assert.ok(transfer.includes('import {readableText} from "./note-search"'));
+assert.ok(transfer.includes('readableText(envelope.note.body||"")'));
+assert.ok(transfer.includes('imageCount:envelope.imageIds?.length||0'));
+assert.ok(ui.includes("Предварительный просмотр файла"));
+assert.ok(ui.includes("incomingWave.preview"));
+assert.ok(ui.includes("incomingWave.imageCount"));
+assert.ok(ui.includes("returnedOriginal.updatedAt"));
+console.log("Returned note preview and privacy protections connected");

@@ -1,0 +1,17 @@
+import { strict as assert } from "node:assert";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+const base=join(process.cwd(),"node_modules","@capacitor-community","admob","android","src","main","java","com","getcapacitor","community","admob","nativeads");
+const view=readFileSync(join(base,"PluginNativeAdView.kt"),"utf8");
+const placement=readFileSync(join(base,"NativeAdExecutor.kt"),"utf8");
+const ui=readFileSync("src/components/NativeAdCard.tsx","utf8");
+const home=readFileSync("src/routes/index.tsx","utf8");
+assert.ok(view.includes("val iconSize = pixels(40)"));
+assert.ok(placement.includes("val minimumVisible = (40 * density).roundToInt()"));
+assert.ok(placement.includes("value.clipWidth < minimumVisible || value.clipHeight < minimumVisible"));
+assert.ok(placement.includes("if (state.isSmall) 120 else 144"));
+assert.ok(ui.includes('height: "120px"'));
+assert.ok(ui.includes("h-[120px]"));
+assert.ok(home.includes('slotKey="home-first"'));
+assert.ok(home.includes("% 5 === 0"));
+console.log("AdMob icon 40dp and 40dp clipping; compact slot remains 120px, ad every 5 records: PASS");

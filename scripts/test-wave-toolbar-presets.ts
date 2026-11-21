@@ -1,0 +1,15 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+import {toolbarPreset,TOOLBAR_TOOLS,validToolbarOrder} from "../src/lib/editor-preferences";
+const writing=toolbarPreset("writing");
+assert.ok(writing.hiddenToolbar.includes("camera"));
+assert.ok(!writing.hiddenToolbar.includes("search"));
+assert.equal(new Set(writing.toolbarOrder).size,TOOLBAR_TOOLS.length);
+assert.equal(writing.toolbarOrder[0],"search");
+const media=toolbarPreset("media");assert.equal(media.toolbarOrder[0],"camera");assert.equal(media.hiddenToolbar.length,0);
+const full=toolbarPreset("all");assert.deepEqual(full.toolbarOrder,validToolbarOrder(null));
+assert.equal(full.hiddenToolbar.length,0);
+const settings=readFileSync("src/routes/settings.tsx","utf8");
+assert.ok(settings.includes('changePref(toolbarPreset(mode))'));
+assert.ok(settings.includes("Фото и звук"));
+console.log("Writing/media/all toolbar presets retain a full safe permutation");

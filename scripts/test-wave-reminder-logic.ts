@@ -1,0 +1,22 @@
+import {strict as assert} from "node:assert";
+import {parseReminderInput,toReminderInput,validReminderTime,reminderIsDue} from "../src/lib/note-reminders";
+import {checklistSummary} from "../src/lib/note-checklist-summary";
+
+const reminder="2031-04-21T14:30";
+const date=parseReminderInput(reminder);
+assert.ok(date!==undefined);
+assert.equal(toReminderInput(date),reminder);
+assert.equal(parseReminderInput("2031-02-30T14:30"),undefined);
+assert.equal(parseReminderInput("2031-04-21T29:00"),undefined);
+assert.equal(parseReminderInput("garbage"),undefined);
+assert.equal(validReminderTime(NaN),undefined);
+assert.equal(validReminderTime(Infinity),undefined);
+assert.equal(validReminderTime(-100),undefined);
+assert.equal(reminderIsDue(date,date-1),false);
+assert.equal(reminderIsDue(date,date),true);
+assert.equal(reminderIsDue(undefined),false);
+assert.deepEqual(checklistSummary(""),{total:0,done:0,pending:0});
+assert.deepEqual(checklistSummary('<div data-type="wave-check-item" data-done="true">A</div><div data-done="false" data-type="wave-check-item">B</div>'),{total:2,done:1,pending:1});
+assert.deepEqual(checklistSummary('<div data-type="taskItem" data-checked="true">X</div><div data-type="taskItem">Y</div>'),{total:2,done:1,pending:1});
+assert.deepEqual(checklistSummary('<div>Unrelated</div><section data-type="wave-check-item"></section>'),{total:0,done:0,pending:0});
+console.log("Reminder and checklist pure logic unit tests passed");
