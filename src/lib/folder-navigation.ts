@@ -29,20 +29,33 @@ export function folderNavigationRows(
  const terms=query?query.split(" "):[];
  // Build each breadcrumb once using constant-time folder lookups. Repeated
  // linear ancestor searches were expensive in folders with many levels.
+ // The preorder guarantees that a valid parent's breadcrumb is already
+ // computed. Reusing it avoids repeatedly scanning all folders for every
+ // ancestor of deep folders. Broken imported cycles use the safe fallback.
+ const cache=new Map<string,{ancestors:Folder[];path:string;hidden:boolean}>();
  const entries=ordered.map(folder=>{
-  const ancestors:Folder[]=[],seen=new Set<string>();
-  let current=folder.id;
-  while(current!=="all"&&!seen.has(current)){
-   seen.add(current);
-   const ancestor=byId.get(current);
-   if(!ancestor)break;
-   ancestors.unshift(ancestor);
-   current=folderParent(ancestor);
+  let ancestors:Folder[]=[],path="",hidden=false;
+  if(folder.id==="all"){
+   path=byId.get("all")?.name??"Все заметки";
+  }else{
+   const parentId=folderParent(folder);
+   const parent=parentId==="all"?undefined:cache.get(parentId);
+   if(parent&&!parent.ancestors.some(item=>item.id===folder.id)){
+    ancestors=[...parent.ancestors,folder];
+    path=(parent.path?parent.path+" / ":"")+folder.name;
+    hidden=parent.hidden||collapsed.has(parentId);
+   }else if(parentId==="all"){
+    ancestors=[folder];
+    path=folder.name;
+   }else{
+    // Orphans and corrupt cyclic imports must remain visible and terminate.
+    ancestors=folderAncestors(folders,folder.id);
+    path=ancestors.map(item=>item.name).filter(Boolean).join(" / ")||folder.name;
+    hidden=ancestors.slice(0,-1).some(item=>collapsed.has(item.id));
+   }
   }
-  const path=folder.id==="all"
-   ? byId.get("all")?.name??"Все заметки"
-   : ancestors.map(f=>f.name).filter(Boolean).join(" / ")||folder.name;
-  return {folder,ancestors,path};
+  cache.set(folder.id,{ancestors,path,hidden});
+  return {folder,ancestors,path,hidden};
  });
  const show=new Set<string>();
  if(query){
@@ -52,10 +65,10 @@ export function folderNavigationRows(
    for(const ancestor of ancestors)show.add(ancestor.id);
   }
  }
- return entries.flatMap(({folder,ancestors,path})=>{
+ return entries.flatMap(({folder,path,hidden})=>{
   if(query){
    if(folder.id!=="all"&&!show.has(folder.id))return [];
-  }else if(ancestors.slice(0,-1).some(a=>collapsed.has(a.id)))return [];
+  }else if(hidden)return [];
   return [{
    folder,
    depth:Math.min(6,Math.max(0,ancestors.length-1)),

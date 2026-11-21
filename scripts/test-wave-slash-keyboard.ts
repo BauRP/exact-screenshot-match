@@ -57,3 +57,8 @@ assert.ok(editor.includes("slashCommandAtCaret(before)?.query??null"));
 assert.ok(editor.includes("slashCommandAtCaret(textBefore)?.length"));
 assert.ok(editor.includes('id:"checklist3"'));
 assert.ok(editor.includes('id:"checklist5"'));
+
+assert.ok(editor.includes("setSlashText(currentSelection.empty?slashCommandAtCaret(before)?.query??null:null)"),
+ "Moving the cursor must close the stale slash palette");
+assert.ok(editor.includes("setSlashText(currentEditor.state.selection.empty?"),
+ "Text selections must never leave an active insertion command");

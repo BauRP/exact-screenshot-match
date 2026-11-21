@@ -56,3 +56,18 @@ assert.equal(folderNavigationRows(unsorted).find(r=>r.folder.id==="leaf")?.path,
 
 assert.deepEqual(folderNavigationRows(folders,new Set(),"  Проекты  Android ").map(r=>r.folder.id),["all","work","a","b"]);
 assert.deepEqual(folderNavigationRows(folders,new Set(),"android проекты").map(r=>r.folder.id),["all","work","a","b"]);
+
+const huge:Folder[]=[{id:"all",name:"Все"}];
+for(let i=0;i<1000;i++)huge.push({
+ id:"deep"+i,name:"Папка"+i,...(i===0?{}:{parentId:"deep"+(i-1)})
+});
+const deepRows=folderNavigationRows(huge);
+assert.equal(deepRows.length,1001,"Large folder hierarchies must stay visible");
+assert.equal(deepRows[deepRows.length-1].depth,6,"Drawer indent is capped");
+assert.ok(deepRows[deepRows.length-1].path.includes("Папка999"));
+assert.equal(folderNavigationRows(huge,new Set(["deep0"])).length,2);
+assert.equal(folderNavigationRows(huge,new Set(["deep0"]),"папка0 папка999").length,1001);
+const cyclicPath=folderNavigationRows([{id:"a",name:"A",parentId:"b"},{id:"b",name:"B",parentId:"a"}]);
+assert.equal(cyclicPath.length,2);
+assert.equal(cyclicPath[0].path,"B / A");
+assert.equal(cyclicPath[1].path,"A / B");

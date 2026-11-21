@@ -357,11 +357,18 @@ function EditorPage() {
       scheduleTick();
       const {$from}=currentEditor.state.selection;
       const before=$from.parent.textBetween(0,$from.parentOffset);
-      setSlashText(slashCommandAtCaret(before)?.query??null);
+      setSlashText(currentEditor.state.selection.empty?
+        slashCommandAtCaret(before)?.query??null:null);
     },
     onSelectionUpdate: ({ editor }) => {
       const { from, to } = editor.state.selection;
       selectionRef.current = { from, to };
+      // The palette belongs to the caret's actual paragraph. Do not keep
+      // a stale slash query when the user taps elsewhere or selects text.
+      const currentSelection=editor.state.selection;
+      const $caret=currentSelection.$from;
+      const before=$caret.parent.textBetween(0,$caret.parentOffset);
+      setSlashText(currentSelection.empty?slashCommandAtCaret(before)?.query??null:null);
       const attrs = editor.getAttributes("textStyle");
       if (attrs.fontFamily) setCurrentFontFamily(attrs.fontFamily);
       if (attrs.fontSize) {
