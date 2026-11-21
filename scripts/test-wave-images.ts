@@ -10,7 +10,7 @@ const backup=readFileSync("src/lib/backup.ts","utf8");
 for(const term of ["saveImageFile","loadImageFile","deleteImageFile","imageIdsInHtml","saveNewImageFile","createIndexedDbOpener","12*1024*1024","store.add(blob,id)"])assert.ok(files.includes(term),term);
 for(const term of ["addNodeView","ReactNodeViewRenderer(ImageView)","insertWaveImage","data-image-id","Ширина фотографии","URL.revokeObjectURL"])assert.ok(node.includes(term),term);
 for(const term of ["WaveImage,","addImage","Добавить фотографию из галереи","createdImageIdsRef","await saveImageFile(valid)","imageIdsInHtml(body)"])assert.ok(editor.includes(term),term);
-for(const term of ["audioIds,imageIds,hasPdf","generatedImages","saveNewImageFile","loadImageFile(id)","deleteImageFile(id)"])assert.ok(transfer.includes(term),term);
+for(const term of ["audioIds=audioIdsInHtml(note.body)","imageIds=imageIdsInHtml(note.body)","audioTypes,imageIds,hasPdf","generatedImages","saveNewImageFile","loadImageFile(id)","deleteImageFile(id)"])assert.ok(transfer.includes(term),term);
 for(const term of ["addedImageIds","saveNewImageFile(copiedId,photo)","deleteImageFile(id)"])assert.ok(home.includes(term),term);
 for(const term of ["latestImages=new Set(state.notes.flatMap(note=>imageIdsInHtml(note.body)))","staleImages.filter(id=>!latestImages.has(id)).map(id=>deleteImageFile(id))"])assert.ok(store.includes(term),term);
 for(const term of ["imageBlobFromBytes","rewrittenImages","imageIds = uniqueIds","newImageIds","saveNewImageFile(destinationId","for (const [sourceId,destinationId] of rewrittenImages)"])assert.ok(backup.includes(term),term);

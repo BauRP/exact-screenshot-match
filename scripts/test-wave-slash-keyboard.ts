@@ -43,7 +43,8 @@ const media=[{id:"gallery",label:"Фотография из галереи",keyw
  {id:"drawing",label:"Рисунок",keywords:["рисовать","полотно"]}];
 assert.deepEqual(matchingSlashCommands(media,"камера").map(item=>item.id),["camera"]);
 assert.deepEqual(matchingSlashCommands(media,"рисовать").map(item=>item.id),["drawing"]);
-assert.deepEqual(matchingSlashCommands(media,"фото").map(item=>item.id),["gallery"]);
+assert.deepEqual(matchingSlashCommands(media,"фото").map(item=>item.id),["gallery","camera"],
+ "Both gallery and camera match a photo search; gallery is the first suggestion");
 
 assert.deepEqual(slashCommandAtCaret("/"),{query:"",length:1});
 assert.deepEqual(slashCommandAtCaret("Текст /задачи"),{query:"задачи",length:7});
