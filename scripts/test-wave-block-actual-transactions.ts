@@ -203,17 +203,9 @@ const insideChildren=()=>insideState.doc.child(0).content.content.map((n:any)=>n
 selectInside("beta");
 assert.equal(moveWaveBlocksToSectionEdge(insideEditor,"start"),true);
 assert.deepEqual(insideChildren(),["beta","alpha","gamma"]);
+assert.equal(insideState.doc.child(0).child(0).type.name,"paragraph","Moving a block must not wrap it in a second section");
 assert.equal(insideState.selection.$from.parent.textContent,"beta");
 assert.equal(moveWaveBlocksToSectionEdge(insideEditor,"start"),false);
-console.log("SECTION MOVE DIAGNOSTIC",JSON.stringify({
- selection:insideState.selection.toJSON(),
- pos:selectedWaveBlockPos(insideEditor),
- doc:insideState.doc.toJSON(),
- depth:insideState.selection.$from.depth,
- index:insideState.selection.$from.index(1),
- start:insideState.selection.$from.start(1),
- end:insideState.selection.$from.end(1)
-}));
 assert.equal(moveWaveBlocksToSectionEdge(insideEditor,"end"),true);
 assert.deepEqual(insideChildren(),["alpha","gamma","beta"]);
 selectInside("gamma","beta");

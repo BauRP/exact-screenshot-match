@@ -479,7 +479,10 @@ export function moveWaveBlocksToSectionEdge(editor:Editor,edge:"start"|"end"):bo
  const start=selection.$from.start(depth),end=selection.$from.end(depth);
  if(from<start||to>end)return false;
  if((edge==="start"&&from===start)||(edge==="end"&&to===end))return false;
- const moved=doc.content.cut(from,to);
+ // Extract siblings from their actual parent, not doc.content: slicing the
+ // whole document across a nested boundary creates a wrapped waveFold and
+ // silently adds another section around the moved block.
+ const moved=section.content.cut(from-start,to-start);
  if(!moved.childCount||moved.content.some(node=>node.type.name==="wavePageBreak"))return false;
  let tr=state.tr.delete(from,to);
  const at=tr.mapping.map(edge==="start"?start:end,edge==="start"?1:-1);
