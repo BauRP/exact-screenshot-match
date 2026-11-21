@@ -9,7 +9,7 @@ export function slashCommandAtCaret(textBefore:string):{query:string;length:numb
  const match=/(?:^|\s)(\/([\p{L}\p{N} -]{0,40}))$/u.exec(textBefore);
  return match?{query:match[2],length:match[1].length}:null;
 }
-const normalizeTerm=(value:string)=>normalizeTerm(value).replace(/ё/g,"е");
+const normalizeTerm=(value:string)=>value.normalize("NFKC").toLocaleLowerCase().replace(/ё/g,"е");
 export function matchingSlashCommands<T extends SlashCommand>(
  commands:readonly T[], query:string
 ):T[]{
@@ -18,7 +18,7 @@ export function matchingSlashCommands<T extends SlashCommand>(
  if(!phrase)return [...commands];
  const words=phrase.split(/\s+/);
  return commands.map((item,index)=>{
-  const fields=[item.label,item.id,...(item.keywords??[])].map(value=>value.normalize("NFKC").toLocaleLowerCase());
+  const fields=[item.label,item.id,...(item.keywords??[])].map(value=>normalizeTerm(value));
   if(!words.every(word=>fields.some(field=>field.includes(word))))return null;
   const rank=fields.some(field=>field===phrase)?0:
    fields.some(field=>field.startsWith(phrase))?1:

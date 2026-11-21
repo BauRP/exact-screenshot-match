@@ -47,7 +47,7 @@ assert.deepEqual(matchingSlashCommands(media,"фото").map(item=>item.id),["ga
 
 assert.deepEqual(slashCommandAtCaret("/"),{query:"",length:1});
 assert.deepEqual(slashCommandAtCaret("Текст /задачи"),{query:"задачи",length:7});
-assert.deepEqual(slashCommandAtCaret("План\n/задачи"),null);
+assert.deepEqual(slashCommandAtCaret("План\n/задачи"),{query:"задачи",length:7});
 assert.deepEqual(slashCommandAtCaret("План /заголовок"),{query:"заголовок",length:10});
 for(const invalid of ["https://example.com","a/b","text /задачи!","x/heading","//задача"]){
  assert.equal(slashCommandAtCaret(invalid),null,invalid);
