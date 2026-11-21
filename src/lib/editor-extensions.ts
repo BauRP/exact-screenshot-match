@@ -71,9 +71,7 @@ export const AutoLinkExtras = Extension.create({
                 emailSpans.push({from,to});
                 const href=normalizedSafeNoteLink("mailto:"+raw);
                 if(!href)continue;
-                const safeHref=normalizedSafeNoteLink(href);
-                if(!safeHref)continue;
-                tr.addMark(pos+from,pos+to,linkType.create({href:safeHref}));
+                tr.addMark(pos+from,pos+to,linkType.create({href}));
                 modified=true;
               }
               PHONE_RE.lastIndex=0;
@@ -86,7 +84,8 @@ export const AutoLinkExtras = Extension.create({
                 // email-like strings. A standalone "+7 ..." still works.
                 if((from>0&&/[\p{L}\p{N}_@]/u.test(text[from-1]))||
                    (to<text.length&&/[\p{L}\p{N}_@]/u.test(text[to])))continue;
-                const href="tel:"+raw.replace(/[\s\-().]/g,"");
+                const href=normalizedSafeNoteLink("tel:"+raw.replace(/[\s\-().]/g,""));
+                if(!href)continue;
                 tr.addMark(pos+from,pos+to,linkType.create({href}));
                 modified=true;
               }
