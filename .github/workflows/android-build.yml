@@ -279,7 +279,9 @@ jobs:
         run: bun scripts/test-wave-page-checklist.ts
 
       - name: Verify safe page copy and reorder ProseMirror transactions
-        run: bun scripts/test-wave-page-actions.ts
+        run: |
+          bun scripts/test-wave-page-actions.ts
+          bun scripts/test-wave-block-transfer-page.ts
 
       - name: Verify named pages and audio playback controls
         run: bun scripts/test-wave-page-audio-controls.ts

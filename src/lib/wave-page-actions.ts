@@ -228,6 +228,21 @@ export function splitPageAtCaret(editor:Editor):boolean{
  return true;
 }
 
+/** Merge only an active named page into its predecessor. A selection
+ * spanning two pages must never delete a guessed divider. One Undo. */
+export function mergeCurrentPageWithPrevious(editor:Editor):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const {doc,selection}=editor.state,pages=topLevelPageRanges(doc);
+ const index=singleSelectedPageIndex(pages,selection);
+ if(index===undefined||index<1)return false;
+ const pos=pages[index].start,divider=doc.nodeAt(pos);
+ if(divider?.type.name!=="wavePageBreak")return false;
+ const tr=editor.state.tr.delete(pos,pos+divider.nodeSize);
+ if(!tr.doc.type.validContent(tr.doc.content))return false;
+ editor.view.dispatch(tr.scrollIntoView());
+ return true;
+}
+
 /** Merge current page with its NEXT page by removing only the top-level
  * divider. This never removes text/media and works for the initial page. */
 export function mergeCurrentPageWithNext(editor:Editor):boolean{

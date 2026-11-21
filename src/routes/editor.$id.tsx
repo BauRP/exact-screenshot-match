@@ -71,8 +71,8 @@ import { WaveImage } from "@/components/editor/WaveImage";
 import { WaveDrawing } from "@/components/editor/WaveDrawing";
 import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection,setWaveTextDirection} from "@/lib/wave-text-direction";
-import {collectNoteOutline,filterNoteOutline,type OutlineFilter,notePagePositions,noteCurrentPage,renameCurrentPage,currentPageBreakPos,pageDisplayNames} from "@/lib/note-outline";
-import {moveSelectedWaveBlock,moveWaveBlocksToAdjacentPage,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
+import {collectNoteOutline,filterNoteOutline,type OutlineFilter,notePagePositions,noteCurrentPage,renameCurrentPage,mergeCurrentPageWithPrevious,pageDisplayNames} from "@/lib/note-outline";
+import {moveSelectedWaveBlock,moveWaveBlocksToAdjacentPage,moveWaveBlocksToPage,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
 import {duplicateCurrentPage,moveCurrentPage,moveCurrentPageToEdge,moveCurrentPageToIndex,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,splitPageAtCaret} from "@/lib/wave-page-actions";
 import {revealOutlinePosition} from "@/lib/wave-outline-navigation";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
@@ -193,6 +193,7 @@ function EditorPage() {
   const [slashActive,setSlashActive]=useState(0);
   const [quickTaskCount,setQuickTaskCount]=useState(3);
   const [targetPageNumber,setTargetPageNumber]=useState(2);
+  const [targetBlockPageNumber,setTargetBlockPageNumber]=useState(1);
   const [pageRename,setPageRename]=useState<{pos:number;label:string}|null>(null);
   useEffect(()=>{setSlashActive(0);},[slashText]);
 
@@ -1309,11 +1310,10 @@ function EditorPage() {
             {pageDisplayNames(editor.state.doc).map((name,index)=><option key={index} value={index+1}>{name}</option>)}
           </select>}
           {currentPage>1&&<button type="button" aria-label="Объединить с предыдущей страницей"
-            className="rounded-md border px-2 py-1 text-xs" onClick={()=>{
-              const pos=currentPageBreakPos(editor.state.doc,editor.state.selection.from);
-              if(pos===undefined)return;
-              editor.view.dispatch(editor.state.tr.delete(pos,pos+1).scrollIntoView());
-            }}>Объединить страницы</button>}
+            className="rounded-md border px-2 py-1 text-xs"
+            onMouseDown={event=>event.preventDefault()}
+            onClick={()=>{if(!mergeCurrentPageWithPrevious(editor))toast("Выделение должно находиться на одной странице");}}>
+            Объединить страницы</button>}
           <button type="button" aria-label="Добавить пустую страницу перед текущей" className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>{if(!insertBlankPageBefore(editor))toast("Не удалось добавить страницу");}}>Страница перед +</button>
           <button type="button" aria-label="Разделить страницу в месте курсора"
@@ -1398,6 +1398,20 @@ function EditorPage() {
             title="Перенести блок или выделенную группу на следующую страницу, сохранив вложения"
             onMouseDown={event=>event.preventDefault()}
             onClick={()=>{if(!moveWaveBlocksToAdjacentPage(editor,"next"))toast("Выберите блок перед следующей страницей");}}>Стр. ⇥</button>
+          <label className="inline-flex items-center gap-1 text-xs">
+            <span>Блок на стр.</span>
+            <input type="number" min={1} max={pagePositions.length} step={1}
+              aria-label="Номер страницы назначения блока" value={targetBlockPageNumber}
+              onChange={event=>setTargetBlockPageNumber(Number(event.target.value))}
+              className="w-14 rounded-md border border-border bg-background px-1 py-1 text-center"/>
+          </label>
+          <button type="button" aria-label="Перенести выбранный блок или группу на указанную страницу"
+            onMouseDown={event=>event.preventDefault()}
+            disabled={pagePositions.length<2||!Number.isSafeInteger(targetBlockPageNumber)||
+              targetBlockPageNumber<1||targetBlockPageNumber>pagePositions.length}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>{if(!moveWaveBlocksToPage(editor,targetBlockPageNumber))toast("Выберите блок на другой странице");}}>
+            Перенести блок</button>
           <button type="button" aria-label="Вложить блок в раздел" title="Переместить блок в предыдущий раздел"
             className="rounded-md border px-2 py-1 text-xs" onClick={()=>nestSelectedWaveBlock(editor)}>↘</button>
           <button type="button" aria-label="Дублировать блок или группу"

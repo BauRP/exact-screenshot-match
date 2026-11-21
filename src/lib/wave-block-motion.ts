@@ -372,3 +372,45 @@ export function moveWaveBlocksToAdjacentPage(editor:Editor,direction:"previous"|
  view.dispatch(tr.scrollIntoView());
  return true;
 }
+
+/** Transfer a top-level block, section or contiguous selected group
+ * directly to a numbered page. Keep its attachments and saved markup intact.
+ * The destination is the end of that page, before the next page divider. */
+export function moveWaveBlocksToPage(editor:Editor,targetPage:number):boolean{
+ if(!editor.isEditable||editor.isDestroyed||!Number.isSafeInteger(targetPage))return false;
+ const {state,view}=editor,{doc}=state,pages=topLevelPageRanges(doc);
+ const target=targetPage-1;
+ if(target<0||target>=pages.length)return false;
+ const group=selectedWaveSiblingRange(editor);
+ let from:number,to:number;
+ if(group&&group.depth===0&&group.end-group.start>1){
+  from=group.from;to=group.to;
+ }else{
+  let pos=selectedWaveBlockPos(editor);
+  if(pos===undefined)return false;
+  let resolved=doc.resolve(pos);
+  if(resolved.depth!==0){
+   const {$from,$to}=state.selection;
+   if($from.depth<1||$to.depth<1||$from.node(1)!==$to.node(1))return false;
+   pos=$from.before(1);
+   resolved=doc.resolve(pos);
+  }
+  if(resolved.depth!==0||resolved.index()>=doc.childCount)return false;
+  from=pos;to=pos+doc.child(resolved.index()).nodeSize;
+ }
+ if(from>=to)return false;
+ const content=doc.content.cut(from,to);
+ if(!content.childCount||content.content.some(node=>node.type.name==="wavePageBreak"))return false;
+ const source=pages.findIndex(p=>from>=p.bodyStart&&from<p.end);
+ if(source<0||source===target||to>pages[source].end)return false;
+ const destination=pages[target].end;
+ if(destination>=from&&destination<=to)return false;
+ let tr=state.tr.delete(from,to);
+ const at=tr.mapping.map(destination,-1),$at=tr.doc.resolve(at);
+ if($at.parent!==tr.doc||!tr.doc.canReplace($at.index(),$at.index(),content))return false;
+ tr=tr.insert(at,content);
+ if(!tr.doc.type.validContent(tr.doc.content))return false;
+ retainMovedSelection(tr,state.selection,from,to,at);
+ view.dispatch(tr.scrollIntoView());
+ return true;
+}

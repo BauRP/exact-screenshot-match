@@ -287,3 +287,23 @@ assert.equal(noteCurrentPage(jumpState.doc,jumpState.selection.from),4);
 for(const invalid of [0,4,3])assert.equal(moveCurrentPageToIndex(jumpEditor,invalid),false);
 assert.equal(jumpEdits,2);
 assert.equal(jumpState.doc.check(),undefined);
+
+import {mergeCurrentPageWithPrevious} from "../src/lib/wave-page-actions";
+let stateMerge=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
+ p("one"),page("two"),p("two body"),page("three"),p("three body")
+])});
+let mergeWrites=0;
+const mergeEd={isEditable:true,isDestroyed:false,get state(){return stateMerge;},
+ view:{dispatch(tr:any){mergeWrites++;stateMerge=stateMerge.apply(tr);}}} as any;
+const mergeRanges=topLevelPageRanges(stateMerge.doc);
+stateMerge=stateMerge.apply(stateMerge.tr.setSelection(TextSelection.create(
+ stateMerge.doc,mergeRanges[1].bodyStart+2,mergeRanges[2].bodyStart+2)));
+assert.equal(mergeCurrentPageWithPrevious(mergeEd),false);
+assert.equal(mergeWrites,0);
+stateMerge=stateMerge.apply(stateMerge.tr.setSelection(TextSelection.create(stateMerge.doc,mergeRanges[1].bodyStart+2)));
+assert.equal(mergeCurrentPageWithPrevious(mergeEd),true);
+assert.equal(mergeWrites,1);
+assert.equal(stateMerge.doc.textContent,"onetwo bodythree body");
+assert.equal(topLevelPageRanges(stateMerge.doc).length,2);
+assert.equal(stateMerge.doc.nodeAt(topLevelPageRanges(stateMerge.doc)[1].start)?.attrs.label,"three");
+assert.equal(stateMerge.doc.check(),undefined);
