@@ -65,7 +65,7 @@ export function folderNavigationRows(
    for(const ancestor of ancestors)show.add(ancestor.id);
   }
  }
- return entries.flatMap(({folder,path,hidden})=>{
+ return entries.flatMap(({folder,ancestors,path,hidden})=>{
   if(query){
    if(folder.id!=="all"&&!show.has(folder.id))return [];
   }else if(hidden)return [];
