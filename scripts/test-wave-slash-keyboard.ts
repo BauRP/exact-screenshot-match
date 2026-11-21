@@ -68,3 +68,6 @@ assert.ok(editor.includes('id:"checklist10"'),"Menu offers ten checkboxes at onc
 assert.ok(editor.includes('kind==="checklist10"'),"Ten-task command is dispatched");
 assert.ok(editor.includes('kind==="checklist5"?5:10'),
  "Bounded ten-row insertion reuses the same undoable editor chain");
+
+assert.ok(editor.includes('id:"code"'),"Slash palette supports a code block");
+assert.ok(editor.includes('chain.toggleCodeBlock().run()'),"Code block uses existing Tiptap command");

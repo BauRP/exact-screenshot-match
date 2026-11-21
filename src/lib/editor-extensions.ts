@@ -1,5 +1,6 @@
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
+import {normalizedSafeNoteLink} from "./external-links";
 
 /* -------------------------------------------------------------------------- */
 /*  Font-size mark attribute (piggy-backs on TextStyle)                       */
@@ -68,7 +69,11 @@ export const AutoLinkExtras = Extension.create({
               while((match=EMAIL_RE.exec(text))!==null){
                 const raw=match[1],from=match.index,to=from+raw.length;
                 emailSpans.push({from,to});
-                tr.addMark(pos+from,pos+to,linkType.create({href:"mailto:"+raw}));
+                const href=normalizedSafeNoteLink("mailto:"+raw);
+                if(!href)continue;
+                const safeHref=normalizedSafeNoteLink(href);
+                if(!safeHref)continue;
+                tr.addMark(pos+from,pos+to,linkType.create({href:safeHref}));
                 modified=true;
               }
               PHONE_RE.lastIndex=0;

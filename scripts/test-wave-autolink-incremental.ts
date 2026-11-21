@@ -79,3 +79,11 @@ assert.ok(hrefs(phoneOnly,0).includes("tel:8(800)5553535")||
  "Legitimate formatted phone still gets a callable link");
 
 console.log("Incremental auto-links preserve numeric emails and reject false phones in large notes");
+
+const tooLongEmail="a".repeat(255)+"@example.org";
+let long=create([tooLongEmail]);
+long=long.apply(long.tr.insertText("!",long.doc.content.size-1));
+assert.deepEqual(hrefs(long,0),[],"Invalid long emails may not become outbound links");
+let tooLongPhone=create(["Call "+"1234567890123456789012345"]);
+tooLongPhone=tooLongPhone.apply(tooLongPhone.tr.insertText(".",tooLongPhone.doc.content.size-1));
+assert.deepEqual(hrefs(tooLongPhone,0),[],"Invalid long phone numbers may not become outbound links");

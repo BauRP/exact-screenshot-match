@@ -2,7 +2,7 @@ import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection} from "@tiptap/pm/state";
 import {topLevelPageRanges} from "../src/lib/wave-page-actions";
-import {moveWaveBlocksToPage} from "../src/lib/wave-block-motion";
+import {moveWaveBlocksToPage,moveWaveBlocksToPageEdge} from "../src/lib/wave-block-motion";
 import {readFileSync} from "node:fs";
 const schema=new Schema({nodes:{
  doc:{content:"block+"},
@@ -46,3 +46,27 @@ const ui=readFileSync("src/routes/editor.$id.tsx","utf8");
 assert.ok(ui.includes('aria-label="Номер страницы назначения блока"'));
 assert.ok(ui.includes("moveWaveBlocksToPage(editor,targetBlockPageNumber)"));
 console.log("Direct block transfer keeps page dividers, inline content and image references");
+
+const edgeDoc=schema.nodes.doc.create(null,[
+ p("alpha"),schema.nodes.waveImage.create({imageId:"photo-safe"}),
+ p("beta"),mark("page two"),p("gamma"),p("delta")
+]);
+let edgeState=EditorState.create({schema,doc:edgeDoc}),edgeWrites=0;
+const edgeEditor={isEditable:true,isDestroyed:false,get state(){return edgeState;},
+ view:{dispatch(tr:any){edgeWrites++;edgeState=edgeState.apply(tr);}}} as any;
+edgeState=edgeState.apply(edgeState.tr.setSelection(TextSelection.create(edgeState.doc,2)));
+assert.equal(moveWaveBlocksToPageEdge(edgeEditor,"end"),true);
+assert.deepEqual([edgeState.doc.child(0).type.name,edgeState.doc.child(1).textContent],
+ ["waveImage","beta"]);
+assert.equal(edgeState.doc.child(2).textContent,"alpha");
+assert.equal(edgeState.selection.$from.parent.textContent,"alpha");
+assert.equal(edgeState.doc.child(3).type.name,"wavePageBreak");
+assert.equal(moveWaveBlocksToPageEdge(edgeEditor,"end"),false);
+assert.equal(moveWaveBlocksToPageEdge(edgeEditor,"start"),true);
+assert.equal(edgeState.doc.child(0).textContent,"alpha");
+assert.equal(edgeState.doc.child(1).attrs.imageId,"photo-safe");
+assert.equal(topLevelPageRanges(edgeState.doc).length,2);
+assert.equal(edgeState.doc.check(),undefined);
+assert.equal(edgeWrites,2);
+assert.ok(ui.includes('moveWaveBlocksToPageEdge(editor,"start")'));
+assert.ok(ui.includes('moveWaveBlocksToPageEdge(editor,"end")'));

@@ -72,7 +72,7 @@ import { WaveDrawing } from "@/components/editor/WaveDrawing";
 import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection,setWaveTextDirection} from "@/lib/wave-text-direction";
 import {collectNoteOutline,filterNoteOutline,type OutlineFilter,notePagePositions,noteCurrentPage,renameCurrentPage,pageDisplayNames} from "@/lib/note-outline";
-import {moveSelectedWaveBlock,moveWaveBlocksToAdjacentPage,moveWaveBlocksToPage,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
+import {moveSelectedWaveBlock,moveWaveBlocksToAdjacentPage,moveWaveBlocksToPage,moveWaveBlocksToPageEdge,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
 import {duplicateCurrentPage,moveCurrentPage,moveCurrentPageToEdge,moveCurrentPageToIndex,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithPrevious,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,splitPageAtCaret} from "@/lib/wave-page-actions";
 import {revealOutlinePosition} from "@/lib/wave-outline-navigation";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
@@ -465,7 +465,7 @@ function EditorPage() {
     requestAnimationFrame(()=>editor.view.dom.querySelector(".wave-find-current")?.scrollIntoView({block:"nearest"}));
   };
 
-  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator"|"bullets"|"numbered"|"heading"|"heading1"|"heading3"|"paragraph"|"checklist"|"checklist3"|"checklist5"|"checklist10"|"page"|"gallery"|"camera"|"drawing",callout:CalloutKind="important")=>{
+  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator"|"bullets"|"numbered"|"heading"|"heading1"|"heading3"|"paragraph"|"code"|"checklist"|"checklist3"|"checklist5"|"checklist10"|"page"|"gallery"|"camera"|"drawing",callout:CalloutKind="important")=>{
     if(!editor)return;
     // Do not consume a slash query if the command cannot apply. In
     // particular the Tape command needs a real text selection.
@@ -487,6 +487,7 @@ function EditorPage() {
     if(kind==="heading1"){chain.setHeading({level:1}).run();return;}
     if(kind==="heading3"){chain.setHeading({level:3}).run();return;}
     if(kind==="paragraph"){chain.setParagraph().run();return;}
+    if(kind==="code"){chain.toggleCodeBlock().run();return;}
     if(kind==="checklist"){chain.insertContent({type:"waveChecklistItem",attrs:{shape:checkShape,done:false},content:[{type:"text",text:" "}]}).run();return;}
     if(kind==="checklist3"||kind==="checklist5"||kind==="checklist10"){
       const count=kind==="checklist3"?3:kind==="checklist5"?5:10;
@@ -521,6 +522,7 @@ function EditorPage() {
     {id:"heading1",label:"Заголовок 1",icon:"H1",keywords:["главный","h1"]},
     {id:"heading3",label:"Заголовок 3",icon:"H3",keywords:["мелкий","h3"]},
     {id:"paragraph",label:"Обычный текст",icon:"¶",keywords:["абзац","paragraph","сбросить стиль"]},
+    {id:"code",label:"Блок кода",icon:"</>",keywords:["код","программа","code","моноширинный"]},
     {id:"callout",label:"Важно",icon:"!"},
     {id:"tip",label:"Совет",icon:"✦"},
     {id:"warning",label:"Предупреждение",icon:"⚠"},
@@ -1406,6 +1408,16 @@ function EditorPage() {
             title="Переместить блок или выделенную группу вверх" onClick={()=>moveSelectedWaveBlock(editor,"up")}>↑</button>
           <button type="button" aria-label="Опустить блок или группу" className="rounded-md border px-2 py-1 text-xs"
             title="Переместить блок или выделенную группу вниз" onClick={()=>moveSelectedWaveBlock(editor,"down")}>↓</button>
+          <button type="button" aria-label="Переместить выбранный блок или группу в начало страницы"
+            title="Переместить блоки в начало текущей страницы, сохранив текст и вложения"
+            onMouseDown={event=>event.preventDefault()}
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!moveWaveBlocksToPageEdge(editor,"start"))toast("Блок уже в начале страницы или выделение пересекает страницы");}}>Блок ⇤</button>
+          <button type="button" aria-label="Переместить выбранный блок или группу в конец страницы"
+            title="Переместить блоки в конец текущей страницы, сохранив текст и вложения"
+            onMouseDown={event=>event.preventDefault()}
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!moveWaveBlocksToPageEdge(editor,"end"))toast("Блок уже в конце страницы или выделение пересекает страницы");}}>Блок ⇥</button>
           <button type="button" aria-label="Увеличить отступ пункта нумерованного или маркированного списка"
             title="Создать вложенный уровень списка, сохранив нумерацию"
             onMouseDown={event=>event.preventDefault()}

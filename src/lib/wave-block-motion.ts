@@ -414,3 +414,44 @@ export function moveWaveBlocksToPage(editor:Editor,targetPage:number):boolean{
  view.dispatch(tr.scrollIntoView());
  return true;
 }
+
+/** Move a whole selected block or contiguous group directly to the start/end
+ * of its CURRENT logical page. Never cross page dividers, split rich nodes or
+ * rebuild attachment references. One document transaction = one Undo. */
+export function moveWaveBlocksToPageEdge(editor:Editor,edge:"start"|"end"):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const {state,view}=editor,{doc}=state;
+ const selected=selectedWaveSiblingRange(editor);
+ let from:number,to:number;
+ if(selected&&selected.depth===0&&selected.end-selected.start>1){
+  from=selected.from;to=selected.to;
+ }else{
+  let pos=selectedWaveBlockPos(editor);
+  if(pos===undefined)return false;
+  let resolved=doc.resolve(pos);
+  if(resolved.depth!==0){
+   const {$from,$to}=state.selection;
+   if($from.depth<1||$to.depth<1||$from.node(1)!==$to.node(1))return false;
+   pos=$from.before(1);
+   resolved=doc.resolve(pos);
+  }
+  if(resolved.depth!==0||resolved.index()>=doc.childCount)return false;
+  from=pos;to=pos+doc.child(resolved.index()).nodeSize;
+ }
+ if(from>=to)return false;
+ const fragment=doc.content.cut(from,to);
+ if(!fragment.childCount||fragment.content.some(node=>node.type.name==="wavePageBreak"))return false;
+ const page=topLevelPageRanges(doc).find(item=>from>=item.bodyStart&&from<item.end);
+ if(!page||to>page.end)return false;
+ if((edge==="start"&&from===page.bodyStart)||(edge==="end"&&to===page.end))return false;
+ const destination=edge==="start"?page.bodyStart:page.end;
+ let tr=state.tr.delete(from,to);
+ const at=tr.mapping.map(destination,edge==="start"?1:-1);
+ const $target=tr.doc.resolve(at);
+ if($target.parent!==tr.doc||!tr.doc.canReplace($target.index(),$target.index(),fragment))return false;
+ tr=tr.insert(at,fragment);
+ if(!tr.doc.type.validContent(tr.doc.content))return false;
+ retainMovedSelection(tr,state.selection,from,to,at);
+ view.dispatch(tr.scrollIntoView());
+ return true;
+}

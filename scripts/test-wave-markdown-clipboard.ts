@@ -81,3 +81,12 @@ assert.ok(editor.includes("structuredMarkdownClipboardHtml(plain)||structuredPla
 const rtlTasks=structuredMarkdownClipboardHtml("- [x] **تم**\n- [ ] *שלום*");
 assert.ok(rtlTasks.includes('dir="rtl"'));
 assert.ok(rtlTasks.includes("<strong>تم</strong>"));
+
+assert.equal(structuredMarkdownClipboardHtml("- [x] **Завершено**"),
+ '<div data-type="wave-check-item" data-done="true" data-shape="square"><strong>Завершено</strong></div>');
+assert.equal(structuredMarkdownClipboardHtml("- [ ] مرحبا"),
+ '<div data-type="wave-check-item" data-done="false" data-shape="square" dir="rtl">مرحبا</div>');
+assert.equal(structuredMarkdownClipboardHtml("> *Одна цитата*"),
+ "<blockquote><p><em>Одна цитата</em></p></blockquote>");
+assert.equal(structuredMarkdownClipboardHtml("Обычная строка"),"");
+assert.equal(structuredMarkdownClipboardHtml("- [x]     "),"");

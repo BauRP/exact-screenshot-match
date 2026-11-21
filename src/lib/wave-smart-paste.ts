@@ -284,7 +284,23 @@ export function safeMarkdownInline(text:string):string{
 export function structuredMarkdownClipboardHtml(input:string):string{
  if(typeof input!=="string"||input.length>20_000)return "";
  const lines=input.replace(/\r\n?/g,"\n").split("\n");
- if(lines.length<2||lines.length>120)return "";
+ if(lines.length>120)return "";
+ // An explicit single checkbox or quote is unambiguous Markdown too.
+ // Ordinary one-line paragraphs and headings keep their old plain-paste path.
+ if(lines.length===1){
+  const line=lines[0];
+  const task=/^\s{0,3}[-*•]\s+\[([ xX])\]\s+(.+)$/.exec(line);
+  if(task&&task[2].trim())
+   return '<div data-type="wave-check-item" data-done="'+
+    (task[1].toLowerCase()==="x"?"true":"false")+
+    '" data-shape="square"'+clipboardRtlAttribute(task[2])+'>'+safeMarkdownInline(task[2])+"</div>";
+  const quote=/^\s{0,3}>\s+(.+)$/.exec(line);
+  if(quote&&quote[1].trim())
+   return "<blockquote><p"+clipboardRtlAttribute(quote[1])+">"+
+    safeMarkdownInline(quote[1])+"</p></blockquote>";
+  return "";
+ }
+ if(lines.length<2)return "";
  const safe=(s:string)=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;")
   .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
  const heading=/^\s{0,3}(#{1,4})\s+(.+?)\s*$/;
