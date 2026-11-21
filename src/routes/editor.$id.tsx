@@ -72,7 +72,7 @@ import { WaveDrawing } from "@/components/editor/WaveDrawing";
 import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection,setWaveTextDirection} from "@/lib/wave-text-direction";
 import {collectNoteOutline,filterNoteOutline,type OutlineFilter,notePagePositions,noteCurrentPage,renameCurrentPage,pageDisplayNames} from "@/lib/note-outline";
-import {moveSelectedWaveBlock,moveWaveBlocksToAdjacentPage,moveWaveBlocksToPage,moveWaveBlocksToPageEdge,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection} from "@/lib/wave-block-motion";
+import {moveSelectedWaveBlock,moveWaveBlocksToAdjacentPage,moveWaveBlocksToPage,moveWaveBlocksToPageEdge,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection,moveWaveBlocksToSectionEdge} from "@/lib/wave-block-motion";
 import {duplicateCurrentPage,moveCurrentPage,moveCurrentPageToEdge,moveCurrentPageToIndex,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithPrevious,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,splitPageAtCaret} from "@/lib/wave-page-actions";
 import {revealOutlinePosition} from "@/lib/wave-outline-navigation";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
@@ -96,7 +96,7 @@ import { readEditorPreferences,saveEditorPreferences,toolbarPreset,EDITOR_PREFS_
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
 import {setSelectedChecklistShape,setSelectedTasksDone,continueSelectedChecklistItem,insertUncheckedChecklistBefore,insertUncheckedChecklistAfter,insertUncheckedChecklistRowsAfter,insertUncheckedChecklistRowsBefore,convertSelectedChecklistBlocks,selectedSectionTaskCounts,setSelectedSectionTasksDone,currentPageTaskCounts,setCurrentPageTasksDone} from "@/lib/wave-checklist-actions";
-import {setAllFoldSections,setFoldSectionsToDepth,setCurrentPageFoldSections,countFoldSections} from "@/lib/wave-section-batch";
+import {setAllFoldSections,setFoldSectionsToDepth,setCurrentPageFoldSections,setSelectedFoldSubsections,countFoldSections} from "@/lib/wave-section-batch";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
 import {openExternalUrl,normalizedSafeNoteLink} from "@/lib/external-links";
@@ -1469,6 +1469,14 @@ function EditorPage() {
             <option value="warning">Предупреждение</option>
             <option value="info">Информация</option>
           </select>
+          <button type="button" aria-label="Переместить выбранные блоки в начало текущего раздела"
+            onMouseDown={event=>event.preventDefault()} title="Без изменения соседних разделов"
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!moveWaveBlocksToSectionEdge(editor,"start"))toast("Выберите блоки внутри раздела");}}>Блок ⇤ раздел</button>
+          <button type="button" aria-label="Переместить выбранные блоки в конец текущего раздела"
+            onMouseDown={event=>event.preventDefault()} title="Без изменения соседних разделов"
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!moveWaveBlocksToSectionEdge(editor,"end"))toast("Выберите блоки внутри раздела");}}>Блок ⇥ раздел</button>
           <button type="button" aria-label="Переместить раздел вверх" title="Переместить весь раздел вверх" className="rounded-md border px-2 py-1 text-xs" onClick={()=>moveContainingWaveSection(editor,"up")}>Раздел ↑</button>
           <button type="button" aria-label="Переместить раздел вниз" title="Переместить весь раздел вниз" className="rounded-md border px-2 py-1 text-xs" onClick={()=>moveContainingWaveSection(editor,"down")}>Раздел ↓</button>
           <button type="button" aria-label="Дублировать раздел" title="Дублировать раздел со всеми блоками" className="rounded-md border px-2 py-1 text-xs" onClick={()=>duplicateContainingWaveSection(editor)}>Раздел ⧉</button>
@@ -1479,7 +1487,7 @@ function EditorPage() {
              title="Выбрать кнопки для работы с текстом или медиа без изменения содержимого"
              onChange={event=>{
                const mode=event.target.value;
-               if(mode==="writing"||mode==="media"||mode==="all"){
+               if(mode==="writing"||mode==="media"||mode==="tasks"||mode==="all"){
                  saveEditorPreferences(toolbarPreset(mode));
                  toast.success("Панель инструментов обновлена");
                }
@@ -1488,6 +1496,7 @@ function EditorPage() {
              <option value="" disabled>Панель…</option>
              <option value="writing">Текст</option>
              <option value="media">Фото и звук</option>
+             <option value="tasks">Для задач</option>
              <option value="all">Все инструменты</option>
            </select>
             </div>
@@ -1506,6 +1515,14 @@ function EditorPage() {
               className="rounded-md border px-2 py-1.5 text-xs">Уровень 2</button>
             <button type="button" onClick={()=>setFoldSectionsToDepth(editor,3)}
               className="rounded-md border px-2 py-1.5 text-xs">Уровень 3</button>
+            <button type="button" onMouseDown={event=>event.preventDefault()}
+              aria-label="Раскрыть вложенные подразделы выбранного раздела"
+              onClick={()=>{if(!setSelectedFoldSubsections(editor,false))toast("Нет свёрнутых подразделов");}}
+              className="rounded-md border px-2 py-1.5 text-xs">Раскрыть подразделы</button>
+            <button type="button" onMouseDown={event=>event.preventDefault()}
+              aria-label="Свернуть вложенные подразделы выбранного раздела"
+              onClick={()=>{if(!setSelectedFoldSubsections(editor,true))toast("Нет раскрытых подразделов");}}
+              className="rounded-md border px-2 py-1.5 text-xs">Свернуть подразделы</button>
             <button type="button" onMouseDown={event=>event.preventDefault()}
               onClick={()=>setCurrentPageFoldSections(editor,false)}
               className="rounded-md border px-2 py-1.5 text-xs">Раскрыть страницу</button>

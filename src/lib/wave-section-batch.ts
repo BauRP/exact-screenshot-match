@@ -66,3 +66,28 @@ export function setFoldSectionsToDepth(editor:Editor,visibleDepth:number):number
  if(changed)editor.view.dispatch(tr.scrollIntoView());
  return changed;
 }
+
+/** Update only nested descendants of the innermost selected section.
+ * Leave the selected section itself and other branches unchanged. One Undo. */
+export function setSelectedFoldSubsections(editor:Editor,collapsed:boolean):number{
+ if(!editor.isEditable||editor.isDestroyed)return 0;
+ const {state,view}=editor,{selection}=state,{$from,$to}=selection;
+ for(let depth=$from.depth;depth>0;depth--){
+  const section=$from.node(depth);
+  if(section.type.name!=="waveFold")continue;
+  if(!selection.empty&&($to.depth<depth||$to.node(depth)!==section))return 0;
+  const start=$from.before(depth)+1;
+  const changes:{pos:number;attrs:Record<string,unknown>}[]=[];
+  section.descendants((node,offset)=>{
+   if(node.type.name==="waveFold"&&node.attrs.collapsed!==collapsed)
+    changes.push({pos:start+offset,attrs:{...node.attrs,collapsed}});
+  });
+  if(!changes.length)return 0;
+  let tr=state.tr;
+  for(const item of changes)tr=tr.setNodeMarkup(item.pos,undefined,item.attrs);
+  if(!tr.doc.type.validContent(tr.doc.content))return 0;
+  view.dispatch(tr.scrollIntoView());
+  return changes.length;
+ }
+ return 0;
+}

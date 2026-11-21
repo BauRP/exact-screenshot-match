@@ -455,3 +455,40 @@ export function moveWaveBlocksToPageEdge(editor:Editor,edge:"start"|"end"):boole
  view.dispatch(tr.scrollIntoView());
  return true;
 }
+
+/** Move selected blocks to the first/last sibling position of their current
+ * folded section, preserving attachment IDs, formatting and one-step Undo. */
+export function moveWaveBlocksToSectionEdge(editor:Editor,edge:"start"|"end"):boolean{
+ if(!editor.isEditable||editor.isDestroyed)return false;
+ const {state,view}=editor,{doc,selection}=state;
+ const group=selectedWaveSiblingRange(editor);
+ let from:number,to:number,depth:number;
+ if(group&&group.depth>0&&selection.$from.node(group.depth).type.name==="waveFold"
+     &&group.end-group.start>1){
+  from=group.from;to=group.to;depth=group.depth;
+ }else{
+  const pos=selectedWaveBlockPos(editor);
+  if(pos===undefined)return false;
+  const $pos=doc.resolve(pos);
+  if($pos.parent.type.name!=="waveFold"||$pos.index()>=$pos.parent.childCount)return false;
+  from=pos;to=pos+$pos.parent.child($pos.index()).nodeSize;depth=$pos.depth;
+ }
+ if(from>=to)return false;
+ const section=selection.$from.node(depth);
+ if(section.type.name!=="waveFold")return false;
+ const start=selection.$from.start(depth),end=selection.$from.end(depth);
+ if(from<start||to>end)return false;
+ if((edge==="start"&&from===start)||(edge==="end"&&to===end))return false;
+ const moved=doc.content.cut(from,to);
+ if(!moved.childCount||moved.content.some(node=>node.type.name==="wavePageBreak"))return false;
+ let tr=state.tr.delete(from,to);
+ const at=tr.mapping.map(edge==="start"?start:end,edge==="start"?1:-1);
+ const $target=tr.doc.resolve(at);
+ if($target.parent.type.name!=="waveFold"||
+    !$target.parent.canReplace($target.index(),$target.index(),moved))return false;
+ tr=tr.insert(at,moved);
+ if(!tr.doc.type.validContent(tr.doc.content))return false;
+ retainMovedSelection(tr,selection,from,to,at);
+ view.dispatch(tr.scrollIntoView());
+ return true;
+}

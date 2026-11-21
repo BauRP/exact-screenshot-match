@@ -435,11 +435,11 @@ function SettingsPage() {
           <div className="p-3">
             <p className="text-sm font-semibold">Готовые наборы панели</p>
             <div className="mt-2 flex flex-wrap gap-2" aria-label="Наборы панели инструментов">
-              {(["writing","media","all"] as const).map(mode=>
+              {(["writing","media","tasks","all"] as const).map(mode=>
                 <button type="button" key={mode}
                   onClick={()=>changePref(toolbarPreset(mode))}
                   className="rounded-lg border border-border bg-secondary/50 px-3 py-2 text-xs">
-                  {mode==="writing"?"Для текста":mode==="media"?"Фото и звук":"Все инструменты"}
+                  {mode==="writing"?"Для текста":mode==="media"?"Фото и звук":mode==="tasks"?"Для задач":"Все инструменты"}
                 </button>)}
             </div>
             <p className="mt-4 text-sm font-semibold">Кнопки панели редактора</p>

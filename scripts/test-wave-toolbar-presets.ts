@@ -13,3 +13,15 @@ const settings=readFileSync("src/routes/settings.tsx","utf8");
 assert.ok(settings.includes('changePref(toolbarPreset(mode))'));
 assert.ok(settings.includes("Фото и звук"));
 console.log("Writing/media/all toolbar presets retain a full safe permutation");
+
+const tasks=toolbarPreset("tasks");
+assert.equal(tasks.toolbarOrder[0],"checklist");
+for(const hidden of ["audio","drawing","camera","gallery","paperMood","paperRule"] as const)
+ assert.ok(tasks.hiddenToolbar.includes(hidden));
+for(const shown of ["checklist","insert","search","formatting"] as const)
+ assert.ok(!tasks.hiddenToolbar.includes(shown));
+assert.equal(new Set(tasks.toolbarOrder).size,TOOLBAR_TOOLS.length);
+assert.ok(settings.includes('"tasks"'));
+const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
+assert.ok(editor.includes('mode==="tasks"'));
+assert.ok(editor.includes('<option value="tasks">Для задач</option>'));

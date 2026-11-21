@@ -94,11 +94,15 @@ export function saveEditorPreferences(patch:Partial<EditorPreferences>):EditorPr
 
 /** One-tap professional toolbar layouts, stored by the existing preferences
  * system. They change controls only, not note content or spelling settings. */
-export function toolbarPreset(mode:"writing"|"media"|"all"):Pick<EditorPreferences,"hiddenToolbar"|"toolbarOrder">{
+export function toolbarPreset(mode:"writing"|"media"|"tasks"|"all"):Pick<EditorPreferences,"hiddenToolbar"|"toolbarOrder">{
  const all=TOOLBAR_TOOLS.map(tool=>tool.id);
  if(mode==="writing")return {
   hiddenToolbar:["audio","drawing","camera","gallery"],
   toolbarOrder:validToolbarOrder(["search","outline","checklist","insert","audio","drawing","camera","gallery"]),
+ };
+ if(mode==="tasks")return {
+  hiddenToolbar:["audio","drawing","camera","gallery","paperMood","paperRule"],
+  toolbarOrder:validToolbarOrder(["checklist","insert","search","outline","formatting","direction","pin"]),
  };
  if(mode==="media")return {
   hiddenToolbar:[],

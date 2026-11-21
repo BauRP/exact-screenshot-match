@@ -1,7 +1,7 @@
 import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection,NodeSelection} from "@tiptap/pm/state";
-import {moveSelectedWaveBlock,nestSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection,containingWaveSectionPos} from "../src/lib/wave-block-motion";
+import {moveSelectedWaveBlock,nestSelectedWaveBlock,liftWaveBlock,selectedWaveBlockPos,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection,containingWaveSectionPos,moveWaveBlocksToSectionEdge} from "../src/lib/wave-block-motion";
 const schema=new Schema({
  nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},
  waveFold:{group:"block",content:"block+",attrs:{title:{default:"Section"},collapsed:{default:false}}},
@@ -182,3 +182,38 @@ assert.equal(crossSection.doc.child(1).attrs.title,"First");
 assert.equal(crossSection.doc.child(1).textContent,crossSection.doc.child(0).textContent);
 assert.equal(crossSection.doc.check(),undefined);
 console.log("Actual ProseMirror move, nesting, outdent and duplicate transactions passed");
+
+const insideDoc=schema.nodes.doc.create(null,[
+ schema.nodes.waveFold.create({title:"Inside"},[p("alpha"),p("beta"),p("gamma")]),
+ schema.nodes.waveFold.create({title:"Outside"},[p("outside")])
+]);
+let insideState=EditorState.create({schema,doc:insideDoc}),insideWrites=0;
+const insideEditor={isEditable:true,isDestroyed:false,get state(){return insideState;},
+ view:{dispatch(tr:any){insideWrites++;insideState=insideState.apply(tr);}}} as any;
+const insidePos=(label:string)=>{
+ let at:number|undefined;
+ insideState.doc.descendants((node,pos)=>{if(node.type.name==="paragraph"&&node.textContent===label)at=pos+1;});
+ assert.notEqual(at,undefined);return at!;
+};
+const selectInside=(label:string,through?:string)=>{
+ insideState=insideState.apply(insideState.tr.setSelection(TextSelection.create(
+  insideState.doc,insidePos(label),through?insidePos(through)+2:insidePos(label))));
+};
+const insideChildren=()=>insideState.doc.child(0).content.content.map((n:any)=>n.textContent);
+selectInside("beta");
+assert.equal(moveWaveBlocksToSectionEdge(insideEditor,"start"),true);
+assert.deepEqual(insideChildren(),["beta","alpha","gamma"]);
+assert.equal(insideState.selection.$from.parent.textContent,"beta");
+assert.equal(moveWaveBlocksToSectionEdge(insideEditor,"start"),false);
+assert.equal(moveWaveBlocksToSectionEdge(insideEditor,"end"),true);
+assert.deepEqual(insideChildren(),["alpha","gamma","beta"]);
+selectInside("gamma","beta");
+assert.equal(moveWaveBlocksToSectionEdge(insideEditor,"start"),true);
+assert.deepEqual(insideChildren(),["gamma","beta","alpha"]);
+const snap=JSON.stringify(insideState.doc.toJSON()),writes=insideWrites;
+selectInside("gamma","outside");
+assert.equal(moveWaveBlocksToSectionEdge(insideEditor,"end"),false);
+assert.equal(insideWrites,writes);
+assert.equal(JSON.stringify(insideState.doc.toJSON()),snap);
+assert.equal(insideState.doc.child(1).textContent,"outside");
+assert.equal(insideState.doc.check(),undefined);
