@@ -44,9 +44,14 @@ function normalizeOutlineTerm(value:string):string{
 }
 export function filterNoteOutline(items:readonly OutlineItem[],query:string,filter:OutlineFilter="all"):OutlineItem[]{
  const needle=normalizeOutlineTerm(query).slice(0,100);
- return items.filter(item=>
-  (filter==="all"||item.type===filter)&&
-  (!needle||normalizeOutlineTerm(item.title).includes(needle)));
+ const words=needle?needle.split(" "):[];
+ return items.filter(item=>{
+  if(filter!=="all"&&item.type!==filter)return false;
+  const title=normalizeOutlineTerm(item.title);
+  // Search can span distant words in a heading ("Проект 2026 Android")
+  // and can be entered in either order. Never inspect the hidden Tape text.
+  return words.every(word=>title.includes(word));
+ });
 }
 
 /** Explicit page boundaries are ProseMirror positions, never guessed pixels. */

@@ -465,7 +465,7 @@ function EditorPage() {
     requestAnimationFrame(()=>editor.view.dom.querySelector(".wave-find-current")?.scrollIntoView({block:"nearest"}));
   };
 
-  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator"|"bullets"|"numbered"|"heading"|"heading1"|"heading3"|"paragraph"|"checklist"|"checklist3"|"checklist5"|"page"|"gallery"|"camera"|"drawing",callout:CalloutKind="important")=>{
+  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator"|"bullets"|"numbered"|"heading"|"heading1"|"heading3"|"paragraph"|"checklist"|"checklist3"|"checklist5"|"checklist10"|"page"|"gallery"|"camera"|"drawing",callout:CalloutKind="important")=>{
     if(!editor)return;
     // Do not consume a slash query if the command cannot apply. In
     // particular the Tape command needs a real text selection.
@@ -488,8 +488,8 @@ function EditorPage() {
     if(kind==="heading3"){chain.setHeading({level:3}).run();return;}
     if(kind==="paragraph"){chain.setParagraph().run();return;}
     if(kind==="checklist"){chain.insertContent({type:"waveChecklistItem",attrs:{shape:checkShape,done:false},content:[{type:"text",text:" "}]}).run();return;}
-    if(kind==="checklist3"||kind==="checklist5"){
-      const count=kind==="checklist3"?3:5;
+    if(kind==="checklist3"||kind==="checklist5"||kind==="checklist10"){
+      const count=kind==="checklist3"?3:kind==="checklist5"?5:10;
       chain.insertContent(Array.from({length:count},()=>({
         type:"waveChecklistItem",attrs:{shape:checkShape,done:false},
         content:[{type:"text",text:" "}]
@@ -514,6 +514,7 @@ function EditorPage() {
     {id:"checklist",label:"Список дел",icon:"☐",keywords:["задача","чеклист","галочка","task"]},
     {id:"checklist3",label:"Три задачи",icon:"☷",keywords:["3","три пункта","чеклист 3"]},
     {id:"checklist5",label:"Пять задач",icon:"☷",keywords:["5","пять пунктов","чеклист 5"]},
+    {id:"checklist10",label:"Десять задач",icon:"☷",keywords:["10","десять пунктов","чеклист 10"]},
     {id:"bullets",label:"Маркированный список",icon:"•"},
     {id:"numbered",label:"Нумерованный список",icon:"1."},
     {id:"heading",label:"Заголовок 2",icon:"H2",keywords:["подзаголовок","h2"]},
@@ -1248,6 +1249,16 @@ function EditorPage() {
               const changed=setWaveTextDirection(editor,"auto","document");
               if(changed)toast.success("Направление обновлено в "+changed+" блоках");
             }}>Все RTL</button>
+          <button style={{order:10+prefs.toolbarOrder.indexOf("direction")}} type="button"
+            aria-label="Автоматическое направление текста текущей страницы"
+            title="Определить направление только на странице с курсором"
+            onMouseDown={event=>event.preventDefault()}
+            className="grid h-8 shrink-0 place-items-center rounded-full px-2 text-xs font-semibold hover:bg-secondary"
+            onClick={()=>{if(!editor)return;
+              const count=setWaveTextDirection(editor,"auto","page");
+              if(count)toast.success("Направление на странице обновлено: "+count);
+              else toast("Выберите текст на одной странице");
+            }}>RTL страница</button>
           <button style={{order:10+prefs.toolbarOrder.indexOf("direction")}} type="button"
             aria-label="Автоматическое направление текста внутри раздела"
             title="Определить направление только внутри текущего вложенного раздела"

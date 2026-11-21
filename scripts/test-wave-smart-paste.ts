@@ -1,5 +1,5 @@
 import {strict as assert} from "node:assert";import {readFileSync} from "node:fs";
-import {safeClipboardColor} from "../src/lib/wave-smart-paste";
+import {safeClipboardColor,safeMarkdownInline} from "../src/lib/wave-smart-paste";
 const paste=readFileSync("src/lib/wave-smart-paste.ts","utf8");
 const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
 for(const name of ["safeBrowserClipboardHtml","SCRIPT","IFRAME","PICTURE","http:","https:","MAX_PASTE_HTML"])assert.ok(paste.includes(name),name);
@@ -45,3 +45,14 @@ assert.ok(paste.includes("if(highlight)out.style.backgroundColor=highlight"));
 assert.ok(paste.includes('if(href)out.setAttribute("href",href)'));
 assert.equal(paste.split('getAttribute("dir")?.trim().toLowerCase()==="rtl"').length-1,2,
  "Copied rich text and checklist rows must preserve case-insensitive RTL");
+
+assert.equal(safeMarkdownInline("[Почта](mailto:notes@example.kz)"),
+ '<a href="mailto:notes@example.kz">Почта</a>');
+assert.equal(safeMarkdownInline("[Телефон](tel:+77001234567)"),
+ '<a href="tel:+77001234567">Телефон</a>');
+assert.equal(safeMarkdownInline("[Сайт](https://example.kz/path?a=1&b=2)"),
+ '<a href="https://example.kz/path?a=1&amp;b=2">Сайт</a>');
+assert.equal(safeMarkdownInline("[Нельзя](mailto:broken-address)"),
+ "[Нельзя](mailto:broken-address)");
+assert.ok(!safeMarkdownInline("[Нельзя](javascript:alert(1))").includes("<a "));
+assert.ok(!safeMarkdownInline("[Нельзя](https://user:pass@example.kz)").includes("<a "));

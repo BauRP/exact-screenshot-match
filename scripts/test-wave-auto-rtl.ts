@@ -204,3 +204,30 @@ sectionState=sectionState.apply(sectionState.tr.setSelection(TextSelection.creat
 assert.equal(setWaveTextDirection(sectionEditor,"auto","section"),0);
 assert.equal(sectionEdits,1);
 assert.ok(editor.includes('setWaveTextDirection(editor,"auto","section")'));
+
+const pageSchema=new Schema({nodes:{
+ doc:{content:"block+"},
+ paragraph:{group:"block",content:"text*",attrs:{textDirection:{default:"ltr"}}},
+ wavePageBreak:{group:"block",atom:true},
+ text:{group:"inline"}
+},marks:{}});
+const pg1=pageSchema.nodes.paragraph.create(null,pageSchema.text("مرحبا в первой"));
+const pg2=pageSchema.nodes.paragraph.create(null,pageSchema.text("שלום בשנייה"));
+const pg3=pageSchema.nodes.paragraph.create(null,pageSchema.text("English in second"));
+let scopeState=EditorState.create({schema:pageSchema,doc:pageSchema.nodes.doc.create(null,[
+ pg1,pageSchema.nodes.wavePageBreak.create(),pg2,pg3
+])});
+let scopeWrites=0;
+const pageEditor={isEditable:true,isDestroyed:false,get state(){return scopeState;},
+ view:{dispatch(tr:any){scopeWrites++;scopeState=scopeState.apply(tr);}}} as any;
+scopeState=scopeState.apply(scopeState.tr.setSelection(TextSelection.create(scopeState.doc,pg1.nodeSize+3)));
+assert.equal(setWaveTextDirection(pageEditor,"auto","page"),1);
+assert.equal(scopeState.doc.child(0).attrs.textDirection,"ltr","First page stays unchanged");
+assert.equal(scopeState.doc.child(2).attrs.textDirection,"rtl","Second page uses Hebrew direction");
+assert.equal(scopeState.doc.child(3).attrs.textDirection,"ltr");
+assert.equal(scopeState.doc.textContent,"مرحبا в первойשלום בשנייהEnglish in second");
+assert.equal(scopeWrites,1);
+assert.equal(setWaveTextDirection(pageEditor,"auto","page"),0);
+assert.equal(scopeWrites,1);
+assert.ok(editor.includes('setWaveTextDirection(editor,"auto","page")'),
+ "RTL current page must be accessible in the existing editor");

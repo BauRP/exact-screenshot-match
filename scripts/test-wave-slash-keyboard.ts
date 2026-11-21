@@ -63,3 +63,8 @@ assert.ok(editor.includes("setSlashText(currentSelection.empty?slashCommandAtCar
  "Moving the cursor must close the stale slash palette");
 assert.ok(editor.includes("setSlashText(currentEditor.state.selection.empty?"),
  "Text selections must never leave an active insertion command");
+
+assert.ok(editor.includes('id:"checklist10"'),"Menu offers ten checkboxes at once");
+assert.ok(editor.includes('kind==="checklist10"'),"Ten-task command is dispatched");
+assert.ok(editor.includes('kind==="checklist5"?5:10'),
+ "Bounded ten-row insertion reuses the same undoable editor chain");

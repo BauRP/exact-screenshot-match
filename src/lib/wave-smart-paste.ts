@@ -255,7 +255,7 @@ export function safeMarkdownInline(text:string):string{
  if(typeof text!=="string"||text.length>20_000)return "";
  const escape=(value:string)=>value.replace(/&/g,"&amp;").replace(/</g,"&lt;")
   .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
- const tokens=/\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|\x60([^\x60\n]+)\x60|\*([^*\n]+)\*|_([^_\n]+)_|\[([^\]\n]+)\]\((https?:\/\/[^\s)\n]+)\)/g;
+ const tokens=/\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|\x60([^\x60\n]+)\x60|\*([^*\n]+)\*|_([^_\n]+)_|\[([^\]\n]+)\]\(((?:https?:\/\/|mailto:|tel:)[^\s)\n]+)\)/gi;
  let output="",last=0,match:RegExpExecArray|null;
  while((match=tokens.exec(text))!==null){
   output+=escape(text.slice(last,match.index));
@@ -265,10 +265,11 @@ export function safeMarkdownInline(text:string):string{
   else if(match[5]!==undefined||match[6]!==undefined)output+="<em>"+escape(match[5]??match[6])+"</em>";
   else{
    try{
-    const url=new URL(match[8]);
-    // Invalid clipboard URLs must never crash the editor paste handler.
-    if(["http:","https:"].includes(url.protocol)&&!url.username&&!url.password)
-     output+='<a href="'+escape(url.href)+'">'+escape(match[7])+"</a>";
+    // Plain Markdown links use the same strict allowlist as pasted HTML
+    // and taps: external browser, mail composer or dialler. Credentials,
+    // unsafe schemes and malformed addresses stay as literal text.
+    const safeLink=normalizedSafeNoteLink(match[8]);
+    if(safeLink)output+='<a href="'+escape(safeLink)+'">'+escape(match[7])+"</a>";
     else output+=escape(match[0]);
    }catch{output+=escape(match[0]);}
   }
