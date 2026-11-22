@@ -16,10 +16,10 @@ declare module "@tiptap/core" {
 function ImageView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewProps){
  const [annotating,setAnnotating]=useState(false);
  const [inkMessage,setInkMessage]=useState("");
+ const id=String(node.attrs.imageId||"");
  const currentDescription=safeImageDescription(node.attrs.alt)||"Фото в заметке";
  const [descriptionDraft,setDescriptionDraft]=useState(()=>currentDescription);
  useEffect(()=>setDescriptionDraft(currentDescription),[currentDescription,id]);
- const id=String(node.attrs.imageId||"");
  // Historic notes can contain an out-of-range width; the preview and
  // slider must still stay inside the supported image size.
  const width=Math.max(120,Math.min(720,Number(node.attrs.width)||320));
