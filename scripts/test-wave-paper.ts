@@ -1,8 +1,8 @@
 import {strict as assert} from "node:assert";
 import {readFileSync} from "node:fs";
 import {PAPER_MOODS,PAPER_RULES,paperAppearance,validPaperMood,validPaperRule} from "../src/lib/note-paper";
-assert.equal(PAPER_MOODS.length,5);
-assert.equal(PAPER_RULES.length,4);
+assert.equal(PAPER_MOODS.length,6);
+assert.equal(PAPER_RULES.length,5);
 assert.ok(validPaperMood("mist"));
 assert.ok(!validPaperMood("malicious"));
 assert.ok(validPaperRule("grid"));
@@ -16,3 +16,13 @@ assert.ok(e.includes('setPaperMood("solid")'));
 assert.ok(e.includes("paperAppearance(paperMood,paperRule)"));
 assert.ok(e.includes("style: { background: canvasBg, paperMood, paperRule }"));
 console.log("Separated note background and paper ruling persistence checks passed.");
+
+assert.ok(validPaperMood("lavender"));
+assert.ok(validPaperRule("margin"));
+assert.ok(PAPER_MOODS.some(m=>m.id==="lavender"&&m.background.startsWith("#")));
+assert.ok(PAPER_RULES.some(r=>r.id==="margin"));
+const notebook=paperAppearance("lavender","margin");
+assert.ok(notebook.backgroundImage?.includes("repeating-linear-gradient"),"Ruled lines remain visible");
+assert.ok(notebook.backgroundImage?.includes("216,79,90"),"Red notebook margin is rendered");
+assert.ok(notebook.backgroundImage?.includes("radial-gradient"),"Pastel mood is layered underneath ruling");
+assert.equal(paperAppearance("solid","plain").backgroundImage,undefined);

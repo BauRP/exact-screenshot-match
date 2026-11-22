@@ -69,6 +69,21 @@ export function serializeInk(strokes:InkStroke[]):string{
  if(text.length>120000||parseInk(text).length!==strokes.length)throw Error("Рисунок слишком большой или повреждён");
  return text;
 }
+/** Duplicate the last stroke for both drawings and photo annotations.
+ * Safe no-op at the 120 stroke / 120 KB limits, with independent point
+ * arrays for future erasing and editing. The original ink is never mutated. */
+export function duplicateLastInkStroke(strokes:readonly InkStroke[]):InkStroke[]|null{
+ if(!strokes.length||strokes.length>=120)return null;
+ const original=strokes[strokes.length-1];
+ const xs=original.points.map(p=>p[0]),ys=original.points.map(p=>p[1]);
+ const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
+ const dx=maxX<=988?12:minX>=12?-12:0;
+ const dy=maxY<=988?12:minY>=12?-12:0;
+ const copy:InkStroke={...original,points:original.points.map(([x,y]):InkPoint=>[x+dx,y+dy])};
+ const result=[...strokes,copy];
+ try{serializeInk(result);return result;}catch{return null;}
+}
+
 /** Reversible transformations of vector ink, never touching image files.
  * Fresh coordinate arrays preserve hit-test caching and undo correctness. */
 export type InkTransform="flip-x"|"flip-y"|"rotate-cw"|"rotate-ccw";

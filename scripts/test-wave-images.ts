@@ -1,5 +1,6 @@
 import {strict as assert} from "node:assert";
 import {readFileSync} from "node:fs";
+import {safeImageDescription,MAX_WAVE_IMAGE_DESCRIPTION} from "../src/lib/wave-image-description";
 const files=readFileSync("src/lib/image-files.ts","utf8");
 const node=readFileSync("src/components/editor/WaveImage.tsx","utf8");
 const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
@@ -16,3 +17,12 @@ for(const term of ["latestImages=new Set(state.notes.flatMap(note=>imageIdsInHtm
 for(const term of ["imageBlobFromBytes","rewrittenImages","imageIds = uniqueIds","newImageIds","saveNewImageFile(destinationId","for (const [sourceId,destinationId] of rewrittenImages)"])assert.ok(backup.includes(term),term);
 assert.ok(files.includes("export function imageBlobFromBytes"));
 console.log("Offline photo storage, editor insert, safe copy/exchange and attachment cleanup wiring verified");
+
+assert.equal(safeImageDescription("  Горы\nна закате  "),"Горы на закате");
+assert.equal(safeImageDescription("Фото\u0000\t!"),"Фото !");
+assert.equal(safeImageDescription("A".repeat(500)).length,MAX_WAVE_IMAGE_DESCRIPTION);
+assert.equal(safeImageDescription(null),"");
+assert.ok(node.includes('aria-label="Описание фотографии"'),"Description editor is visible");
+assert.ok(node.includes('maxLength={MAX_WAVE_IMAGE_DESCRIPTION}'),"Description length bounded");
+assert.ok(node.includes('updateAttributes({alt:next})'),"Descriptions persist within the image node");
+assert.ok(node.includes('safeImageDescription(el.getAttribute("data-alt"))'),"Description survives save and reopen");

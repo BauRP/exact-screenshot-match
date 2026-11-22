@@ -6,6 +6,7 @@ import {WaveInkCanvas} from "@/components/editor/WaveInkCanvas";
 import {moveWaveBlock} from "@/lib/wave-block-motion";
 import {imageWidthForDrag} from "@/lib/wave-image-resize";
 import {copyWaveInk,pasteWaveInk} from "@/lib/wave-ink-transfer";
+import {safeImageDescription,MAX_WAVE_IMAGE_DESCRIPTION} from "@/lib/wave-image-description";
 
 declare module "@tiptap/core" {
  interface Commands<ReturnType> {
@@ -15,6 +16,9 @@ declare module "@tiptap/core" {
 function ImageView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewProps){
  const [annotating,setAnnotating]=useState(false);
  const [inkMessage,setInkMessage]=useState("");
+ const currentDescription=safeImageDescription(node.attrs.alt)||"Фото в заметке";
+ const [descriptionDraft,setDescriptionDraft]=useState(()=>currentDescription);
+ useEffect(()=>setDescriptionDraft(currentDescription),[currentDescription,id]);
  const id=String(node.attrs.imageId||"");
  // Historic notes can contain an out-of-range width; the preview and
  // slider must still stay inside the supported image size.
@@ -127,6 +131,30 @@ function ImageView({node,updateAttributes,deleteNode,editor,getPos}:NodeViewProp
           }}/>
         <span>{shownWidth}px</span>
       </label>
+      <label className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+        <span className="shrink-0">Описание фото</span>
+        <input type="text" aria-label="Описание фотографии"
+          maxLength={MAX_WAVE_IMAGE_DESCRIPTION}
+          value={descriptionDraft}
+          onChange={event=>setDescriptionDraft(event.target.value)}
+          onKeyDown={event=>{
+            event.stopPropagation();
+            if(event.key==="Enter"){event.preventDefault();event.currentTarget.blur();}
+            if(event.key==="Escape"){
+              event.preventDefault();
+              event.currentTarget.value=currentDescription;
+              setDescriptionDraft(currentDescription);
+              event.currentTarget.blur();
+            }
+          }}
+          onBlur={event=>{
+            const next=safeImageDescription(event.currentTarget.value)||"Фото в заметке";
+            setDescriptionDraft(next);
+            if(editor.isEditable&&!editor.isDestroyed&&next!==currentDescription)
+              updateAttributes({alt:next});
+          }}
+          className="min-w-0 w-40 max-w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs"/>
+      </label>
       <select aria-label="Расположение фотографии" value={align}
         onChange={e=>updateAttributes({align:e.target.value})}
         className="rounded-lg border border-border bg-background px-2 py-2 text-xs">
@@ -158,7 +186,7 @@ export const WaveImage=Node.create({
   align:{default:"center",parseHTML:el=>["left","center","right"].includes(el.getAttribute("data-align")||"")?el.getAttribute("data-align"):"center",renderHTML:a=>({"data-align":a.align})},
   width:{default:320,parseHTML:el=>Math.min(720,Math.max(120,Number(el.getAttribute("data-width"))||320)),renderHTML:a=>({"data-width":a.width})},
   ink:{default:"[]",parseHTML:el=>el.getAttribute("data-ink")||"[]",renderHTML:a=>({"data-ink":a.ink})},
-  alt:{default:"Фото в заметке",parseHTML:el=>el.getAttribute("data-alt")||"Фото в заметке",renderHTML:a=>({"data-alt":a.alt})},
+  alt:{default:"Фото в заметке",parseHTML:el=>safeImageDescription(el.getAttribute("data-alt"))||"Фото в заметке",renderHTML:a=>({"data-alt":safeImageDescription(a.alt)||"Фото в заметке"})},
  };},
  parseHTML(){return [{tag:"div[data-wave-image]"}];},
  renderHTML({HTMLAttributes}){return ["div",mergeAttributes(HTMLAttributes,{"data-wave-image":"true"})];},

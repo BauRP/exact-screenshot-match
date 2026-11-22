@@ -1,7 +1,7 @@
 import {strict as assert} from "node:assert";
 import {readFileSync} from "node:fs";
 import {copyWaveInk,pasteWaveInk} from "../src/lib/wave-ink-transfer";
-import {serializeInk,parseInk} from "../src/lib/wave-ink";
+import {serializeInk,parseInk,duplicateLastInkStroke} from "../src/lib/wave-ink";
 const ink=readFileSync("src/lib/wave-ink.ts","utf8");
 const canvas=readFileSync("src/components/editor/WaveInkCanvas.tsx","utf8");
 const drawing=readFileSync("src/components/editor/WaveDrawing.tsx","utf8");
@@ -41,3 +41,18 @@ assert.equal(parseInk(combined).length,2);
 assert.equal(parseInk(ink2).length,1,"Original annotations are never overwritten");
 assert.ok(readFileSync("src/components/editor/WaveImage.tsx","utf8").includes("pasteWaveInk(node.attrs.ink)"));
 assert.ok(readFileSync("src/components/editor/WaveDrawing.tsx","utf8").includes("pasteWaveInk(strokes)"));
+
+const originalStrokes=parseInk(ink1);
+const repeated=duplicateLastInkStroke(originalStrokes);
+assert.ok(repeated);
+assert.equal(repeated!.length,2);
+assert.deepEqual(repeated![0].points,[[0,0],[150,160]]);
+assert.deepEqual(repeated![1].points,[[12,12],[162,172]]);
+assert.notEqual(repeated![1].points,repeated![0].points,"Duplicate must not share editable point arrays");
+assert.equal(parseInk(serializeInk(repeated!)).length,2);
+assert.equal(originalStrokes.length,1,"Duplicating strokes must never mutate the original");
+assert.equal(duplicateLastInkStroke([]),null);
+assert.equal(duplicateLastInkStroke(Array(120).fill(originalStrokes[0])),null);
+const atCorner=duplicateLastInkStroke([{...originalStrokes[0],points:[[995,995],[1000,1000]]}]);
+assert.deepEqual(atCorner?.[1].points,[[983,983],[988,988]]);
+assert.ok(canvas.includes('onClick={repeatLastStroke}'),"New button is shared by drawings and photo overlays");

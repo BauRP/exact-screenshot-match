@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from "react";
 import type {PointerEvent as ReactPointerEvent} from "react";
-import {appendInkPoint,arrowInkPoints,ellipseInkPoints,inkStrokeIndicesAlong,parseInk,serializeInk,transformInkStrokes,type InkTransform,type InkPoint,type InkStroke} from "@/lib/wave-ink";
+import {appendInkPoint,arrowInkPoints,ellipseInkPoints,inkStrokeIndicesAlong,parseInk,serializeInk,transformInkStrokes,duplicateLastInkStroke,type InkTransform,type InkPoint,type InkStroke} from "@/lib/wave-ink";
 
 /** Per-drawing undo/redo also works for ink layered over a photograph. */
 export function WaveInkCanvas({value,onChange,editable,active=false}:{
@@ -170,6 +170,15 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
    replace(next);setHistoryVersion(v=>v+1);
    emit(next);
  };
+ const repeatLastStroke=()=>{
+   if(!editable||!active||gesture.current!==null)return;
+   // Validate storage limits BEFORE changing the canvas or Undo history.
+   const next=duplicateLastInkStroke(current.current);
+   if(!next)return;
+   past.current=[...past.current.slice(-29),current.current];
+   future.current=[];
+   replace(next);setHistoryVersion(v=>v+1);emit(next);
+ };
  const clear=()=>{
    if(!editable||!active||gesture.current!==null||current.current.length===0)return;
    past.current=[...past.current.slice(-29),current.current];
@@ -222,6 +231,11 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
        title="Повернуть нарисованные линии влево с возможностью отмены"
        disabled={strokes.length===0} onClick={()=>transformAll("rotate-ccw")}
        className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">⟲ 90°</button>
+     <button type="button" aria-label="Повторить последний штрих"
+       title="Продублировать последнюю линию, можно отменить"
+       disabled={strokes.length===0||strokes.length>=120}
+       onClick={repeatLastStroke}
+       className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">Повторить штрих</button>
      <button type="button" aria-label="Очистить рисунок" title="Очистить рисунок (можно отменить)"
        disabled={strokes.length===0} onClick={clear}
        className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">Очистить</button>
