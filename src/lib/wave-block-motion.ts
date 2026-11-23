@@ -1,6 +1,6 @@
 import { Fragment, type Node as PMNode, type ResolvedPos } from "@tiptap/pm/model";
 import {topLevelPageRanges} from "./wave-page-actions";
-import {NodeSelection,TextSelection,type Selection,type Transaction} from "@tiptap/pm/state";
+import {NodeSelection,TextSelection,Selection,type Transaction} from "@tiptap/pm/state";
 import type { Editor } from "@tiptap/react";
 
 /** Keep the caret/selection inside relocated nodes, not on the block that
