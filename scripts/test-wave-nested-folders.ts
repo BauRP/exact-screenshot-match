@@ -19,6 +19,17 @@ assert.throws(()=>store.restoreFolderBackup([{id:"loop",name:"Loop",parentId:"lo
 assert.throws(()=>store.restoreFolderBackup([{id:"alpha",name:"A",parentId:"beta"},{id:"beta",name:"B",parentId:"alpha"}],[]),/структуру/);
 store.deleteFolder(parent.id);
 assert.equal(store.exportFolderBackup().folders.find(x=>x.id===child.id)?.parentId,undefined);
+const beforeInvalid=current.get("sn.folders.v1");
+assert.throws(()=>store.addFolder("x".repeat(121)),/120 символов/);
+assert.throws(()=>store.renameFolder(child.id,"x".repeat(121)),/120 символов/);
+assert.equal(current.get("sn.folders.v1"),beforeInvalid,"Oversized names must never corrupt the stored folder list");
+const spare=store.addFolder("   ");
+assert.equal(spare.name,"Folder");
+const beforeOverflow=current.get("sn.folders.v1");
+assert.throws(()=>store.restoreFolderBackup(Array.from({length:1000},(_,i)=>({id:"import"+i,name:"Folder "+i})),[]),/1000/);
+assert.equal(current.get("sn.folders.v1"),beforeOverflow,"Rejected backups must preserve saved folders");
+assert.throws(()=>store.restoreFolderBackup([{id:"bad-parent",name:"Bad",parentId:"bad id"}],[]),/parent folder ID/);
+assert.equal(current.get("sn.folders.v1"),beforeOverflow);
 console.log("Nested folders, cycle rejection and safe reparenting verified");
 
 const home=readFileSync("src/routes/index.tsx","utf8");

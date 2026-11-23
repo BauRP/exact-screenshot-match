@@ -18,3 +18,7 @@ assert.equal(noteSearchSnippet({body:"<p>Hello</p>"} as any,"Hello"),"Hello");
 const folded={body:"<p>"+"x".repeat(150)+"\t".repeat(700)+
  "НАЙДЕНО"+"y".repeat(250)+"</p>"} as any;
 assert.ok(noteSearchSnippet(folded,"найдено").includes("НАЙДЕНО"));
+
+const reverseWords={body:"<p>"+"q".repeat(160)+" ЯБЛОКО "+"z".repeat(200)+" БАНАН</p>"} as any;
+assert.ok(noteSearchSnippet(reverseWords,"банан яблоко").includes("ЯБЛОКО"),
+ "Search snippets must locate real terms even when query words are reversed");

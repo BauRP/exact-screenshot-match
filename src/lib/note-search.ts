@@ -74,8 +74,14 @@ function originalSnippetOffset(source:string,normalizedOffset:number):number{
 export function noteSearchSnippet(note:Note,query:string,maxLength=155):string {
  const source=readableText(note.body||"").trim();
  if(!source)return "";
- const normalized=normalizeSearchText(source),needle=normalizeSearchText(parseNoteQuery(query).query);
- const match=needle?normalized.indexOf(needle):-1;
+ const normalized=normalizeSearchText(source);
+ // Full search permits words in any order. Previews must show a real hit.
+ const tokens=normalizeSearchText(parseNoteQuery(query).query).split(" ").filter(Boolean);
+ let match=-1;
+ for(const token of tokens){
+  const at=normalized.indexOf(token);
+  if(at>=0&&(match<0||at<match))match=at;
+ }
  const start=match<0?0:originalSnippetOffset(source,Math.max(0,match-40));
  const fragment=source.slice(start,start+Math.max(30,maxLength));
  return (start?"…":"")+fragment+(start+fragment.length<source.length?"…":"");

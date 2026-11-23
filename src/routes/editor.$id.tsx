@@ -1381,6 +1381,11 @@ function EditorPage() {
             onMouseDown={event=>event.preventDefault()}
             className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>{if(!insertBlankPagesAfter(editor,3))toast("Выберите текст одной страницы");}}>+3 страницы</button>
+           <button type="button" aria-label="Добавить пять пустых страниц после текущей"
+             title="Пять чистых страниц, одна операция отмены"
+             onMouseDown={event=>event.preventDefault()}
+             className="rounded-md border px-2 py-1 text-xs"
+             onClick={()=>{if(!insertBlankPagesAfter(editor,5))toast("Выберите текст одной страницы");}}>+5 страниц</button>
           <button type="button" aria-label="Удалить пустую текущую страницу" disabled={currentPage<=1}
             className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
             onClick={()=>{if(!removeEmptyCurrentPage(editor))toast("Удалить можно только пустую страницу");}}>Пустую −</button>

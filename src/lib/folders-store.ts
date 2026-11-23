@@ -11,6 +11,14 @@ export type Folder = {
 const FOLDERS_KEY = "sn.folders.v1";
 const HIDDEN_KEY = "sn.hidden-system-folders.v1";
 const ACTIVE_KEY = "sn.active-folder.v1";
+const MAX_CUSTOM_FOLDERS = 1000;
+const MAX_FOLDER_NAME_LENGTH = 120;
+function safeFolderName(name:string,fallback:string):string{
+ const normalized=name.trim()||fallback;
+ if(normalized.length>MAX_FOLDER_NAME_LENGTH)
+  throw Error("Название папки не должно превышать 120 символов");
+ return normalized;
+}
 
 export const SYSTEM_FOLDERS: Folder[] = [
   { id: "all", name: "ALL", system: true },
@@ -241,7 +249,9 @@ export function addFolder(name: string,activate=false,parentId="all"): Folder {
   hydrate();
   const available=snapshot();
   if(parentId!=="all"&&!available.some(folder=>folder.id===parentId))throw Error("Неизвестная родительская папка");
-  const f: Folder = { id: crypto.randomUUID(), name: name.trim() || "Folder",...(parentId==="all"?{}:{parentId}) };
+  if(customFolders.length>=MAX_CUSTOM_FOLDERS)
+    throw Error("Достигнут предел в 1000 пользовательских папок");
+  const f: Folder = { id: crypto.randomUUID(), name: safeFolderName(name,"Folder"),...(parentId==="all"?{}:{parentId}) };
   const next=[...customFolders, f];
   // Creating and selecting a new folder is one UI operation; persist both.
   persist(next,hiddenSystem,activate?f.id:undefined);
@@ -257,10 +267,11 @@ export function renameFolder(id: string, name: string,parentId?:string) {
   if(!current)throw Error("Папка не найдена");
   const parent=parentId??folderParent(current);
   if(!canNestFolder(snapshot(),id,parent))throw Error("Нельзя переместить папку внутрь себя или своей подпапки");
+  const safeName=safeFolderName(name,current.name);
   const next=customFolders.map(f=>{
     if(f.id!==id)return f;
     const {parentId:oldParent,...base}=f;
-    return {...base,name:name.trim()||f.name,...(parent==="all"?{}:{parentId:parent})};
+    return {...base,name:safeName,...(parent==="all"?{}:{parentId:parent})};
   });
   persist(next,hiddenSystem);
   customFolders=next;emit();
@@ -326,12 +337,17 @@ export function restoreFolderBackup(folders: Folder[], restoredHidden: string[])
         typeof folder.name !== "string" || folder.name.length > 120) {
       throw new Error("Invalid folder record in backup");
     }
+    if(folder.parentId!==undefined&&
+       (typeof folder.parentId!=="string"||! /^[\w-]{1,128}$/.test(folder.parentId)))
+      throw Error("Invalid parent folder ID in backup");
     if (!known.has(folder.id)) {
-      pending.push({ id: folder.id, name: folder.name.trim() || "Folder",
+      pending.push({ id: folder.id, name: safeFolderName(folder.name,"Folder"),
         ...(typeof folder.parentId==="string"&&folder.parentId!=="all"?{parentId:folder.parentId}:{}) });
       known.add(folder.id);
     }
   }
+  if(customFolders.length+pending.length>MAX_CUSTOM_FOLDERS)
+    throw Error("В резервной копии слишком много папок (максимум 1000)");
   const next = [...customFolders, ...pending];
   // Validate the whole imported tree including out-of-order folder records.
   for(const folder of next){

@@ -329,3 +329,16 @@ const batchCrossEditor={isEditable:true,isDestroyed:false,get state(){return bat
  view:{dispatch(){throw Error("Cross-page must be rejected");}}} as any;
 assert.equal(insertBlankPagesAfter(batchCrossEditor,3),false);
 assert.equal(JSON.stringify(batchCross.doc.toJSON()),beforeBatchCross);
+
+const editorUi=readFileSync("src/routes/editor.$id.tsx","utf8");
+assert.ok(editorUi.includes('aria-label="Добавить пять пустых страниц после текущей"'));
+assert.ok(editorUi.includes("insertBlankPagesAfter(editor,5)"));
+let fiveState=EditorState.create({schema,doc:batchOriginal}),fiveWrites=0;
+const fiveEditor={isEditable:true,isDestroyed:false,get state(){return fiveState;},
+ view:{dispatch(tr:any){fiveWrites++;fiveState=fiveState.apply(tr);}}} as any;
+fiveState=fiveState.apply(fiveState.tr.setSelection(TextSelection.create(fiveState.doc,2)));
+assert.equal(insertBlankPagesAfter(fiveEditor,5),true);
+assert.equal(topLevelPageRanges(fiveState.doc).length,7);
+assert.equal(fiveWrites,1);
+assert.equal(fiveState.doc.textContent,"introsaved");
+assert.equal(fiveState.doc.check(),undefined);
