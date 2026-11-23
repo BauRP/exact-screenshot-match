@@ -72,8 +72,8 @@ import { WaveDrawing } from "@/components/editor/WaveDrawing";
 import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection,setWaveTextDirection} from "@/lib/wave-text-direction";
 import {collectNoteOutline,filterNoteOutline,type OutlineFilter,notePagePositions,noteCurrentPage,renameCurrentPage,pageDisplayNames} from "@/lib/note-outline";
-import {moveSelectedWaveBlock,moveWaveBlocksToAdjacentPage,moveWaveBlocksToPage,moveWaveBlocksToPageEdge,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection,moveWaveBlocksToSectionEdge} from "@/lib/wave-block-motion";
-import {duplicateCurrentPage,moveCurrentPage,moveCurrentPageToEdge,moveCurrentPageToIndex,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithPrevious,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,splitPageAtCaret} from "@/lib/wave-page-actions";
+import {moveSelectedWaveBlock,moveWaveBlocksToAdjacentPage,moveWaveBlocksToPage,copyWaveBlocksToPage,moveWaveBlocksToPageEdge,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection,moveWaveBlocksToSectionEdge} from "@/lib/wave-block-motion";
+import {duplicateCurrentPage,moveCurrentPage,moveCurrentPageToEdge,moveCurrentPageToIndex,insertBlankPageAfter,insertBlankPagesAfter,insertBlankPageBefore,mergeCurrentPageWithPrevious,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,splitPageAtCaret} from "@/lib/wave-page-actions";
 import {revealOutlinePosition} from "@/lib/wave-outline-navigation";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
@@ -1262,6 +1262,26 @@ function EditorPage() {
               else toast("Выберите текст на одной странице");
             }}>RTL страница</button>
           <button style={{order:10+prefs.toolbarOrder.indexOf("direction")}} type="button"
+            aria-label="Справа налево на текущей странице"
+            title="Применить RTL только к блокам одной страницы"
+            onMouseDown={event=>event.preventDefault()}
+            className="grid h-8 shrink-0 place-items-center rounded-full px-2 text-xs font-semibold hover:bg-secondary"
+            onClick={()=>{if(!editor)return;
+              const n=setWaveTextDirection(editor,"rtl","page");
+              if(n)toast.success("RTL установлен для "+n+" блоков");
+              else toast("Уже RTL или выделены разные страницы");
+            }}>Стр. RTL</button>
+          <button style={{order:10+prefs.toolbarOrder.indexOf("direction")}} type="button"
+            aria-label="Слева направо на текущей странице"
+            title="Применить LTR только к блокам одной страницы"
+            onMouseDown={event=>event.preventDefault()}
+            className="grid h-8 shrink-0 place-items-center rounded-full px-2 text-xs font-semibold hover:bg-secondary"
+            onClick={()=>{if(!editor)return;
+              const n=setWaveTextDirection(editor,"ltr","page");
+              if(n)toast.success("LTR установлен для "+n+" блоков");
+              else toast("Уже LTR или выделены разные страницы");
+            }}>Стр. LTR</button>
+          <button style={{order:10+prefs.toolbarOrder.indexOf("direction")}} type="button"
             aria-label="Автоматическое направление текста внутри раздела"
             title="Определить направление только внутри текущего вложенного раздела"
             onMouseDown={event=>event.preventDefault()}
@@ -1356,6 +1376,11 @@ function EditorPage() {
             onClick={()=>{if(!mergeCurrentPageWithNext(editor))toast("Не удалось объединить страницы");}}>Со след. объединить</button>
           <button type="button" aria-label="Добавить пустую страницу после текущей" className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>{if(!insertBlankPageAfter(editor))toast("Не удалось добавить страницу");}}>Страница +</button>
+          <button type="button" aria-label="Добавить три пустые страницы после текущей"
+            title="Три чистые страницы, одна операция отмены"
+            onMouseDown={event=>event.preventDefault()}
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!insertBlankPagesAfter(editor,3))toast("Выберите текст одной страницы");}}>+3 страницы</button>
           <button type="button" aria-label="Удалить пустую текущую страницу" disabled={currentPage<=1}
             className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
             onClick={()=>{if(!removeEmptyCurrentPage(editor))toast("Удалить можно только пустую страницу");}}>Пустую −</button>
@@ -1452,6 +1477,14 @@ function EditorPage() {
             className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
             onClick={()=>{if(!moveWaveBlocksToPage(editor,targetBlockPageNumber))toast("Выберите блок на другой странице");}}>
             Перенести блок</button>
+          <button type="button" aria-label="Скопировать выбранные блоки на указанную страницу"
+            title="Оригиналы остаются на месте, оформление и фото сохраняются"
+            onMouseDown={event=>event.preventDefault()}
+            disabled={pagePositions.length<2||!Number.isSafeInteger(targetBlockPageNumber)||
+              targetBlockPageNumber<1||targetBlockPageNumber>pagePositions.length}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>{if(!copyWaveBlocksToPage(editor,targetBlockPageNumber))toast("Выберите блок на другой странице");}}>
+            Копия на страницу</button>
           <button type="button" aria-label="Вложить блок в раздел" title="Переместить блок в предыдущий раздел"
             className="rounded-md border px-2 py-1 text-xs" onClick={()=>nestSelectedWaveBlock(editor)}>↘</button>
           <button type="button" aria-label="Дублировать блок или группу"
@@ -1487,7 +1520,7 @@ function EditorPage() {
              title="Выбрать кнопки для работы с текстом или медиа без изменения содержимого"
              onChange={event=>{
                const mode=event.target.value;
-               if(mode==="writing"||mode==="media"||mode==="tasks"||mode==="all"){
+               if(mode==="writing"||mode==="media"||mode==="tasks"||mode==="pages"||mode==="all"){
                  saveEditorPreferences(toolbarPreset(mode));
                  toast.success("Панель инструментов обновлена");
                }
@@ -1497,6 +1530,7 @@ function EditorPage() {
              <option value="writing">Текст</option>
              <option value="media">Фото и звук</option>
              <option value="tasks">Для задач</option>
+              <option value="pages">Для страниц</option>
              <option value="all">Все инструменты</option>
            </select>
             </div>

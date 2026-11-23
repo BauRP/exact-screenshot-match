@@ -25,3 +25,13 @@ assert.ok(settings.includes('"tasks"'));
 const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
 assert.ok(editor.includes('mode==="tasks"'));
 assert.ok(editor.includes('<option value="tasks">Для задач</option>'));
+
+const pagesPreset=toolbarPreset("pages");
+assert.equal(pagesPreset.toolbarOrder[0],"outline");
+assert.ok(!pagesPreset.hiddenToolbar.includes("pageActions"));
+assert.ok(!pagesPreset.hiddenToolbar.includes("direction"));
+assert.ok(pagesPreset.hiddenToolbar.includes("camera"));
+assert.equal(new Set(pagesPreset.toolbarOrder).size,TOOLBAR_TOOLS.length);
+assert.ok(settings.includes('"pages"'));
+assert.ok(editor.includes('mode==="pages"'));
+assert.ok(editor.includes('<option value="pages">Для страниц</option>'));

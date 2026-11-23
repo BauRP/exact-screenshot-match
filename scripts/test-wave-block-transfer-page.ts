@@ -2,7 +2,7 @@ import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection} from "@tiptap/pm/state";
 import {topLevelPageRanges} from "../src/lib/wave-page-actions";
-import {moveWaveBlocksToPage,moveWaveBlocksToPageEdge} from "../src/lib/wave-block-motion";
+import {moveWaveBlocksToPage,copyWaveBlocksToPage,moveWaveBlocksToPageEdge} from "../src/lib/wave-block-motion";
 import {readFileSync} from "node:fs";
 const schema=new Schema({nodes:{
  doc:{content:"block+"},
@@ -70,3 +70,31 @@ assert.equal(edgeState.doc.check(),undefined);
 assert.equal(edgeWrites,2);
 assert.ok(ui.includes('moveWaveBlocksToPageEdge(editor,"start")'));
 assert.ok(ui.includes('moveWaveBlocksToPageEdge(editor,"end")'));
+
+const copyStart=schema.nodes.doc.create(null,[
+ p("source"),schema.nodes.waveImage.create({imageId:"same-photo"}),
+ mark("target"),p("target body"),mark("tail"),p("tail body")
+]);
+let copyState=EditorState.create({schema,doc:copyStart}),copyWrites=0;
+const copyEditor={isEditable:true,isDestroyed:false,get state(){return copyState;},
+ view:{dispatch(tr:any){copyWrites++;copyState=copyState.apply(tr);}}} as any;
+copyState=copyState.apply(copyState.tr.setSelection(TextSelection.create(copyState.doc,2)));
+assert.equal(copyWaveBlocksToPage(copyEditor,2),true);
+assert.equal(copyWrites,1);
+assert.equal(copyState.doc.child(0).textContent,"source");
+assert.equal(copyState.doc.child(1).attrs.imageId,"same-photo");
+assert.equal(copyState.doc.child(4).textContent,"source");
+assert.equal(copyState.selection.$from.parent.textContent,"source");
+const copySnapshot=JSON.stringify(copyState.doc.toJSON());
+for(const invalid of [0,4,NaN,1.2])assert.equal(copyWaveBlocksToPage(copyEditor,invalid),false);
+assert.equal(copyWaveBlocksToPage(copyEditor,2),false);
+assert.equal(copyWrites,1);
+assert.equal(JSON.stringify(copyState.doc.toJSON()),copySnapshot);
+assert.equal(copyState.doc.check(),undefined);
+const copyRanges=topLevelPageRanges(copyState.doc);
+copyState=copyState.apply(copyState.tr.setSelection(TextSelection.create(
+ copyState.doc,copyRanges[0].bodyStart+2,copyRanges[1].bodyStart+2)));
+assert.equal(copyWaveBlocksToPage(copyEditor,3),false);
+assert.equal(copyWrites,1);
+assert.ok(ui.includes('copyWaveBlocksToPage(editor,targetBlockPageNumber)'));
+assert.ok(ui.includes('insertBlankPagesAfter(editor,3)'));

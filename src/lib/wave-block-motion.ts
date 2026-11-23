@@ -373,6 +373,49 @@ export function moveWaveBlocksToAdjacentPage(editor:Editor,direction:"previous"|
  return true;
 }
 
+/** Copy a complete top-level block or selected group to another existing
+ * page. The originals remain, their inline marks and media references stay
+ * in the same note. Reject dividers, cross-page selections and nested splits. */
+export function copyWaveBlocksToPage(editor:Editor,targetPage:number):boolean{
+ if(!editor.isEditable||editor.isDestroyed||!Number.isSafeInteger(targetPage))return false;
+ const {state,view}=editor,{doc,selection}=state,pages=topLevelPageRanges(doc);
+ const target=targetPage-1;
+ if(target<0||target>=pages.length)return false;
+ const group=selectedWaveSiblingRange(editor);
+ let from:number,to:number;
+ if(group&&group.depth===0&&group.end-group.start>1){
+  from=group.from;to=group.to;
+ }else{
+  let pos=selectedWaveBlockPos(editor);
+  if(pos===undefined)return false;
+  let resolved=doc.resolve(pos);
+  if(resolved.depth!==0){
+   const {$from,$to}=selection;
+   if($from.depth<1||$to.depth<1||$from.node(1)!==$to.node(1))return false;
+   pos=$from.before(1);resolved=doc.resolve(pos);
+  }
+  if(resolved.depth!==0||resolved.index()>=doc.childCount)return false;
+  from=pos;to=pos+doc.child(resolved.index()).nodeSize;
+ }
+ if(from>=to)return false;
+ const content=doc.content.cut(from,to);
+ if(!content.childCount||content.content.some(node=>node.type.name==="wavePageBreak"))return false;
+ const source=pages.findIndex(p=>from>=p.bodyStart&&from<p.end);
+ if(source<0||source===target||to>pages[source].end)return false;
+ const at=pages[target].end,$at=doc.resolve(at);
+ if($at.parent!==doc||!doc.canReplace($at.index(),$at.index(),content))return false;
+ const tr=state.tr.insert(at,content);
+ if(!tr.doc.type.validContent(tr.doc.content))return false;
+ const shift=at-from;
+ if(selection instanceof TextSelection&&selection.from>=from&&selection.to<=to)
+  tr.setSelection(TextSelection.create(tr.doc,selection.anchor+shift,selection.head+shift));
+ else if(selection instanceof NodeSelection&&selection.from>=from&&selection.to<=to)
+  tr.setSelection(NodeSelection.create(tr.doc,selection.from+shift));
+ else tr.setSelection(Selection.near(tr.doc.resolve(at+Math.min(1,content.size))));
+ view.dispatch(tr.scrollIntoView());
+ return true;
+}
+
 /** Transfer a top-level block, section or contiguous selected group
  * directly to a numbered page. Keep its attachments and saved markup intact.
  * The destination is the end of that page, before the next page divider. */

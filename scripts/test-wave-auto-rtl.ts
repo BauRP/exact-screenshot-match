@@ -231,3 +231,16 @@ assert.equal(setWaveTextDirection(pageEditor,"auto","page"),0);
 assert.equal(scopeWrites,1);
 assert.ok(editor.includes('setWaveTextDirection(editor,"auto","page")'),
  "RTL current page must be accessible in the existing editor");
+
+assert.equal(setWaveTextDirection(pageEditor,"rtl","page"),2);
+assert.equal(scopeWrites,2);
+assert.equal(scopeState.doc.child(0).attrs.textDirection,"ltr");
+assert.equal(scopeState.doc.child(2).attrs.textDirection,"rtl");
+assert.equal(scopeState.doc.child(3).attrs.textDirection,"rtl");
+assert.equal(setWaveTextDirection(pageEditor,"ltr","page"),2);
+assert.equal(scopeWrites,3);
+assert.equal(scopeState.doc.child(2).attrs.textDirection,"ltr");
+assert.equal(scopeState.doc.child(3).attrs.textDirection,"ltr");
+assert.equal(scopeState.doc.textContent,"مرحبا в первойשלום בשנייהEnglish in second");
+assert.ok(editor.includes('setWaveTextDirection(editor,"rtl","page")'));
+assert.ok(editor.includes('setWaveTextDirection(editor,"ltr","page")'));

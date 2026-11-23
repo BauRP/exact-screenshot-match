@@ -2,7 +2,7 @@ import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection,NodeSelection} from "@tiptap/pm/state";
 import {noteCurrentPage} from "../src/lib/note-outline";
-import {duplicateCurrentPage,moveCurrentPage,moveCurrentPageToIndex,topLevelPageRanges,insertBlankPageAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,isEmptyPageBody,splitPageAtCaret} from "../src/lib/wave-page-actions";
+import {duplicateCurrentPage,moveCurrentPage,moveCurrentPageToIndex,topLevelPageRanges,insertBlankPageAfter,insertBlankPagesAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,isEmptyPageBody,splitPageAtCaret} from "../src/lib/wave-page-actions";
 const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},wavePageBreak:{group:"block",atom:true,attrs:{label:{default:""}}},waveFold:{group:"block",content:"block+"},text:{group:"inline"}},marks:{}});
 const p=(s:string)=>schema.nodes.paragraph.create(null,schema.text(s));
 const page=(s:string)=>schema.nodes.wavePageBreak.create({label:s});
@@ -307,3 +307,25 @@ assert.equal(stateMerge.doc.textContent,"onetwo bodythree body");
 assert.equal(topLevelPageRanges(stateMerge.doc).length,2);
 assert.equal(stateMerge.doc.nodeAt(topLevelPageRanges(stateMerge.doc)[1].start)?.attrs.label,"three");
 assert.equal(stateMerge.doc.check(),undefined);
+
+const batchOriginal=schema.nodes.doc.create(null,[p("intro"),page("keep"),p("saved")]);
+let batchState=EditorState.create({schema,doc:batchOriginal}),batchWrites=0;
+const batchEditor={isEditable:true,isDestroyed:false,get state(){return batchState;},
+ view:{dispatch(tr:any){batchWrites++;batchState=batchState.apply(tr);}}} as any;
+batchState=batchState.apply(batchState.tr.setSelection(TextSelection.create(batchState.doc,2)));
+assert.equal(insertBlankPagesAfter(batchEditor,3),true);
+assert.equal(topLevelPageRanges(batchState.doc).length,5);
+assert.equal(batchWrites,1);
+assert.equal(batchState.doc.textContent,"introsaved");
+assert.equal(batchState.doc.lastChild?.textContent,"saved");
+assert.equal(batchState.doc.nodeAt(topLevelPageRanges(batchState.doc)[4].start)?.attrs.label,"keep");
+for(const invalid of [0,1,6,2.5,NaN])assert.equal(insertBlankPagesAfter(batchEditor,invalid),false);
+assert.equal(batchWrites,1);
+assert.equal(batchState.doc.check(),undefined);
+let batchCross=EditorState.create({schema,doc:batchOriginal});
+const beforeBatchCross=JSON.stringify(batchCross.doc.toJSON());
+batchCross=batchCross.apply(batchCross.tr.setSelection(TextSelection.create(batchCross.doc,2,topLevelPageRanges(batchCross.doc)[1].bodyStart+2)));
+const batchCrossEditor={isEditable:true,isDestroyed:false,get state(){return batchCross;},
+ view:{dispatch(){throw Error("Cross-page must be rejected");}}} as any;
+assert.equal(insertBlankPagesAfter(batchCrossEditor,3),false);
+assert.equal(JSON.stringify(batchCross.doc.toJSON()),beforeBatchCross);

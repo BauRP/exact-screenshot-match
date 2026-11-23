@@ -192,6 +192,26 @@ export function insertBlankPageBefore(editor:Editor):boolean{
  return true;
 }
 
+/** Add 2–5 blank pages directly after the active page in ONE transaction.
+ * Refuse selections spanning pages; do not touch saved text, photos or marks. */
+export function insertBlankPagesAfter(editor:Editor,count:number):boolean{
+ if(!editor.isEditable||editor.isDestroyed||!Number.isSafeInteger(count)||count<2||count>5)return false;
+ const {state,view}=editor,{doc,schema,selection}=state;
+ const pages=topLevelPageRanges(doc),index=singleSelectedPageIndex(pages,selection);
+ const divider=schema.nodes.wavePageBreak,paragraph=schema.nodes.paragraph;
+ if(index===undefined||!divider||!paragraph)return false;
+ const at=pages[index].end;
+ const nodes:PMNode[]=[];
+ for(let i=0;i<count;i++)nodes.push(divider.create(),paragraph.create());
+ const content=Fragment.fromArray(nodes),$at=doc.resolve(at);
+ if($at.parent!==doc||!doc.canReplace($at.index(),$at.index(),content))return false;
+ const tr=state.tr.insert(at,content);
+ tr.setSelection(TextSelection.create(tr.doc,at+divider.create().nodeSize+1));
+ if(!tr.doc.type.validContent(tr.doc.content))return false;
+ view.dispatch(tr.scrollIntoView());
+ return true;
+}
+
 /** Split a top-level text paragraph at the caret into two pages.
  * The original rich ProseMirror fragments are reused verbatim. Everything
  * after the caret (including inline marks) stays on the new page, and the
