@@ -232,7 +232,8 @@ assert.equal(scopeWrites,1);
 assert.ok(editor.includes('setWaveTextDirection(editor,"auto","page")'),
  "RTL current page must be accessible in the existing editor");
 
-assert.equal(setWaveTextDirection(pageEditor,"rtl","page"),2);
+assert.equal(setWaveTextDirection(pageEditor,"rtl","page"),1,
+ "Only the English paragraph changes; Hebrew is already RTL");
 assert.equal(scopeWrites,2);
 assert.equal(scopeState.doc.child(0).attrs.textDirection,"ltr");
 assert.equal(scopeState.doc.child(2).attrs.textDirection,"rtl");
