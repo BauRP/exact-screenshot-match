@@ -129,6 +129,9 @@ jobs:
       - name: Test bulk note ordering across folder groups
         run: bun scripts/test-wave-bulk-note-order.ts
 
+      - name: Test stepwise multi-selection note reordering and rollback
+        run: bun scripts/test-wave-note-step-order.ts
+
       - name: Verify atomic selected note actions
         run: bun scripts/test-wave-bulk-safe-mutations.ts
 
