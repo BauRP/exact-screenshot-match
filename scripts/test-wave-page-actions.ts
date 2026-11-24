@@ -1,4 +1,5 @@
 import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection,NodeSelection} from "@tiptap/pm/state";
 import {noteCurrentPage} from "../src/lib/note-outline";
