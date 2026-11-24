@@ -89,6 +89,7 @@ import {
   useView,
   moveNoteBefore,
   moveSelectedNotesToEdge,
+  moveSelectedNotesByOne,
   type Note,
   type SortMode,
   type ViewMode,
@@ -221,6 +222,15 @@ function Index() {
       : navigate({ to: "/editor/$id", params: { id: note.id }, search: { folder: undefined } });
 
   const selectedNotes = notes.filter((n) => selected.has(n.id));
+  const selectedFolderId=selectedNotes.length&&selectedNotes.every(note=>
+    (note.folderId??"all")===(selectedNotes[0].folderId??"all"))
+    ?(selectedNotes[0].folderId??"all"):null;
+  const parentOfSelection=selectedFolderId&&selectedFolderId!=="all"
+    ?folders.find(folder=>folder.id===selectedFolderId):undefined;
+  const parentDestination=parentOfSelection
+    ?(folders.some(folder=>folder.id===folderParent(parentOfSelection))
+       ?folderParent(parentOfSelection):"all")
+    :null;
   const duplicateSelectedNote = async () => {
     if(copyBusy || selectedNotes.length!==1)return;
     setCopyBusy(true);
@@ -279,6 +289,7 @@ function Index() {
   const scopedFolderIds=useMemo(()=>descendantFolderIds(folders,activeFolder),[folders,activeFolder]);
   const countsByFolder=useMemo(()=>noteCountsByFolder(folders,notes),[folders,notes]);
   const drawerRows=useMemo(()=>folderNavigationRows(folders,drawerCollapsed,drawerQuery),[folders,drawerCollapsed,drawerQuery]);
+  const searchedParentIds=useMemo(()=>new Set(folderNavigationRows(folders,new Set(),folderParentSearch).map(row=>row.folder.id)),[folders,folderParentSearch]);
   const filteredNotes = useMemo(() => notes.filter((note) => {
     const inScope=searchOpen&&searchAllFolders||activeFolder==="all"||scopedFolderIds.has(note.folderId??"all");
     return inScope && (!searchOpen || noteMatchesSearch(note,searchTerm,searchFilter));
@@ -504,8 +515,19 @@ function Index() {
                       <DropdownMenuItem onClick={()=>{try{const count=moveSelectedNotesToEdge([...selected],"bottom");setSelected(new Set());if(count)toast.success("Заметки перемещены вниз");}catch(error){toast.error(error instanceof Error?error.message:"Не удалось изменить порядок");}}} className="min-h-10 gap-2">
                         Выбранные в конец
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={()=>{try{const count=moveSelectedNotesByOne([...selected],"up");if(count)toast.success("Поднято заметок: "+count);else toast("Выбранные заметки уже наверху");}catch(error){toast.error(error instanceof Error?error.message:"Не удалось поднять заметки");}}} className="min-h-10 gap-2">
+                        Выбранные на одну выше
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={()=>{try{const count=moveSelectedNotesByOne([...selected],"down");if(count)toast.success("Опущено заметок: "+count);else toast("Выбранные заметки уже внизу");}catch(error){toast.error(error instanceof Error?error.message:"Не удалось опустить заметки");}}} className="min-h-10 gap-2">
+                        Выбранные на одну ниже
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={()=>setColorDialog(true)} className="min-h-10 gap-2">
                         <Palette className="h-4 w-4"/>Цвет карточки
+                      </DropdownMenuItem>
+                      <DropdownMenuItem disabled={!parentDestination}
+                        onClick={()=>{if(!parentDestination)return;try{const count=moveSelectedNotesToFolder([...selected],parentDestination);if(count){setSelected(new Set());toast.success("Перенесено в родительскую папку: "+count);}else toast("Заметки уже в этой папке");}catch(error){toast.error(error instanceof Error?error.message:"Не удалось перенести заметки");}}}
+                        className="min-h-10 gap-2">
+                        <FolderInput className="h-4 w-4"/>Переместить на уровень выше
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={()=>setMoveDialog(true)} className="min-h-10 gap-2">
                         <FolderInput className="h-4 w-4"/>Переместить в папку
@@ -688,6 +710,13 @@ function Index() {
           <div className="mt-3 shrink-0 space-y-2">
             <Input aria-label="Поиск папки" placeholder="Найти папку…" value={drawerQuery}
               maxLength={80} onChange={event=>setDrawerQuery(event.target.value)}/>
+            {activeFolder!=="all"&&<button type="button" aria-label="Перейти в родительскую папку"
+              className="w-full rounded-lg border px-3 py-2 text-left text-xs"
+              onClick={()=>{const current=folders.find(folder=>folder.id===activeFolder);
+                const parent=current?folderParent(current):"all";
+                setActiveFolder(folders.some(folder=>folder.id===parent)?parent:"all");
+                setDrawerOpen(false);setDrawerQuery("");
+              }}>↑ Родительская папка</button>}
             <div className="flex gap-2 text-xs">
               <button type="button" className="rounded-lg border px-3 py-2" onClick={()=>setDrawerCollapsed(new Set(folders.filter(f=>f.id!=="all").map(f=>f.id)))}>Свернуть все</button>
               <button type="button" className="rounded-lg border px-3 py-2" onClick={()=>setDrawerCollapsed(new Set())}>Развернуть все</button>
@@ -820,7 +849,7 @@ function Index() {
                     !descendantFolderIds(folders,folderDialog.id??"").has(folder.id))&&
                     (!folderParentSearch.trim()||folder.id==="all"||
                       folder.id===(folderDialog?.parentId??activeFolder)||
-                      folderDisplayPath(folders,folder.id).toLocaleLowerCase().includes(folderParentSearch.trim().toLocaleLowerCase())))
+                      searchedParentIds.has(folder.id)))
                   .map(({folder,path})=>
                     <option key={folder.id} value={folder.id}>{folder.id==="all"?localizedFolderName(folder):path}</option>)}
               </select>
@@ -1272,8 +1301,8 @@ function NotesGrid({
             onToggle={() => onToggle(note.id)}
             onOpen={() => onOpen(note)}
             onMove={targetId=>onMove(note.id,targetId)}
-            canMoveUp={index>0&&notes[index-1].pinned===note.pinned&&notes[index-1].folderId===note.folderId}
-            canMoveDown={index<notes.length-1&&notes[index+1].pinned===note.pinned&&notes[index+1].folderId===note.folderId}
+            canMoveUp={index>0&&notes[index-1].pinned===note.pinned&&(notes[index-1].folderId??"all")===(note.folderId??"all")}
+            canMoveDown={index<notes.length-1&&notes[index+1].pinned===note.pinned&&(notes[index+1].folderId??"all")===(note.folderId??"all")}
             onMoveUp={()=>{if(index>0)onMove(note.id,notes[index-1].id);}}
             onMoveDown={()=>{if(index<notes.length-1)onMove(notes[index+1].id,note.id);}}
           />

@@ -528,7 +528,8 @@ export function moveNoteBefore(sourceId:string,targetId:string):boolean{
  const ordered=sortNotes(state.notes,state.sort);
  const from=ordered.findIndex(x=>x.id===sourceId),to=ordered.findIndex(x=>x.id===targetId);
  if(from<0||to<0)return false;
- if(ordered[from].pinned!==ordered[to].pinned||ordered[from].folderId!==ordered[to].folderId)return false;
+ if(ordered[from].pinned!==ordered[to].pinned||
+    (ordered[from].folderId??"all")!==(ordered[to].folderId??"all"))return false;
  const [moving]=ordered.splice(from,1);
  ordered.splice(ordered.findIndex(x=>x.id===targetId),0,moving);
  const ranks=new Map(ordered.map((note,k)=>[note.id,k]));
@@ -537,6 +538,48 @@ export function moveNoteBefore(sourceId:string,targetId:string):boolean{
  commit({notes:next,sort:"manual",status:"ready",error:null});
  return true;
 }
+/** Move selected notes one position, keeping order inside each folder/pin
+ * group and preserving the content and attachments. One durable write.
+ * A legacy missing folderId means the same root as the explicit "all". */
+export function moveSelectedNotesByOne(noteIds:readonly string[],direction:"up"|"down"):number{
+ ensureReadyForMutation();
+ if(direction!=="up"&&direction!=="down")return 0;
+ const ids=new Set(noteIds);
+ if(!ids.size)return 0;
+ const groups=new Map<string,Note[]>();
+ for(const note of sortNotes(state.notes,state.sort)){
+  const key=JSON.stringify([note.folderId??"all",Boolean(note.pinned)]);
+  const group=groups.get(key)??[];
+  group.push(note);
+  groups.set(key,group);
+ }
+ let moved=0,rank=0;
+ const ranks=new Map<string,number>();
+ for(const group of groups.values()){
+  if(direction==="up"){
+   for(let i=1;i<group.length;i++){
+    if(ids.has(group[i].id)&&!ids.has(group[i-1].id)){
+     [group[i-1],group[i]]=[group[i],group[i-1]];
+     moved++;
+    }
+   }
+  }else{
+   for(let i=group.length-2;i>=0;i--){
+    if(ids.has(group[i].id)&&!ids.has(group[i+1].id)){
+     [group[i],group[i+1]]=[group[i+1],group[i]];
+     moved++;
+    }
+   }
+  }
+  for(const note of group)ranks.set(note.id,rank++);
+ }
+ if(!moved)return 0;
+ const next=state.notes.map(note=>({...note,manualOrder:ranks.get(note.id)}));
+ persistManualOrder(next);
+ commit({notes:next,sort:"manual",hydrated:true,status:"ready",error:null});
+ return moved;
+}
+
 /** Move a multi-selection to the start or end of its OWN folder and pin
  * group. One write, no modifications to note content or attachment references.
  * This also works when the user was previously sorting by date or alphabet. */

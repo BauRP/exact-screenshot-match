@@ -28,6 +28,9 @@ for(const phrase of ["folderNavigationRows(folders,drawerCollapsed,drawerQuery)"
 assert.ok(editor.includes("folderNavigationRows(folders,new Set(),editorFolderQuery)"));
 
 assert.ok(home.includes('aria-label="Найти родительскую папку"'));
+assert.ok(home.includes('aria-label="Перейти в родительскую папку"'));
+assert.ok(home.includes("searchedParentIds.has(folder.id)"));
+assert.ok(home.includes("folderNavigationRows(folders,new Set(),folderParentSearch)"));
 assert.ok(home.includes("folderParentSearch"));
 assert.ok(home.includes("folderAncestors(folders,activeFolder)"));
 assert.ok(editor.includes('aria-label="Поиск папки в редакторе"'));
