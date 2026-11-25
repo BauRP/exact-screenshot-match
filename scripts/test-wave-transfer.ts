@@ -11,6 +11,9 @@ assert.ok(db.includes('originId?: string'));
 assert.ok(home.includes('aria-label="Поделиться редактируемой заметкой"'));
 assert.ok(home.includes("Получить заметку Wave Notes"));
 assert.ok(home.includes("Сохранить копию"));
-assert.ok(body.includes("createNote({...p.note,id,originId:p.originId"));
+assert.ok(body.includes("return createNote(await stageReceivedNote(files,p,folderId,created))"),
+ "Single import uses the validated staged-note path");
+assert.ok(body.includes("return createNotesBatch(notes)"),
+ "Multiple imports use one atomic note-list transaction");
 assert.ok(!body.includes("updateNote("),"Imported files must never overwrite records");
 console.log("Self-contained Wave Notes exchange format and non-destructive import verified");

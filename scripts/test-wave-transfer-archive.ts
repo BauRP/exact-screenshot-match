@@ -42,7 +42,14 @@ const tooManyAudio=Array.from({length:51},(_,i)=>'<div data-audio="audiodb:a'+i+
 await assert.rejects(makeWaveNote({...base.note,body:tooManyAudio} as Note),/предел формата/);
 
 const importer=(await import("node:fs")).readFileSync("src/lib/note-transfer.ts","utf8");
-assert.ok(importer.indexOf("generatedAudio.push(fresh);")<importer.indexOf("await saveNewAudioFile(fresh"));
-assert.ok(importer.indexOf("generatedImages.push(fresh);")<importer.indexOf("await saveNewImageFile(fresh"));
-assert.ok(importer.includes("await Promise.allSettled(generatedAudio.map(id=>deleteAudioFile(id)))"));
-assert.ok(importer.includes("await Promise.allSettled(generatedImages.map(id=>deleteImageFile(id)))"));
+const audioTracked=importer.indexOf("created.audio.push(fresh);");
+const audioWritten=importer.indexOf("await saveNewAudioFile(fresh");
+const imageTracked=importer.indexOf("created.images.push(fresh);");
+const imageWritten=importer.indexOf("await saveNewImageFile(fresh");
+assert.ok(audioTracked>=0&&audioWritten>audioTracked,"Audio ID registered BEFORE storage write");
+assert.ok(imageTracked>=0&&imageWritten>imageTracked,"Image ID registered BEFORE storage write");
+assert.ok(importer.includes("async function cleanupStagedNotes(created:StagedIds)"));
+assert.ok(importer.includes("created.audio.map(id=>deleteAudioFile(id))"));
+assert.ok(importer.includes("created.images.map(id=>deleteImageFile(id))"));
+assert.ok(importer.includes("created.pdf.map(id=>deletePdfFile(id))"));
+assert.ok(importer.includes("await cleanupStagedNotes(created);"),"Both import modes reclaim staged media on failure");
