@@ -98,7 +98,7 @@ import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
 import {setSelectedChecklistShape,setSelectedTasksDone,continueSelectedChecklistItem,insertUncheckedChecklistBefore,insertUncheckedChecklistAfter,insertUncheckedChecklistRowsAfter,insertUncheckedChecklistRowsBefore,continueSelectedChecklistRows,convertSelectedChecklistBlocks,selectedSectionTaskCounts,setSelectedSectionTasksDone,currentPageTaskCounts,setCurrentPageTasksDone} from "@/lib/wave-checklist-actions";
 import {setAllFoldSections,setFoldSectionsToDepth,setCurrentPageFoldSections,setSelectedFoldSubsections,countFoldSections} from "@/lib/wave-section-batch";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
-import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
+import { WaveCallout, WaveFold, WaveTape, closeRevealedTape, type CalloutKind } from "@/lib/wave-blocks";
 import {openExternalUrl,normalizedSafeNoteLink} from "@/lib/external-links";
 import {hasMeaningfulNoteContent} from "@/lib/note-content";
 
@@ -1570,6 +1570,14 @@ function EditorPage() {
             onMouseDown={event=>event.preventDefault()} title="Без изменения соседних разделов"
             className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>{if(!moveWaveBlocksToSectionEdge(editor,"end"))toast("Выберите блоки внутри раздела");}}>Блок ⇥ раздел</button>
+          <button type="button" aria-label="Снова скрыть все открытые ответы Tape"
+            title="Скрыть раскрытые ответы без изменения сохранённого текста"
+            onMouseDown={event=>event.preventDefault()}
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{const count=closeRevealedTape(editor);
+              if(count)toast.success("Скрыто ответов: "+count);
+              else toast("Все ответы Tape уже скрыты");
+            }}>Скрыть Tape</button>
           <button type="button" aria-label="Переместить раздел вверх" title="Переместить весь раздел вверх" className="rounded-md border px-2 py-1 text-xs" onClick={()=>moveContainingWaveSection(editor,"up")}>Раздел ↑</button>
           <button type="button" aria-label="Переместить раздел вниз" title="Переместить весь раздел вниз" className="rounded-md border px-2 py-1 text-xs" onClick={()=>moveContainingWaveSection(editor,"down")}>Раздел ↓</button>
           <button type="button" aria-label="Дублировать раздел" title="Дублировать раздел со всеми блоками" className="rounded-md border px-2 py-1 text-xs" onClick={()=>duplicateContainingWaveSection(editor)}>Раздел ⧉</button>

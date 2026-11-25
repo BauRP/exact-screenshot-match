@@ -140,6 +140,14 @@ export const WaveFold=Node.create({
  },
 });
 
+/** Hide temporarily revealed Tape marks without editing saved note data. */
+export function closeRevealedTape(editor:{isDestroyed:boolean;view:{dom:HTMLElement}}):number{
+ if(editor.isDestroyed)return 0;
+ const opened=editor.view.dom.querySelectorAll("[data-wave-tape].wave-tape-open");
+ for(const mark of opened)mark.classList.remove("wave-tape-open");
+ return opened.length;
+}
+
 /** Tape is a revision-safe mark around real text. Clicking reveals only on
  * screen, without mutating or stripping the underlying note content.
  */

@@ -189,15 +189,16 @@ export async function receiveWaveNote(file:File,folderId:string):Promise<Note>{
   for(const id of p.audioIds){
    const fresh=crypto.randomUUID();
    const bytes=files["audio/"+id+".blob"];
-   await saveNewAudioFile(fresh,new Blob([bytes.slice().buffer],{type:transferAudioMime(bytes,p.audioTypes?.[id])}));
+   // Track the ID before awaiting storage, including lost acknowledgements.
    generatedAudio.push(fresh);
+   await saveNewAudioFile(fresh,new Blob([bytes.slice().buffer],{type:transferAudioMime(bytes,p.audioTypes?.[id])}));
    audioMap.set(id,fresh);
   }
   for(const imageId of p.imageIds||[]){
    const fresh=crypto.randomUUID();
    const data=files["images/"+imageId+".blob"];
-   await saveNewImageFile(fresh,imageBlobFromBytes(data));
    generatedImages.push(fresh);
+   await saveNewImageFile(fresh,imageBlobFromBytes(data));
    imageMap.set(imageId,fresh);
   }
   // Rewrite actual attachment attributes in one pass, not ordinary note text.

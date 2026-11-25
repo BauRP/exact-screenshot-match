@@ -90,3 +90,17 @@ assert.equal(structuredMarkdownClipboardHtml("> *Одна цитата*"),
  "<blockquote><p><em>Одна цитата</em></p></blockquote>");
 assert.equal(structuredMarkdownClipboardHtml("Обычная строка"),"");
 assert.equal(structuredMarkdownClipboardHtml("- [x]     "),"");
+
+assert.equal(structuredMarkdownClipboardHtml("> **Первый**\n> *Второй*"),
+ "<blockquote><p><strong>Первый</strong></p><p><em>Второй</em></p></blockquote>");
+assert.equal(structuredMarkdownClipboardHtml("> مرحبا\n> English"),
+ '<blockquote><p dir="rtl">مرحبا</p><p>English</p></blockquote>');
+assert.equal(structuredMarkdownClipboardHtml("# Заголовок\n> один\n> два\n\n> три"),
+ "<h1>Заголовок</h1><blockquote><p>один</p><p>два</p></blockquote><blockquote><p>три</p></blockquote>");
+assert.equal(structuredMarkdownClipboardHtml("> [!NOTE]\n> **Внимание**\n> второй абзац"),
+ '<aside data-wave-callout="true" data-kind="info"><p><strong>Внимание</strong></p><p>второй абзац</p></aside>');
+for(const [kind,expected] of [["TIP","tip"],["WARNING","warning"],["IMPORTANT","important"]]){
+ assert.ok(structuredMarkdownClipboardHtml("> [!"+kind+"]\n> сообщение").includes('data-kind="'+expected+'"'));
+}
+assert.ok(structuredMarkdownClipboardHtml("> [!NOTE]\n> <script>alert(1)</script>")
+ .includes("&lt;script&gt;alert(1)&lt;/script&gt;"));

@@ -40,3 +40,9 @@ assert.equal(transferAudioMime(strToU8("random"),"text/html"),"",
  "Older unknown recordings must keep their original empty Blob type for browser sniffing");
 const tooManyAudio=Array.from({length:51},(_,i)=>'<div data-audio="audiodb:a'+i+'"></div>').join("");
 await assert.rejects(makeWaveNote({...base.note,body:tooManyAudio} as Note),/предел формата/);
+
+const importer=(await import("node:fs")).readFileSync("src/lib/note-transfer.ts","utf8");
+assert.ok(importer.indexOf("generatedAudio.push(fresh);")<importer.indexOf("await saveNewAudioFile(fresh"));
+assert.ok(importer.indexOf("generatedImages.push(fresh);")<importer.indexOf("await saveNewImageFile(fresh"));
+assert.ok(importer.includes("await Promise.allSettled(generatedAudio.map(id=>deleteAudioFile(id)))"));
+assert.ok(importer.includes("await Promise.allSettled(generatedImages.map(id=>deleteImageFile(id)))"));

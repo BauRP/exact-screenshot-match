@@ -746,6 +746,10 @@ async function reclaimDetachedAttachments(previousBody:string):Promise<void>{
     const usedImages=new Set(state.notes.flatMap(note=>imageIdsInHtml(note.body)));
     const staleAudio=[...new Set(audioIdsInHtml(previousBody))].filter(id=>!usedAudio.has(id));
     const staleImages=[...new Set(imageIdsInHtml(previousBody))].filter(id=>!usedImages.has(id));
+    // Another tab or restore may have changed stored note references.
+    // Prefer an orphan to permanently deleting a still-referenced blob.
+    if(!isBrowserStorageAvailable()||
+       window.localStorage.getItem(NOTES_KEY)!==lastStoredNotesRaw)return;
     // Recheck once against the latest state; it may have changed while
     // IndexedDB was opening (e.g. a copied note restored a reference).
     const latestAudio=new Set(state.notes.flatMap(note=>audioIdsInHtml(note.body)));

@@ -335,7 +335,23 @@ export function structuredMarkdownClipboardHtml(input:string):string{
    meaningful++;continue;
   }
   if(h){close();html+="<h"+h[1].length+clipboardRtlAttribute(h[2])+">"+safeMarkdownInline(h[2])+"</h"+h[1].length+">";meaningful++;continue;}
-  if(q){close();html+="<blockquote><p"+clipboardRtlAttribute(q[1])+">"+safeMarkdownInline(q[1])+"</p></blockquote>";meaningful++;continue;}
+  if(q){
+   close();const rows=[q[1]];
+   while(i+1<lines.length){
+    const next=quote.exec(lines[i+1]);
+    if(!next||!next[1].trim())break;
+    rows.push(next[1]);i++;
+   }
+   const marker=/^\[!(NOTE|TIP|WARNING|IMPORTANT)\]$/i.exec(rows[0].trim());
+   const isCallout=!!marker&&rows.length>1;
+   const paragraphs=(isCallout?rows.slice(1):rows).map(value=>
+    "<p"+clipboardRtlAttribute(value)+">"+safeMarkdownInline(value)+"</p>").join("");
+   if(isCallout){
+    const kind=({NOTE:"info",TIP:"tip",WARNING:"warning",IMPORTANT:"important"} as const)[marker![1].toUpperCase() as "NOTE"|"TIP"|"WARNING"|"IMPORTANT"];
+    html+='<aside data-wave-callout="true" data-kind="'+kind+'">'+paragraphs+"</aside>";
+   }else html+="<blockquote>"+paragraphs+"</blockquote>";
+   meaningful+=rows.length;continue;
+  }
   if(trimmed==="---"||trimmed==="***"){close();html+="<hr>";meaningful++;continue;}
   // A Markdown heading followed by an indented list must retain the list
   // hierarchy. The earlier line-by-line parser flattened nested children.
