@@ -1,6 +1,6 @@
 import {strict as assert} from "node:assert";
 import {readFileSync} from "node:fs";
-import {appendInkPoint,arrowInkPoints,ellipseInkPoints,inkStrokeAt,inkStrokeAlong,inkStrokeIndicesAlong,paintInk,parseInk,serializeInk,transformInkStrokes,type InkStroke,type InkPoint} from "../src/lib/wave-ink";
+import {appendInkPoint,arrowInkPoints,ellipseInkPoints,inkStrokeAt,inkStrokeAlong,inkStrokeIndicesAlong,paintInk,parseInk,serializeInk,transformInkStrokes,translateInkStrokes,type InkStroke,type InkPoint} from "../src/lib/wave-ink";
 const line:InkStroke={tool:"pen",color:"#161b22",width:4,points:[[0,0],[1000,0]]};
 assert.equal(inkStrokeAt([line],[500,5],5),0);
 assert.equal(inkStrokeAt([line],[500,100],5),-1);
@@ -170,3 +170,43 @@ assert.equal(arrowInkPoints([450,450],[450,450]).length,5);
 assert.ok(canvas.includes('item==="arrow"?"Стрелка"'),"Arrow in both ink editors");
 assert.ok(canvas.includes("arrowInkPoints(shapeStart.current??last.points[0],point)"),
  "Arrow tip must follow the Android pointer coordinate");
+
+/** Nudge on paper and photographic annotations must keep EVERY point's
+ * relative coordinates. A global clamp prevents deformed arrows/shapes. */
+const geometry=[line,box,oval,arrow];
+const translated=translateInkStrokes(geometry,20,-20);
+assert.ok(translated);
+assert.notStrictEqual(translated,geometry);
+assert.equal(translated!.length,geometry.length);
+for(let i=0;i<geometry.length;i++){
+ assert.notStrictEqual(translated![i],geometry[i]);
+ for(let j=0;j<geometry[i].points.length;j++){
+  const [ox,oy]=geometry[i].points[j];
+  const [nx,ny]=translated![i].points[j];
+  assert.equal(nx-ox,0,"A stroke already spanning width=1000 cannot shift X");
+  assert.equal(ny-oy,0,"A stroke already touching top=0 cannot shift upwards");
+ }
+}
+const smallShape=[{...box,points:[[100,100],[400,100],[400,300],[100,300],[100,100]] as InkPoint[]}];
+const moved=translateInkStrokes(smallShape,20,40);
+assert.ok(moved);
+assert.deepEqual(moved![0].points,[[120,140],[420,140],[420,340],[120,340],[120,140]]);
+assert.deepEqual(parseInk(serializeInk(moved!)),moved);
+assert.deepEqual(smallShape[0].points,box.points,"The original stroke is immutable");
+const edgeShape=[{...straight,points:[[990,10],[1000,10]] as InkPoint[]}];
+assert.equal(translateInkStrokes(edgeShape,20,0),null,"Do not clip points across a canvas edge");
+assert.deepEqual(translateInkStrokes(edgeShape,-20,0)?.[0].points,[[970,10],[980,10]]);
+assert.equal(translateInkStrokes(smallShape,0,0),null);
+assert.equal(translateInkStrokes([],10,0),null);
+assert.equal(translateInkStrokes(smallShape,NaN,0),null);
+assert.equal(translateInkStrokes(smallShape,2.5,0),null);
+for(const token of ["translateInkStrokes(current.current,dx,dy)",
+ 'aria-label="Передвинуть линии рисунка"',
+ "Сдвинуть линии вверх","Сдвинуть линии вниз",
+ "Сдвинуть линии влево","Сдвинуть линии вправо",
+ 'aria-label="Удалить последний штрих"',"onClick={removeLastStroke}",
+ "lastEmitted.current=null;"])
+ assert.ok(canvas.includes(token),token);
+const photoSource=readFileSync("src/components/editor/WaveImage.tsx","utf8");
+assert.ok(photoSource.includes("<WaveInkCanvas"),"The same nudge and undo functions are available over photos");
+assert.ok(photoSource.includes("onChange={ink=>updateAttributes({ink})}"));

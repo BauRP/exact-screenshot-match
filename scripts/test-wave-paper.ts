@@ -1,6 +1,7 @@
 import {strict as assert} from "node:assert";
 import {readFileSync} from "node:fs";
 import {PAPER_MOODS,PAPER_RULES,paperAppearance,validPaperMood,validPaperRule} from "../src/lib/note-paper";
+import {noteCaretColor} from "../src/lib/note-caret-color";
 assert.equal(PAPER_MOODS.length,6);
 assert.equal(PAPER_RULES.length,5);
 assert.ok(validPaperMood("mist"));
@@ -26,3 +27,12 @@ assert.ok(notebook.backgroundImage?.includes("repeating-linear-gradient"),"Ruled
 assert.ok(notebook.backgroundImage?.includes("216,79,90"),"Red notebook margin is rendered");
 assert.ok(notebook.backgroundImage?.includes("radial-gradient"),"Pastel mood is layered underneath ruling");
 assert.equal(paperAppearance("solid","plain").backgroundImage,undefined);
+
+assert.equal(noteCaretColor("#FDE68A"),"#000000","Yellow paper uses a black caret");
+assert.equal(noteCaretColor("#18181B"),"#FFFFFF","Dark paper uses a white caret");
+assert.equal(noteCaretColor("#ffffff"),"#000000");
+const editorSource=readFileSync("src/routes/editor.$id.tsx","utf8");
+const styleSource=readFileSync("src/styles.css","utf8");
+assert.ok(editorSource.includes('"--wave-note-caret": noteCaretColor(canvasBg)'));
+assert.ok(styleSource.includes('.sn-tiptap [contenteditable="true"]'));
+assert.ok(styleSource.includes('caret-color: var(--wave-note-caret,#000000)'));

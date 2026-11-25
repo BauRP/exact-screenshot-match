@@ -240,6 +240,16 @@
   pointer-events: none;
 }
 
+/* Caret contrast comes from the actual paper colour in editor.$id.tsx.
+ * Some nested editable task/section nodes become their own editing hosts
+ * in Android WebView and do not reliably inherit the inline ProseMirror
+ * caret colour. Keep the selection cursor visible on yellow and dark paper. */
+.sn-tiptap,
+.sn-tiptap [contenteditable="true"],
+.sn-tiptap [contenteditable="plaintext-only"] {
+  caret-color: var(--wave-note-caret,#000000);
+}
+
 /* No focus outline / highlight while text is actively edited. */
 .sn-tiptap,
 .sn-tiptap:focus,

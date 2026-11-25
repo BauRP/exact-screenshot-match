@@ -1,6 +1,6 @@
 import {useEffect,useRef,useState} from "react";
 import type {PointerEvent as ReactPointerEvent} from "react";
-import {appendInkPoint,arrowInkPoints,ellipseInkPoints,inkStrokeIndicesAlong,parseInk,serializeInk,transformInkStrokes,duplicateLastInkStroke,type InkTransform,type InkPoint,type InkStroke} from "@/lib/wave-ink";
+import {appendInkPoint,arrowInkPoints,ellipseInkPoints,inkStrokeIndicesAlong,parseInk,serializeInk,transformInkStrokes,translateInkStrokes,duplicateLastInkStroke,type InkTransform,type InkPoint,type InkStroke} from "@/lib/wave-ink";
 
 /** Per-drawing undo/redo also works for ink layered over a photograph. */
 export function WaveInkCanvas({value,onChange,editable,active=false}:{
@@ -63,6 +63,8 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
      onChange(encoded);
      setSaveError(false);
    }catch(error){
+     // A rejected parent save must not be mistaken for a successful echo.
+     lastEmitted.current=null;
      console.error("Ink save failed",error);
      setSaveError(true);
      // Restore the last serialized state rather than displaying unsaved ink.
@@ -170,6 +172,23 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
    replace(next);setHistoryVersion(v=>v+1);
    emit(next);
  };
+ const nudgeInk=(dx:number,dy:number)=>{
+   if(!editable||!active||gesture.current!==null)return;
+   const next=translateInkStrokes(current.current,dx,dy);
+   if(!next)return;
+   // Reject an overlarge serialized annotation before changing Undo history.
+   try{serializeInk(next);}catch{setSaveError(true);return;}
+   past.current=[...past.current.slice(-29),current.current];
+   future.current=[];
+   replace(next);setHistoryVersion(v=>v+1);emit(next);
+ };
+ const removeLastStroke=()=>{
+   if(!editable||!active||gesture.current!==null||!current.current.length)return;
+   const next=current.current.slice(0,-1);
+   past.current=[...past.current.slice(-29),current.current];
+   future.current=[];
+   replace(next);setHistoryVersion(v=>v+1);emit(next);
+ };
  const repeatLastStroke=()=>{
    if(!editable||!active||gesture.current!==null)return;
    // Validate storage limits BEFORE changing the canvas or Undo history.
@@ -231,6 +250,21 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
        title="Повернуть нарисованные линии влево с возможностью отмены"
        disabled={strokes.length===0} onClick={()=>transformAll("rotate-ccw")}
        className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">⟲ 90°</button>
+     <div role="group" aria-label="Передвинуть линии рисунка" className="flex items-center gap-1">
+       {([
+         {dx:0,dy:-20,label:"Сдвинуть линии вверх",text:"↑"},
+         {dx:0,dy:20,label:"Сдвинуть линии вниз",text:"↓"},
+         {dx:-20,dy:0,label:"Сдвинуть линии влево",text:"←"},
+         {dx:20,dy:0,label:"Сдвинуть линии вправо",text:"→"},
+       ] as const).map(option=><button key={option.label} type="button"
+         aria-label={option.label} title="Переместить весь рисунок, не изображение"
+         disabled={!strokes.length} onClick={()=>nudgeInk(option.dx,option.dy)}
+         className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">{option.text}</button>)}
+     </div>
+     <button type="button" aria-label="Удалить последний штрих"
+       title="Удалить один последний штрих с возможностью отмены"
+       disabled={!strokes.length} onClick={removeLastStroke}
+       className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">− штрих</button>
      <button type="button" aria-label="Повторить последний штрих"
        title="Продублировать последнюю линию, можно отменить"
        disabled={strokes.length===0||strokes.length>=120}

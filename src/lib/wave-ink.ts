@@ -84,6 +84,27 @@ export function duplicateLastInkStroke(strokes:readonly InkStroke[]):InkStroke[]
  try{serializeInk(result);return result;}catch{return null;}
 }
 
+/** Move complete ink geometry within the 1000-unit canvas without clipping
+ * or distorting any line, arrow, ellipse or annotation. Clamps a shared
+ * displacement for ALL points (clamping each point would deform drawings).
+ * null means no safe movement; callers must not create an Undo entry. */
+export function translateInkStrokes(
+ strokes:readonly InkStroke[],dx:number,dy:number
+):InkStroke[]|null{
+ if(!strokes.length||!Number.isSafeInteger(dx)||!Number.isSafeInteger(dy)||
+    (dx===0&&dy===0))return null;
+ let minX=1000,maxX=0,minY=1000,maxY=0;
+ for(const stroke of strokes)for(const [x,y] of stroke.points){
+  if(!Number.isFinite(x)||!Number.isFinite(y)||x<0||x>1000||y<0||y>1000)return null;
+  minX=Math.min(minX,x);maxX=Math.max(maxX,x);
+  minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+ }
+ const shiftX=Math.max(-minX,Math.min(1000-maxX,dx));
+ const shiftY=Math.max(-minY,Math.min(1000-maxY,dy));
+ if(!shiftX&&!shiftY)return null;
+ return strokes.map(stroke=>({...stroke,points:stroke.points.map(([x,y]):InkPoint=>[x+shiftX,y+shiftY])}));
+}
+
 /** Reversible transformations of vector ink, never touching image files.
  * Fresh coordinate arrays preserve hit-test caching and undo correctness. */
 export type InkTransform="flip-x"|"flip-y"|"rotate-cw"|"rotate-ccw";

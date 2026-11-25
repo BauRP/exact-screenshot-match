@@ -348,7 +348,7 @@ function EditorPage() {
       attributes: {
         class:
           "sn-tiptap min-h-full w-full whitespace-pre-wrap break-words outline-none",
-        style: "color:var(--wave-note-ink,#FFFFFF);caret-color:var(--wave-note-caret,#FFFFFF);",
+        style: "color:var(--wave-note-ink,#FFFFFF);caret-color:var(--wave-note-caret,#000000);",
         spellcheck: prefs.spellcheck ? "true" : "false",
       },
     },
