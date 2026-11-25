@@ -100,6 +100,7 @@ import { pickPdfFile, savePdfFile } from "@/lib/pdf-files";
 import { toast } from "sonner";
 import {inspectWaveFile,receiveWaveNote,shareWaveNote,shareWaveNotes,inspectWaveNotesBundle,receiveWaveNotesBundle} from "@/lib/note-transfer";
 import {rewriteNoteAttachmentIds} from "@/lib/note-attachment-refs";
+import {copyPdfMetadata} from "@/lib/note-copy";
 import {findReturnedOriginal,returnedNoteComparison} from "@/lib/wave-note-conflicts";
 import {noteMatchesSearch,type NoteSearchFilter} from "@/lib/note-search";
 import {shareNoteExport,type NoteExportFormat} from "@/lib/note-export";
@@ -272,7 +273,7 @@ function Index() {
         }
         copies.push({...original,id:copyId,title:original.title+" — копия",
           body:rewriteNoteAttachmentIds(original.body,audioMap,imageMap),
-          pdf:original.pdf?structuredClone(original.pdf):undefined,
+          pdf:copyPdfMetadata(original.pdf),
           manualOrder:undefined,createdAt:Date.now(),updatedAt:Date.now()});
       }
       createNotesBatch(copies);

@@ -289,6 +289,9 @@ jobs:
           bun scripts/test-wave-multi-share.ts
           bun scripts/test-wave-multi-import.ts
 
+      - name: Test safe Android PDF copies and multi-page editor controls
+        run: bun scripts/test-wave-release-page-batch.ts
+
       - name: Verify safe page copy and reorder ProseMirror transactions
         run: |
           bun scripts/test-wave-page-actions.ts

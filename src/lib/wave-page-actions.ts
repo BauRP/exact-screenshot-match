@@ -60,6 +60,40 @@ export function duplicateCurrentPage(editor:Editor):boolean{
  editor.view.dispatch(tr.scrollIntoView());
  return true;
 }
+/** Create two or three independent page copies in ONE undoable transaction.
+ * Shared embedded media IDs are intentional inside the same note. The
+ * original page and each copied section retain every mark, field and label.
+ * Reject cross-page selections and invalid counts rather than partial edits. */
+export function duplicateCurrentPageMultiple(editor:Editor,count:2|3):boolean{
+ if(!editor.isEditable||editor.isDestroyed||(count!==2&&count!==3))return false;
+ const {state,view}=editor,{doc,schema,selection}=state;
+ const pages=topLevelPageRanges(doc),divider=schema.nodes.wavePageBreak;
+ if(!divider)return false;
+ const index=singleSelectedPageIndex(pages,selection);
+ if(index===undefined)return false;
+ const page=pages[index],body=doc.content.cut(page.bodyStart,page.end);
+ const original=index>0?doc.nodeAt(page.start):undefined;
+ const originalLabel=String(original?.attrs.label||"Страница "+(index+1));
+ let copies=Fragment.empty;
+ for(let n=1;n<=count;n++){
+  const marker=divider.create({...original?.attrs,label:(originalLabel+" — копия "+n).slice(0,80)});
+  copies=copies.append(Fragment.from(marker)).append(body);
+ }
+ const $target=doc.resolve(page.end);
+ if($target.parent!==doc||!doc.canReplace($target.index(),$target.index(),copies))return false;
+ const tr=state.tr.insert(page.end,copies);
+ if(!tr.doc.type.validContent(tr.doc.content))return false;
+ const last=page.end+(count-1)*(body.size+divider.create().nodeSize),lastBody=last+divider.create().nodeSize;
+ if(selection instanceof NodeSelection&&index>0&&selection.from===page.start)
+  tr.setSelection(NodeSelection.create(tr.doc,last));
+ else if(selection instanceof TextSelection&&selection.from>=page.bodyStart&&selection.to<=page.end){
+  const diff=lastBody-page.bodyStart;
+  tr.setSelection(TextSelection.create(tr.doc,selection.anchor+diff,selection.head+diff));
+ }else tr.setSelection(Selection.near(tr.doc.resolve(Math.min(lastBody+1,tr.doc.content.size))));
+ view.dispatch(tr.scrollIntoView());
+ return true;
+}
+
 /** Reorder pages after the initial page without rebuilding individual blocks
  * or losing formatting, media, section trees or saved page labels. The initial
  * page is special (it has no divider), so it is deliberately never swapped. */

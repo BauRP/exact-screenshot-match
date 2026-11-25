@@ -73,7 +73,7 @@ import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection,setWaveTextDirection} from "@/lib/wave-text-direction";
 import {collectNoteOutline,filterNoteOutline,type OutlineFilter,notePagePositions,noteCurrentPage,renameCurrentPage,pageDisplayNames} from "@/lib/note-outline";
 import {moveSelectedWaveBlock,moveWaveBlocksToAdjacentPage,moveWaveBlocksToPage,copyWaveBlocksToPage,moveWaveBlocksToPageEdge,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection,moveWaveBlocksToSectionEdge} from "@/lib/wave-block-motion";
-import {duplicateCurrentPage,moveCurrentPage,moveCurrentPageToEdge,moveCurrentPageToIndex,insertBlankPageAfter,insertBlankPagesAfter,insertBlankPageBefore,insertBlankPagesBefore,mergeCurrentPageWithPrevious,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,splitPageAtCaret} from "@/lib/wave-page-actions";
+import {duplicateCurrentPage,duplicateCurrentPageMultiple,moveCurrentPage,moveCurrentPageToEdge,moveCurrentPageToIndex,insertBlankPageAfter,insertBlankPagesAfter,insertBlankPageBefore,insertBlankPagesBefore,mergeCurrentPageWithPrevious,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,splitPageAtCaret} from "@/lib/wave-page-actions";
 import {revealOutlinePosition} from "@/lib/wave-outline-navigation";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
@@ -81,7 +81,7 @@ import {safeBrowserClipboardHtml,structuredPlainClipboardHtml,structuredMarkdown
 import {DOMParser as PMDOMParser} from "@tiptap/pm/model";
 import { useFolders, type Folder } from "@/lib/folders-store";
 import {folderNavigationRows} from "@/lib/folder-navigation";
-import {matchingSlashCommands,nextSlashIndex,slashCommandAtCaret} from "@/lib/wave-slash-commands";
+import {matchingSlashCommands,nextSlashIndex,slashCommandAtCaret,slashBlankPages,slashNestedSection} from "@/lib/wave-slash-commands";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -465,7 +465,7 @@ function EditorPage() {
     requestAnimationFrame(()=>editor.view.dom.querySelector(".wave-find-current")?.scrollIntoView({block:"nearest"}));
   };
 
-  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator"|"bullets"|"numbered"|"heading"|"heading1"|"heading3"|"paragraph"|"code"|"checklist"|"checklist3"|"checklist5"|"checklist10"|"page"|"gallery"|"camera"|"drawing",callout:CalloutKind="important")=>{
+  const insertWaveBlock=(kind:"quote"|"callout"|"fold"|"tape"|"date"|"separator"|"bullets"|"numbered"|"heading"|"heading1"|"heading3"|"paragraph"|"code"|"checklist"|"checklist3"|"checklist5"|"checklist10"|"page"|"page3"|"page5"|"gallery"|"camera"|"drawing"|"foldnested",callout:CalloutKind="important")=>{
     if(!editor)return;
     // Do not consume a slash query if the command cannot apply. In
     // particular the Tape command needs a real text selection.
@@ -475,6 +475,15 @@ function EditorPage() {
       return;
     }
     const {$from}=editor.state.selection;
+    if((kind==="page3"||kind==="page5")&&($from.depth!==1||$from.parent.type.name!=="paragraph")){
+      toast("Вставьте новые страницы из обычного абзаца вне раздела");return;
+    }
+    if(kind==="foldnested"){
+      let enclosing=0;
+      for(let depth=1;depth<=$from.depth;depth++)
+        if($from.node(depth).type.name==="waveFold")enclosing++;
+      if(enclosing>3){toast("Не более пяти уровней вложенных разделов");return;}
+    }
     const textBefore=$from.parent.textBetween(0,$from.parentOffset);
     const slashLength=slashText!==null?(slashCommandAtCaret(textBefore)?.length??0):0;
     let chain=editor.chain().focus();
@@ -501,6 +510,10 @@ function EditorPage() {
     if(kind==="date"){chain.insertContent(new Date().toLocaleDateString("ru-RU")).run();return;}
     if(kind==="separator"){chain.setHorizontalRule().run();return;}
     if(kind==="page"){chain.insertWavePageBreak().run();return;}
+    if(kind==="page3"||kind==="page5"){
+      chain.insertContent(slashBlankPages(kind==="page3"?3:5)).run();return;
+    }
+    if(kind==="foldnested"){chain.insertContent(slashNestedSection()).run();return;}
     if(kind==="drawing"){chain.insertWaveDrawing().run();return;}
     // Finish deleting the / command before opening Android's picker.
     // Both actions reuse the working media-import path and its rollback.
@@ -529,6 +542,7 @@ function EditorPage() {
     {id:"info",label:"Информация",icon:"i"},
     {id:"quote",label:"Цитата",icon:"❝"},
     {id:"fold",label:"Сворачиваемый раздел",icon:"▸"},
+    {id:"foldnested",label:"Раздел с подразделом",icon:"▸▸",keywords:["вложенный","подраздел","дерево","иерархия"]},
     {id:"gallery",label:"Фотография из галереи",icon:"▧",keywords:["фото","картинка","изображение","image"]},
     {id:"camera",label:"Сфотографировать",icon:"◉",keywords:["камера","снимок","фото"]},
     {id:"drawing",label:"Рисунок",icon:"✎",keywords:["рисовать","полотно","маркер"]},
@@ -536,6 +550,8 @@ function EditorPage() {
     {id:"date",label:"Вставить дату",icon:"◷"},
     {id:"separator",label:"Разделитель",icon:"—"},
     {id:"page",label:"Новая страница",icon:"▤",keywords:["лист","разрыв","page"]},
+    {id:"page3",label:"Три новые страницы",icon:"▤3",keywords:["3 страницы","три листа"]},
+    {id:"page5",label:"Пять новых страниц",icon:"▤5",keywords:["5 страниц","пять листов"]},
   ] as const;
   const chooseBlock=(id:typeof blockChoices[number]["id"])=>{
     if(id==="callout")insertWaveBlock("callout","important");
@@ -1435,6 +1451,16 @@ function EditorPage() {
           </button>
           <button type="button" aria-label="Дублировать текущую страницу" className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>{if(!duplicateCurrentPage(editor))toast("Не удалось дублировать страницу");}}>Копия страницы</button>
+          <button type="button" aria-label="Создать две копии текущей страницы"
+            title="Две копии страницы с текстом и вложениями, одна отмена"
+            onMouseDown={event=>event.preventDefault()}
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!duplicateCurrentPageMultiple(editor,2))toast("Выберите текст только одной страницы");}}>Копия ×2</button>
+          <button type="button" aria-label="Создать три копии текущей страницы"
+            title="Три копии страницы с текстом и вложениями, одна отмена"
+            onMouseDown={event=>event.preventDefault()}
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!duplicateCurrentPageMultiple(editor,3))toast("Выберите текст только одной страницы");}}>Копия ×3</button>
           <button type="button" aria-label="Переместить страницу выше" disabled={currentPage<=2}
             className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
             onClick={()=>moveCurrentPage(editor,"up")}>Стр. ↑</button>
