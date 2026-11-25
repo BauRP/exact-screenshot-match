@@ -174,19 +174,15 @@ assert.ok(canvas.includes("arrowInkPoints(shapeStart.current??last.points[0],poi
 /** Nudge on paper and photographic annotations must keep EVERY point's
  * relative coordinates. A global clamp prevents deformed arrows/shapes. */
 const geometry=[line,box,oval,arrow];
-const translated=translateInkStrokes(geometry,20,-20);
-assert.ok(translated);
-assert.notStrictEqual(translated,geometry);
-assert.equal(translated!.length,geometry.length);
-for(let i=0;i<geometry.length;i++){
- assert.notStrictEqual(translated![i],geometry[i]);
- for(let j=0;j<geometry[i].points.length;j++){
-  const [ox,oy]=geometry[i].points[j];
-  const [nx,ny]=translated![i].points[j];
-  assert.equal(nx-ox,0,"A stroke already spanning width=1000 cannot shift X");
-  assert.equal(ny-oy,0,"A stroke already touching top=0 cannot shift upwards");
- }
-}
+// One line spans the full width and touches the top. No global displacement
+// is possible, so the correct behaviour is NO change and NO Undo entry.
+assert.equal(translateInkStrokes(geometry,20,-20),null);
+assert.deepEqual(geometry[0].points,[[0,0],[1000,0]]);
+// The requested motion is clamped once for every point, not point by point.
+const bounded=translateInkStrokes([box],800,0);
+assert.ok(bounded);
+assert.deepEqual(bounded![0].points,[[700,100],[1000,100],[1000,300],[700,300],[700,100]]);
+assert.deepEqual(box.points,[[100,100],[400,100],[400,300],[100,300],[100,100]]);
 const smallShape=[{...box,points:[[100,100],[400,100],[400,300],[100,300],[100,100]] as InkPoint[]}];
 const moved=translateInkStrokes(smallShape,20,40);
 assert.ok(moved);
