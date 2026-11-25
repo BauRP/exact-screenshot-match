@@ -192,6 +192,30 @@ export function insertBlankPageBefore(editor:Editor):boolean{
  return true;
 }
 
+/** Add 2–5 empty pages BEFORE the selected page in one Undo step.
+ * The first page is divider-free, so preserve that invariant even when
+ * adding multiple pages before it. Never rebuild text or change media IDs. */
+export function insertBlankPagesBefore(editor:Editor,count:number):boolean{
+ if(!editor.isEditable||editor.isDestroyed||!Number.isSafeInteger(count)||count<2||count>5)return false;
+ const {state,view}=editor,{doc,schema,selection}=state;
+ const pages=topLevelPageRanges(doc),index=singleSelectedPageIndex(pages,selection);
+ const divider=schema.nodes.wavePageBreak,paragraph=schema.nodes.paragraph;
+ if(index===undefined||!divider||!paragraph)return false;
+ const at=pages[index].start;
+ const nodes:PMNode[]=[];
+ for(let i=0;i<count;i++){
+  if(index===0)nodes.push(paragraph.create(),divider.create());
+  else nodes.push(divider.create(),paragraph.create());
+ }
+ const fragment=Fragment.fromArray(nodes),$at=doc.resolve(at);
+ if($at.parent!==doc||!doc.canReplace($at.index(),$at.index(),fragment))return false;
+ const tr=state.tr.insert(at,fragment);
+ if(!tr.doc.type.validContent(tr.doc.content))return false;
+ tr.setSelection(TextSelection.create(tr.doc,index===0?1:at+divider.create().nodeSize+1));
+ view.dispatch(tr.scrollIntoView());
+ return true;
+}
+
 /** Add 2–5 blank pages directly after the active page in ONE transaction.
  * Refuse selections spanning pages; do not touch saved text, photos or marks. */
 export function insertBlankPagesAfter(editor:Editor,count:number):boolean{

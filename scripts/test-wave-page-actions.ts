@@ -3,7 +3,7 @@ import {readFileSync} from "node:fs";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection,NodeSelection} from "@tiptap/pm/state";
 import {noteCurrentPage} from "../src/lib/note-outline";
-import {duplicateCurrentPage,moveCurrentPage,moveCurrentPageToIndex,topLevelPageRanges,insertBlankPageAfter,insertBlankPagesAfter,insertBlankPageBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,isEmptyPageBody,splitPageAtCaret} from "../src/lib/wave-page-actions";
+import {duplicateCurrentPage,moveCurrentPage,moveCurrentPageToIndex,topLevelPageRanges,insertBlankPageAfter,insertBlankPagesAfter,insertBlankPageBefore,insertBlankPagesBefore,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,isEmptyPageBody,splitPageAtCaret} from "../src/lib/wave-page-actions";
 const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},wavePageBreak:{group:"block",atom:true,attrs:{label:{default:""}}},waveFold:{group:"block",content:"block+"},text:{group:"inline"}},marks:{}});
 const p=(s:string)=>schema.nodes.paragraph.create(null,schema.text(s));
 const page=(s:string)=>schema.nodes.wavePageBreak.create({label:s});
@@ -343,3 +343,41 @@ assert.equal(topLevelPageRanges(fiveState.doc).length,7);
 assert.equal(fiveWrites,1);
 assert.equal(fiveState.doc.textContent,"introsaved");
 assert.equal(fiveState.doc.check(),undefined);
+
+const originalPrepend=schema.nodes.doc.create(null,[p("first"),page("Keep second"),p("second")]);
+let prependState=EditorState.create({schema,doc:originalPrepend}),prependEdits=0;
+const prependEditor={isEditable:true,isDestroyed:false,get state(){return prependState;},
+ view:{dispatch(tr:any){prependEdits++;prependState=prependState.apply(tr);}}} as any;
+prependState=prependState.apply(prependState.tr.setSelection(TextSelection.create(prependState.doc,2)));
+assert.equal(insertBlankPagesBefore(prependEditor,3),true);
+assert.equal(prependEdits,1);
+assert.equal(topLevelPageRanges(prependState.doc).length,5);
+assert.equal(prependState.doc.textContent,"firstsecond");
+assert.equal(prependState.selection.from,1);
+assert.equal(prependState.doc.nodeAt(topLevelPageRanges(prependState.doc)[4].start)?.attrs.label,"Keep second");
+assert.equal(prependState.doc.check(),undefined);
+for(const invalid of [-1,0,1,6,2.3,NaN])assert.equal(insertBlankPagesBefore(prependEditor,invalid),false);
+assert.equal(prependEdits,1);
+let namedBeforeState=EditorState.create({schema,doc:originalPrepend}),namedWrites=0;
+const namedEditor={isEditable:true,isDestroyed:false,get state(){return namedBeforeState;},
+ view:{dispatch(tr:any){namedWrites++;namedBeforeState=namedBeforeState.apply(tr);}}} as any;
+const namedRange=topLevelPageRanges(namedBeforeState.doc)[1];
+namedBeforeState=namedBeforeState.apply(namedBeforeState.tr.setSelection(TextSelection.create(namedBeforeState.doc,namedRange.bodyStart+1)));
+assert.equal(insertBlankPagesBefore(namedEditor,5),true);
+assert.equal(namedWrites,1);
+assert.equal(topLevelPageRanges(namedBeforeState.doc).length,7);
+assert.equal(namedBeforeState.doc.textContent,originalPrepend.textContent);
+assert.equal(namedBeforeState.doc.nodeAt(topLevelPageRanges(namedBeforeState.doc)[6].start)?.attrs.label,"Keep second");
+assert.equal(namedBeforeState.doc.check(),undefined);
+let spanningBeforeState=EditorState.create({schema,doc:originalPrepend}),crossBeforeWrites=0;
+const spanEditor={isEditable:true,isDestroyed:false,get state(){return spanningBeforeState;},
+ view:{dispatch(){crossBeforeWrites++;}}} as any;
+spanningBeforeState=spanningBeforeState.apply(spanningBeforeState.tr.setSelection(TextSelection.create(
+ spanningBeforeState.doc,2,topLevelPageRanges(spanningBeforeState.doc)[1].bodyStart+2)));
+assert.equal(insertBlankPagesBefore(spanEditor,3),false);
+assert.equal(crossBeforeWrites,0);
+assert.deepEqual(spanningBeforeState.doc.toJSON(),originalPrepend.toJSON());
+const beforeUi=readFileSync("src/routes/editor.$id.tsx","utf8");
+for(const marker of ['aria-label="Добавить три пустые страницы перед текущей"',
+ 'aria-label="Добавить пять пустых страниц перед текущей"',
+ 'insertBlankPagesBefore(editor,3)','insertBlankPagesBefore(editor,5)'])assert.ok(beforeUi.includes(marker),marker);

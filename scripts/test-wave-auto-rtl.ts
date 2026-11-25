@@ -204,6 +204,21 @@ sectionState=sectionState.apply(sectionState.tr.setSelection(TextSelection.creat
 assert.equal(setWaveTextDirection(sectionEditor,"auto","section"),0);
 assert.equal(sectionEdits,1);
 assert.ok(editor.includes('setWaveTextDirection(editor,"auto","section")'));
+assert.ok(editor.includes('setWaveTextDirection(editor,"rtl","section")'));
+assert.ok(editor.includes('setWaveTextDirection(editor,"ltr","section")'));
+assert.ok(editor.includes('aria-label="Справа налево внутри текущего раздела"'));
+assert.ok(editor.includes('aria-label="Слева направо внутри текущего раздела"'));
+sectionState=sectionState.apply(sectionState.tr.setSelection(TextSelection.create(sectionState.doc,sectionStart+2)));
+assert.equal(setWaveTextDirection(sectionEditor,"ltr","section"),2);
+assert.equal(sectionState.doc.child(1).child(0).attrs.textDirection,"ltr");
+assert.equal(sectionState.doc.child(1).child(1).attrs.textDirection,"ltr");
+assert.equal(sectionState.doc.child(2).attrs.textDirection,"ltr");
+assert.equal(setWaveTextDirection(sectionEditor,"rtl","section"),2);
+assert.equal(sectionState.doc.child(1).child(0).attrs.textDirection,"rtl");
+assert.equal(sectionState.doc.child(1).child(1).attrs.textDirection,"rtl");
+assert.equal(setWaveTextDirection(sectionEditor,"rtl","section"),0);
+assert.equal(sectionEdits,3,"Only actual section changes create Undo transactions");
+assert.equal(sectionState.doc.textContent,"English outsideمرحباשלוםשלום outside");
 
 const pageSchema=new Schema({nodes:{
  doc:{content:"block+"},

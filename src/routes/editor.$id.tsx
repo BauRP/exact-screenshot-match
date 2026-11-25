@@ -73,7 +73,7 @@ import {WavePageBreak} from "@/lib/wave-page-break";
 import {WaveTextDirection,setWaveTextDirection} from "@/lib/wave-text-direction";
 import {collectNoteOutline,filterNoteOutline,type OutlineFilter,notePagePositions,noteCurrentPage,renameCurrentPage,pageDisplayNames} from "@/lib/note-outline";
 import {moveSelectedWaveBlock,moveWaveBlocksToAdjacentPage,moveWaveBlocksToPage,copyWaveBlocksToPage,moveWaveBlocksToPageEdge,liftWaveBlock,selectedWaveBlockPos,nestSelectedWaveBlock,duplicateSelectedWaveBlock,setSelectedCalloutKind,moveContainingWaveSection,duplicateContainingWaveSection,moveWaveBlocksToSectionEdge} from "@/lib/wave-block-motion";
-import {duplicateCurrentPage,moveCurrentPage,moveCurrentPageToEdge,moveCurrentPageToIndex,insertBlankPageAfter,insertBlankPagesAfter,insertBlankPageBefore,mergeCurrentPageWithPrevious,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,splitPageAtCaret} from "@/lib/wave-page-actions";
+import {duplicateCurrentPage,moveCurrentPage,moveCurrentPageToEdge,moveCurrentPageToIndex,insertBlankPageAfter,insertBlankPagesAfter,insertBlankPageBefore,insertBlankPagesBefore,mergeCurrentPageWithPrevious,mergeCurrentPageWithNext,removeAllEmptyPages,removeEmptyCurrentPage,splitPageAtCaret} from "@/lib/wave-page-actions";
 import {revealOutlinePosition} from "@/lib/wave-outline-navigation";
 import { saveImageFile,deleteImageFile,imageIdsInHtml } from "@/lib/image-files";
 import {verifiedNoteImage,takeNotePhoto,clipboardImage,droppedImage} from "@/lib/note-image-import";
@@ -1290,6 +1290,26 @@ function EditorPage() {
               const count=setWaveTextDirection(editor,"auto","section");
               if(count)toast.success("Направление в разделе обновлено: "+count);
               else toast("Установите курсор внутри раздела");}}>RTL раздела</button>
+          <button style={{order:10+prefs.toolbarOrder.indexOf("direction")}} type="button"
+            aria-label="Справа налево внутри текущего раздела"
+            title="Сделать RTL во всех текстовых блоках текущего вложенного раздела"
+            onMouseDown={event=>event.preventDefault()}
+            className="grid h-8 shrink-0 place-items-center rounded-full px-2 text-xs font-semibold hover:bg-secondary"
+            onClick={()=>{if(!editor)return;
+              const count=setWaveTextDirection(editor,"rtl","section");
+              if(count)toast.success("RTL установлен для "+count+" блоков раздела");
+              else toast("Установите курсор внутри раздела или направление уже RTL");
+            }}>Разд. RTL</button>
+          <button style={{order:10+prefs.toolbarOrder.indexOf("direction")}} type="button"
+            aria-label="Слева направо внутри текущего раздела"
+            title="Сделать LTR во всех текстовых блоках текущего вложенного раздела"
+            onMouseDown={event=>event.preventDefault()}
+            className="grid h-8 shrink-0 place-items-center rounded-full px-2 text-xs font-semibold hover:bg-secondary"
+            onClick={()=>{if(!editor)return;
+              const count=setWaveTextDirection(editor,"ltr","section");
+              if(count)toast.success("LTR установлен для "+count+" блоков раздела");
+              else toast("Установите курсор внутри раздела или направление уже LTR");
+            }}>Разд. LTR</button>
           </>}
           {editor&&toolVisible("formatting")&&(
             <div style={{order:10+prefs.toolbarOrder.indexOf("formatting")}}
@@ -1366,6 +1386,16 @@ function EditorPage() {
             Объединить страницы</button>}
           <button type="button" aria-label="Добавить пустую страницу перед текущей" className="rounded-md border px-2 py-1 text-xs"
             onClick={()=>{if(!insertBlankPageBefore(editor))toast("Не удалось добавить страницу");}}>Страница перед +</button>
+          <button type="button" aria-label="Добавить три пустые страницы перед текущей"
+            title="Три чистые страницы перед выбранной, одна отмена"
+            onMouseDown={event=>event.preventDefault()}
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!insertBlankPagesBefore(editor,3))toast("Выберите текст одной страницы");}}>Перед +3</button>
+          <button type="button" aria-label="Добавить пять пустых страниц перед текущей"
+            title="Пять чистых страниц перед выбранной, одна отмена"
+            onMouseDown={event=>event.preventDefault()}
+            className="rounded-md border px-2 py-1 text-xs"
+            onClick={()=>{if(!insertBlankPagesBefore(editor,5))toast("Выберите текст одной страницы");}}>Перед +5</button>
           <button type="button" aria-label="Разделить страницу в месте курсора"
             title="Создать следующую страницу с текста после курсора"
             className="rounded-md border px-2 py-1 text-xs"
