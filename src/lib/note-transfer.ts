@@ -6,7 +6,7 @@
 import { zip, unzip, strToU8, strFromU8 } from "fflate";
 import {audioIdsInHtml,loadAudioFile,saveNewAudioFile,deleteAudioFile} from "./audio-files";
 import {loadPdfFile,saveNewPdfFile,deletePdfFile} from "./pdf-files";
-import {createNote,type Note} from "./notes-store";
+import {createNote,createNotesBatch,type Note} from "./notes-store";
 import {readableText} from "./note-search";
 import {imageIdsInHtml,loadImageFile,saveNewImageFile,deleteImageFile,imageBlobFromBytes} from "./image-files";
 import {rewriteNoteAttachmentIds} from "./note-attachment-refs";
@@ -203,43 +203,82 @@ async function shareWaveBlob(blob:Blob,name:string,title:string):Promise<void>{
  const a=document.createElement("a");a.href=url;a.download=name;document.body.append(a);a.click();a.remove();
  setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
-export async function receiveWaveNote(file:File,folderId:string):Promise<Note>{
- const files=await unpack(file),p=parseManifest(files);
- const generatedAudio:string[]=[];const generatedImages:string[]=[];let generatedPdf:string|null=null;
+/** Validate the entire outer archive and every embedded .wnote BEFORE
+ * creating a single media file or changing the notes database. */
+async function unpackWaveNotesBundle(file:Blob):Promise<Array<{files:Record<string,Uint8Array>;manifest:Envelope}>>{
+ const outer=await unpack(file);
+ const names=Object.keys(outer).sort();
+ if(names.length<2||names.length>10)throw Error("Архив должен содержать от 2 до 10 заметок");
+ const prepared:Array<{files:Record<string,Uint8Array>;manifest:Envelope}>=[];
+ for(let i=0;i<names.length;i++){
+  const expected="WaveNotes-"+String(i+1).padStart(2,"0")+".wnote";
+  if(names[i]!==expected)throw Error("Неожиданное имя файла в архиве заметок");
+  const bytes=outer[names[i]];
+  if(!bytes?.byteLength)throw Error("Пустая заметка внутри архива");
+  const files=await unpack(new Blob([bytes.slice().buffer],{type:"application/octet-stream"}));
+  prepared.push({files,manifest:parseManifest(files)});
+ }
+ return prepared;
+}
+/** A preview shows titles only; private Tape text is never disclosed. */
+export async function inspectWaveNotesBundle(file:File):Promise<{titles:string[];originIds:string[];count:number}>{
+ const all=await unpackWaveNotesBundle(file);
+ return {titles:all.map(entry=>entry.manifest.note.title),
+  originIds:all.map(entry=>entry.manifest.originId),count:all.length};
+}
+type StagedIds={audio:string[];images:string[];pdf:string[]};
+async function cleanupStagedNotes(created:StagedIds):Promise<void>{
+ await Promise.allSettled([
+  ...created.audio.map(id=>deleteAudioFile(id)),
+  ...created.images.map(id=>deleteImageFile(id)),
+  ...created.pdf.map(id=>deletePdfFile(id))
+ ]);
+}
+/** Stage attachments without publishing a note. Each fresh ID is tracked
+ * before an IDB await so failed acknowledgements are also reclaimed. */
+async function stageReceivedNote(
+ files:Record<string,Uint8Array>,p:Envelope,folderId:string,created:StagedIds
+):Promise<Note>{
  const audioMap=new Map<string,string>(),imageMap=new Map<string,string>();
+ for(const old of p.audioIds){
+  const fresh=crypto.randomUUID(),bytes=files["audio/"+old+".blob"];
+  created.audio.push(fresh);
+  await saveNewAudioFile(fresh,new Blob([bytes.slice().buffer],{type:transferAudioMime(bytes,p.audioTypes?.[old])}));
+  audioMap.set(old,fresh);
+ }
+ for(const old of p.imageIds||[]){
+  const fresh=crypto.randomUUID(),bytes=files["images/"+old+".blob"];
+  created.images.push(fresh);
+  await saveNewImageFile(fresh,imageBlobFromBytes(bytes));
+  imageMap.set(old,fresh);
+ }
+ const body=rewriteNoteAttachmentIds(p.note.body,audioMap,imageMap),id=crypto.randomUUID();
+ if(p.hasPdf){
+  created.pdf.push(id);
+  await saveNewPdfFile(id,files["document.pdf"].slice().buffer);
+ }
+ return {...p.note,id,originId:p.originId,body,folderId,
+  title:p.note.title+" — получено",createdAt:Date.now(),updatedAt:Date.now(),
+  pinned:false,manualOrder:undefined};
+}
+/** Import all 2–10 editable .wnote entries with ONE durable note-list write.
+ * If any stage or the final write fails, originals stay untouched, and
+ * staged images/audio/PDFs are reclaimed. No conflict is auto-merged. */
+export async function receiveWaveNotesBundle(file:File,folderId:string):Promise<Note[]>{
+ const all=await unpackWaveNotesBundle(file);
+ const created:StagedIds={audio:[],images:[],pdf:[]};
  try{
-  for(const id of p.audioIds){
-   const fresh=crypto.randomUUID();
-   const bytes=files["audio/"+id+".blob"];
-   // Track the ID before awaiting storage, including lost acknowledgements.
-   generatedAudio.push(fresh);
-   await saveNewAudioFile(fresh,new Blob([bytes.slice().buffer],{type:transferAudioMime(bytes,p.audioTypes?.[id])}));
-   audioMap.set(id,fresh);
-  }
-  for(const imageId of p.imageIds||[]){
-   const fresh=crypto.randomUUID();
-   const data=files["images/"+imageId+".blob"];
-   generatedImages.push(fresh);
-   await saveNewImageFile(fresh,imageBlobFromBytes(data));
-   imageMap.set(imageId,fresh);
-  }
-  // Rewrite actual attachment attributes in one pass, not ordinary note text.
-  // Short source IDs must never corrupt IDs with a common prefix.
-  const body=rewriteNoteAttachmentIds(p.note.body,audioMap,imageMap);
-  const id=crypto.randomUUID();
-  if(p.hasPdf){
-   generatedPdf=id;
-   await saveNewPdfFile(id,files["document.pdf"].slice().buffer);
-  }
-  // Never overwrite local records. Returned edits carry the original originId
-  // for a future diff/merge flow, even when they arrive via Telegram/WhatsApp.
-  return createNote({...p.note,id,originId:p.originId,body,folderId,
-    title:p.note.title+" — получено",createdAt:Date.now(),updatedAt:Date.now(),
-    pinned:false,manualOrder:undefined});
+  const notes:Note[]=[];
+  for(const item of all)notes.push(await stageReceivedNote(item.files,item.manifest,folderId,created));
+  return createNotesBatch(notes);
  }catch(error){
-  await Promise.allSettled(generatedAudio.map(id=>deleteAudioFile(id)));
-  await Promise.allSettled(generatedImages.map(id=>deleteImageFile(id)));
-  if(generatedPdf)await deletePdfFile(generatedPdf).catch(console.error);
+  await cleanupStagedNotes(created);
   throw error;
  }
+}
+export async function receiveWaveNote(file:File,folderId:string):Promise<Note>{
+ const files=await unpack(file),p=parseManifest(files);
+ const created:StagedIds={audio:[],images:[],pdf:[]};
+ try{return createNote(await stageReceivedNote(files,p,folderId,created));}
+ catch(error){await cleanupStagedNotes(created);throw error;}
 }

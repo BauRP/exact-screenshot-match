@@ -98,7 +98,7 @@ import {
 import { useT } from "@/lib/i18n";
 import { pickPdfFile, savePdfFile } from "@/lib/pdf-files";
 import { toast } from "sonner";
-import {inspectWaveFile,receiveWaveNote,shareWaveNote,shareWaveNotes} from "@/lib/note-transfer";
+import {inspectWaveFile,receiveWaveNote,shareWaveNote,shareWaveNotes,inspectWaveNotesBundle,receiveWaveNotesBundle} from "@/lib/note-transfer";
 import {rewriteNoteAttachmentIds} from "@/lib/note-attachment-refs";
 import {findReturnedOriginal,returnedNoteComparison} from "@/lib/wave-note-conflicts";
 import {noteMatchesSearch,type NoteSearchFilter} from "@/lib/note-search";
@@ -176,6 +176,7 @@ function Index() {
   const [copyBusy,setCopyBusy]=useState(false);
   const [transferBusy,setTransferBusy]=useState(false);
   const [incomingWave,setIncomingWave]=useState<{file:File;title:string;originId:string;kind:"note"|"pdf";preview:string;comparisonText:string;visibleLength:number;audioCount:number;imageCount:number;modifiedAt:number|null}|null>(null);
+  const [incomingBundle,setIncomingBundle]=useState<{file:File;titles:string[];originIds:string[]}|null>(null);
   const [folderDialog, setFolderDialog] = useState<FolderDialogState>(null);
   const [folderParentSearch,setFolderParentSearch]=useState("");
   const [drawerOpen,setDrawerOpen]=useState(false);
@@ -196,9 +197,9 @@ function Index() {
   // Google renders native ads above WebView; temporarily hide that overlay
   // while the popup is open so the popup remains readable and clickable.
   useEffect(() => {
-    setNativeAdDialogBlocked(drawerOpen || menuOpen || renameValue !== null || confirmDelete || Boolean(folderDialog) || exportDialog || Boolean(incomingWave) || colorDialog || moveDialog);
+    setNativeAdDialogBlocked(drawerOpen || menuOpen || renameValue !== null || confirmDelete || Boolean(folderDialog) || exportDialog || Boolean(incomingWave) || Boolean(incomingBundle) || colorDialog || moveDialog);
     return () => setNativeAdDialogBlocked(false);
-  }, [drawerOpen,menuOpen, renameValue, confirmDelete, folderDialog, exportDialog, incomingWave, colorDialog, moveDialog]);
+  }, [drawerOpen,menuOpen, renameValue, confirmDelete, folderDialog, exportDialog, incomingWave, incomingBundle, colorDialog, moveDialog]);
 
   // Selection is scoped to the folder being viewed and to notes that still exist.
   useEffect(() => setSelected(new Set()), [activeFolder]);
@@ -345,14 +346,30 @@ function Index() {
   
   const importWave=()=>{
     const picker=document.createElement("input");picker.type="file";
-    picker.accept=".wnote,application/octet-stream";picker.style.display="none";
+    picker.accept=".wnote,.zip,application/octet-stream,application/zip";picker.style.display="none";
     picker.addEventListener("change",()=>{
       const file=picker.files?.[0];picker.remove();
       if(!file)return;
-      void inspectWaveFile(file).then(info=>setIncomingWave({file,title:info.title,originId:info.originId,kind:info.kind,preview:info.preview,comparisonText:info.comparisonText,visibleLength:info.visibleLength,audioCount:info.audioCount,imageCount:info.imageCount,modifiedAt:info.modifiedAt}))
-        .catch(error=>toast.error(error instanceof Error?error.message:"Файл Wave Notes повреждён"));
+      if(file.name.toLowerCase().endsWith(".zip")){
+        void inspectWaveNotesBundle(file)
+          .then(info=>setIncomingBundle({file,titles:info.titles,originIds:info.originIds}))
+          .catch(error=>toast.error(error instanceof Error?error.message:"Архив Wave Notes повреждён"));
+      }else{
+        void inspectWaveFile(file).then(info=>setIncomingWave({file,title:info.title,originId:info.originId,kind:info.kind,preview:info.preview,comparisonText:info.comparisonText,visibleLength:info.visibleLength,audioCount:info.audioCount,imageCount:info.imageCount,modifiedAt:info.modifiedAt}))
+          .catch(error=>toast.error(error instanceof Error?error.message:"Файл Wave Notes повреждён"));
+      }
     });
     document.body.appendChild(picker);picker.click();
+  };
+  const doImportBundle=async()=>{
+    if(!incomingBundle||transferBusy)return;
+    setTransferBusy(true);
+    try{
+      const imported=await receiveWaveNotesBundle(incomingBundle.file,activeFolder==="all"?"all":activeFolder);
+      setIncomingBundle(null);
+      toast.success("Получено заметок: "+imported.length);
+    }catch(error){toast.error(error instanceof Error?error.message:"Не удалось получить архив заметок");}
+    finally{setTransferBusy(false);}
   };
   const returnedOriginal=incomingWave?findReturnedOriginal(notes,incomingWave.originId,incomingWave.kind):undefined;
   const doImportWave=async(mode:"copy"|"replace"|"combine"="copy")=>{
@@ -759,6 +776,24 @@ function Index() {
           </nav>
         </SheetContent>
       </Sheet>
+      <Dialog open={Boolean(incomingBundle)} onOpenChange={open=>{if(!open&&!transferBusy)setIncomingBundle(null)}}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader><DialogTitle>Получить несколько заметок Wave Notes</DialogTitle></DialogHeader>
+          <p className="text-xs text-muted-foreground">Архив предварительно проверен. Все заметки будут сохранены отдельными копиями за одно действие. Исходные версии не заменяются.</p>
+          <div className="max-h-48 overflow-y-auto rounded-xl border border-border p-3 text-sm">
+            {incomingBundle?.titles.map((title,index)=>
+              <p key={index} className="break-words py-1">{index+1}. {title}
+                {notes.some(note=>note.id===incomingBundle.originIds[index]||note.originId===incomingBundle.originIds[index])&&
+                  <span className="ml-2 text-xs text-muted-foreground">(уже есть версия, оригинал сохранится)</span>}
+              </p>)}
+          </div>
+          <p className="text-xs text-muted-foreground">Скрытые ответы Tape не выводятся в просмотре. При ошибке импорта ни одна новая заметка не будет записана.</p>
+          <DialogFooter>
+            <Button variant="outline" disabled={transferBusy} onClick={()=>setIncomingBundle(null)}>Отмена</Button>
+            <Button disabled={transferBusy} onClick={()=>void doImportBundle()}>Получить все заметки</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={Boolean(incomingWave)} onOpenChange={open=>{if(!open&&!transferBusy)setIncomingWave(null)}}>
         <DialogContent className="max-w-sm rounded-2xl">
           <DialogHeader><DialogTitle>Получить заметку Wave Notes</DialogTitle></DialogHeader>
