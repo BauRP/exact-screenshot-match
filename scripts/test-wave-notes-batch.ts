@@ -29,7 +29,7 @@ assert.equal(writes,count);
 assert.equal(saved.get("sn.notes.v1"),before);
 deny=true;
 assert.throws(()=>db.createNotesBatch([{...original,id:"failure"}]),/Unable to save notes/);
-assert.equal(db.getNote("failure"),undefined);
+assert.ok(!db.parseStoredNotes(saved.get("sn.notes.v1")??null).some(note=>note.id==="failure"),"Failed write cannot leave a copy in persisted notes");
 assert.equal(saved.get("sn.notes.v1"),before);
 const code=readFileSync("src/routes/index.tsx","utf8");
 assert.ok(code.includes("createNotesBatch(copies)"));
