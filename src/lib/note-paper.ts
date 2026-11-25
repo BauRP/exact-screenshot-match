@@ -2,6 +2,8 @@
  * Paper rulings may layer with pastel themes; choosing a solid palette colour
  * automatically disables the pastel theme while preserving the paper ruling.
  */
+import {noteCaretColor} from "./note-caret-color";
+
 export type PaperMood="solid"|"mist"|"warm"|"sage"|"sky"|"lavender";
 export type PaperRule="plain"|"lined"|"grid"|"dots"|"margin";
 export const PAPER_MOODS:{id:PaperMood;name:string;background:string;gradient:string}[]=[
@@ -19,17 +21,22 @@ export const PAPER_RULES:{id:PaperRule;name:string}[]=[
 ];
 export const validPaperMood=(value:unknown):value is PaperMood=>PAPER_MOODS.some(m=>m.id===value);
 export const validPaperRule=(value:unknown):value is PaperRule=>PAPER_RULES.some(m=>m.id===value);
-export function paperAppearance(mood:PaperMood,rule:PaperRule):{backgroundImage?:string;backgroundSize?:string}{
- const theme=PAPER_MOODS.find(m=>m.id===mood)?.gradient||"";
- const line="rgba(66,84,112,.15)";
- const margin="linear-gradient(to right,transparent 0,transparent 35px,rgba(216,79,90,.3) 35px,rgba(216,79,90,.3) 37px,transparent 37px)";
+/** Dark custom paper needs brighter ruling, without modifying stored styles. */
+export function paperAppearance(mood:PaperMood,rule:PaperRule,background?:string):{backgroundImage?:string;backgroundSize?:string}{
+ const active=PAPER_MOODS.find(m=>m.id===mood);
+ const theme=active?.gradient||"";
+ const dark=noteCaretColor(background||active?.background||"#FDE68A")==="#FFFFFF";
+ const line=dark?"rgba(226,232,240,.26)":"rgba(66,84,112,.15)";
+ const dot=dark?"rgba(226,232,240,.34)":"rgba(66,84,112,.22)";
+ const marginInk=dark?"rgba(251,113,133,.56)":"rgba(216,79,90,.3)";
+ const margin=`linear-gradient(to right,transparent 0,transparent 35px,${marginInk} 35px,${marginInk} 37px,transparent 37px)`;
  const overlay=rule==="margin"
   ? margin+`,repeating-linear-gradient(to bottom,transparent 0,transparent 27px,${line} 28px,transparent 29px)`
   :rule==="lined"
   ? `repeating-linear-gradient(to bottom,transparent 0,transparent 27px,${line} 28px,transparent 29px)`
   :rule==="grid"
   ? `linear-gradient(to right,${line} 1px,transparent 1px),linear-gradient(to bottom,${line} 1px,transparent 1px)`
-  :rule==="dots"?"radial-gradient(rgba(66,84,112,.22) 1px,transparent 1.3px)":"";
+  :rule==="dots"?`radial-gradient(${dot} 1px,transparent 1.3px)`:"";
  const layers=[overlay,theme].filter(Boolean);
  const sizes=rule==="grid"?["24px 24px","24px 24px"]:rule==="dots"?["20px 20px"]:[];
  if(theme&&sizes.length)sizes.push("auto");

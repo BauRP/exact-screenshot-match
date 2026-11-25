@@ -1,7 +1,7 @@
 import {strict as assert} from "node:assert";
 import {Schema} from "@tiptap/pm/model";
 import {EditorState,TextSelection} from "@tiptap/pm/state";
-import {setSelectedChecklistShape,setSelectedTasksDone} from "../src/lib/wave-checklist-actions";
+import {setSelectedChecklistShape,setSelectedTasksDone,continueSelectedChecklistRows} from "../src/lib/wave-checklist-actions";
 import {readFileSync} from "node:fs";
 const schema=new Schema({nodes:{
  doc:{content:"block+"},waveChecklistItem:{group:"block",content:"inline*",attrs:{
@@ -50,3 +50,38 @@ for(const s of ['setSelectedTasksDone(editor,true)','setSelectedTasksDone(editor
  'Изменить форму выделенных отметок',
  'style={{order:10+prefs.toolbarOrder.indexOf("direction")}}'])assert.ok(ui.includes(s),s);
 console.log("Selected task bulk status and shape preserve marks, page boundaries and atomic undo");
+
+let extended=EditorState.create({schema,doc:schema.nodes.doc.create(null,[
+ task("alpha",true),task("beta",false),schema.nodes.wavePageBreak.create(),task("other",true)
+])});
+let inserts=0;
+const extending={isEditable:true,isDestroyed:false,get state(){return extended;},
+ view:{dispatch(tr:any){inserts++;extended=extended.apply(tr);}}} as any;
+const originalContent=extended.doc.textContent;
+extended=extended.apply(extended.tr.setSelection(TextSelection.create(extended.doc,2,extended.doc.child(0).nodeSize+2)));
+assert.equal(continueSelectedChecklistRows(extending),2);
+assert.equal(inserts,1,"One transaction must continue both selected tasks");
+assert.equal(extended.doc.childCount,6);
+assert.equal(extended.doc.child(0).textContent,"alpha");
+assert.equal(extended.doc.child(0).attrs.done,true);
+assert.equal(extended.doc.child(1).textContent,"");
+assert.equal(extended.doc.child(1).attrs.done,false);
+assert.equal(extended.doc.child(2).textContent,"beta");
+assert.equal(extended.doc.child(3).textContent,"");
+assert.equal(extended.doc.child(3).attrs.done,false);
+assert.equal(extended.doc.child(4).type.name,"wavePageBreak");
+assert.equal(extended.doc.child(5).textContent,"other");
+assert.equal(extended.doc.textContent,originalContent);
+assert.equal(extended.doc.child(0).firstChild?.marks[0].type.name,"strong");
+assert.equal(extended.selection.$from.parent.type.name,"waveChecklistItem");
+assert.equal(extended.doc.check(),undefined);
+const savedState=JSON.stringify(extended.doc.toJSON());
+let far=-1;
+extended.doc.descendants((node,pos)=>{if(node.type.name==="waveChecklistItem"&&node.textContent==="other")far=pos+2;});
+extended=extended.apply(extended.tr.setSelection(TextSelection.create(extended.doc,2,far)));
+assert.equal(continueSelectedChecklistRows(extending),0);
+assert.equal(inserts,1);
+assert.equal(JSON.stringify(extended.doc.toJSON()),savedState);
+const uiTasks=readFileSync("src/routes/editor.$id.tsx","utf8");
+assert.ok(uiTasks.includes("continueSelectedChecklistRows(editor)"));
+assert.ok(uiTasks.includes('aria-label="Продолжить каждую выделенную задачу новым пунктом"'));

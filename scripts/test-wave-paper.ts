@@ -14,7 +14,7 @@ const e=readFileSync("src/routes/editor.$id.tsx","utf8");
 assert.ok(e.includes('aria-label="Оформление листа"'));
 assert.ok(e.includes('aria-label="Разметка бумаги"'));
 assert.ok(e.includes('setPaperMood("solid")'));
-assert.ok(e.includes("paperAppearance(paperMood,paperRule)"));
+assert.ok(e.includes("paperAppearance(paperMood,paperRule,canvasBg)"));
 assert.ok(e.includes("style: { background: canvasBg, paperMood, paperRule }"));
 console.log("Separated note background and paper ruling persistence checks passed.");
 
@@ -36,3 +36,14 @@ const styleSource=readFileSync("src/styles.css","utf8");
 assert.ok(editorSource.includes('"--wave-note-caret": noteCaretColor(canvasBg)'));
 assert.ok(styleSource.includes('.sn-tiptap [contenteditable="true"]'));
 assert.ok(styleSource.includes('caret-color: var(--wave-note-caret,#000000)'));
+
+const lightGrid=paperAppearance("solid","grid","#FDE68A");
+const darkGrid=paperAppearance("solid","grid","#111827");
+assert.ok(lightGrid.backgroundImage?.includes("66,84,112"));
+assert.ok(darkGrid.backgroundImage?.includes("226,232,240"));
+assert.equal(darkGrid.backgroundSize,"24px 24px,24px 24px");
+assert.ok(paperAppearance("solid","dots","#111827").backgroundImage?.includes("226,232,240"));
+assert.ok(paperAppearance("solid","lined","#111827").backgroundImage?.includes("226,232,240"));
+assert.ok(paperAppearance("solid","margin","#111827").backgroundImage?.includes("251,113,133"));
+assert.equal(paperAppearance("solid","plain","#111827").backgroundImage,undefined);
+assert.ok(paperAppearance("lavender","margin").backgroundImage?.includes("216,79,90"));

@@ -98,3 +98,40 @@ assert.equal(copyWaveBlocksToPage(copyEditor,3),false);
 assert.equal(copyWrites,1);
 assert.ok(ui.includes('copyWaveBlocksToPage(editor,targetBlockPageNumber)'));
 assert.ok(ui.includes('insertBlankPagesAfter(editor,3)'));
+
+const startDestination=schema.nodes.doc.create(null,[
+ p("alpha"),schema.nodes.waveImage.create({imageId:"safe-photo"}),
+ mark("destination"),p("existing"),mark("tail"),p("tail")
+]);
+let startMoveState=EditorState.create({schema,doc:startDestination}),startMoveWrites=0;
+const startMover={isEditable:true,isDestroyed:false,get state(){return startMoveState;},
+ view:{dispatch(tr:any){startMoveWrites++;startMoveState=startMoveState.apply(tr);}}} as any;
+startMoveState=startMoveState.apply(startMoveState.tr.setSelection(TextSelection.create(startMoveState.doc,2)));
+assert.equal(moveWaveBlocksToPage(startMover,2,"start"),true);
+assert.equal(startMoveWrites,1);
+assert.equal(startMoveState.doc.child(0).attrs.imageId,"safe-photo");
+assert.equal(startMoveState.doc.child(1).type.name,"wavePageBreak");
+assert.equal(startMoveState.doc.child(1).attrs.label,"destination");
+assert.equal(startMoveState.doc.child(2).textContent,"alpha");
+assert.equal(startMoveState.doc.child(3).textContent,"existing");
+assert.equal(startMoveState.selection.$from.parent.textContent,"alpha");
+assert.equal(startMoveState.doc.check(),undefined);
+assert.equal(moveWaveBlocksToPage(startMover,2,"invalid" as any),false);
+assert.equal(startMoveWrites,1);
+let startCopyState=EditorState.create({schema,doc:startDestination}),startCopyWrites=0;
+const startCopier={isEditable:true,isDestroyed:false,get state(){return startCopyState;},
+ view:{dispatch(tr:any){startCopyWrites++;startCopyState=startCopyState.apply(tr);}}} as any;
+startCopyState=startCopyState.apply(startCopyState.tr.setSelection(TextSelection.create(startCopyState.doc,2)));
+assert.equal(copyWaveBlocksToPage(startCopier,2,"start"),true);
+assert.equal(startCopyWrites,1);
+assert.equal(startCopyState.doc.child(0).textContent,"alpha");
+assert.equal(startCopyState.doc.child(1).attrs.imageId,"safe-photo");
+assert.equal(startCopyState.doc.child(2).attrs.label,"destination");
+assert.equal(startCopyState.doc.child(3).textContent,"alpha");
+assert.equal(startCopyState.doc.child(4).textContent,"existing");
+assert.equal(startCopyState.selection.$from.parent.textContent,"alpha");
+assert.equal(startCopyState.doc.check(),undefined);
+assert.equal(copyWaveBlocksToPage(startCopier,2,"invalid" as any),false);
+assert.equal(startCopyWrites,1);
+assert.ok(ui.includes('moveWaveBlocksToPage(editor,targetBlockPageNumber,"start")'));
+assert.ok(ui.includes('copyWaveBlocksToPage(editor,targetBlockPageNumber,"start")'));

@@ -95,7 +95,7 @@ import {replaceOneInNote,replaceAllInNote} from "@/lib/wave-find-replace";
 import { readEditorPreferences,saveEditorPreferences,toolbarPreset,EDITOR_PREFS_CHANGED,type EditorTool } from "@/lib/editor-preferences";
 import { WaveChecklistItem, type CheckShape } from "@/lib/wave-checklist";
 import {setAllChecklistItems,checklistCounts} from "@/lib/wave-checklist-batch";
-import {setSelectedChecklistShape,setSelectedTasksDone,continueSelectedChecklistItem,insertUncheckedChecklistBefore,insertUncheckedChecklistAfter,insertUncheckedChecklistRowsAfter,insertUncheckedChecklistRowsBefore,convertSelectedChecklistBlocks,selectedSectionTaskCounts,setSelectedSectionTasksDone,currentPageTaskCounts,setCurrentPageTasksDone} from "@/lib/wave-checklist-actions";
+import {setSelectedChecklistShape,setSelectedTasksDone,continueSelectedChecklistItem,insertUncheckedChecklistBefore,insertUncheckedChecklistAfter,insertUncheckedChecklistRowsAfter,insertUncheckedChecklistRowsBefore,continueSelectedChecklistRows,convertSelectedChecklistBlocks,selectedSectionTaskCounts,setSelectedSectionTasksDone,currentPageTaskCounts,setCurrentPageTasksDone} from "@/lib/wave-checklist-actions";
 import {setAllFoldSections,setFoldSectionsToDepth,setCurrentPageFoldSections,setSelectedFoldSubsections,countFoldSections} from "@/lib/wave-section-batch";
 import { PAPER_MOODS,PAPER_RULES,paperAppearance,type PaperMood,type PaperRule } from "@/lib/note-paper";
 import { WaveCallout, WaveFold, WaveTape, type CalloutKind } from "@/lib/wave-blocks";
@@ -1140,6 +1140,15 @@ function EditorPage() {
                   onClick={()=>{if(!editor||!insertUncheckedChecklistRowsBefore(editor,quickTaskCount))toast("Установите курсор внутри задачи");}}
                   className="flex-1 rounded-md border border-border px-2 py-2 text-xs">Перед +</button>
               </div>
+              <button type="button" onMouseDown={event=>event.preventDefault()}
+                aria-label="Продолжить каждую выделенную задачу новым пунктом"
+                title="Добавить по одному невыполненному пункту к выбранным задачам, одна отмена"
+                className="mt-1 w-full rounded-md border border-border px-2 py-2 text-left text-xs"
+                onClick={()=>{if(!editor)return;
+                  const count=continueSelectedChecklistRows(editor);
+                  if(count)toast.success("Продолжено задач: "+count);
+                  else toast("Выделите соседние задачи одной страницы");
+                }}>Продолжить выбранные задачи +</button>
               <div className="mt-2 grid grid-cols-1 gap-1 border-t border-border pt-2">
                 <p className="px-2 text-xs font-semibold">Преобразование без потери текста</p>
                 <button type="button" onMouseDown={event=>event.preventDefault()}
@@ -1520,6 +1529,22 @@ function EditorPage() {
             className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
             onClick={()=>{if(!copyWaveBlocksToPage(editor,targetBlockPageNumber))toast("Выберите блок на другой странице");}}>
             Копия на страницу</button>
+          <button type="button" aria-label="Перенести блок в начало указанной страницы"
+            title="Перенести блок или группу перед существующим содержимым страницы"
+            onMouseDown={event=>event.preventDefault()}
+            disabled={pagePositions.length<2||!Number.isSafeInteger(targetBlockPageNumber)||
+              targetBlockPageNumber<1||targetBlockPageNumber>pagePositions.length}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>{if(!moveWaveBlocksToPage(editor,targetBlockPageNumber,"start"))toast("Выберите блок на другой странице");}}>
+            Блок в начало стр.</button>
+          <button type="button" aria-label="Копировать блок в начало указанной страницы"
+            title="Оригинал остаётся на месте, копия появляется перед содержимым страницы"
+            onMouseDown={event=>event.preventDefault()}
+            disabled={pagePositions.length<2||!Number.isSafeInteger(targetBlockPageNumber)||
+              targetBlockPageNumber<1||targetBlockPageNumber>pagePositions.length}
+            className="rounded-md border px-2 py-1 text-xs disabled:opacity-30"
+            onClick={()=>{if(!copyWaveBlocksToPage(editor,targetBlockPageNumber,"start"))toast("Выберите блок на другой странице");}}>
+            Копия в начало стр.</button>
           <button type="button" aria-label="Вложить блок в раздел" title="Переместить блок в предыдущий раздел"
             className="rounded-md border px-2 py-1 text-xs" onClick={()=>nestSelectedWaveBlock(editor)}>↘</button>
           <button type="button" aria-label="Дублировать блок или группу"
@@ -1759,7 +1784,7 @@ function EditorPage() {
       <main className="mx-auto flex w-full min-h-0 max-w-xl flex-1 flex-col px-3 pb-[calc(env(safe-area-inset-bottom)+16px)] pt-3">
         <div
           className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border p-3 shadow-inner transition-colors [-webkit-overflow-scrolling:touch]"
-          style={{ backgroundColor: canvasBg, ...paperAppearance(paperMood,paperRule) }}
+          style={{ backgroundColor: canvasBg, ...paperAppearance(paperMood,paperRule,canvasBg) }}
           onKeyDownCapture={event=>{
             if(slashText===null||event.nativeEvent.isComposing)return;
             if(event.key==="Escape"){

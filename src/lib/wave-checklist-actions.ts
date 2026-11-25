@@ -217,6 +217,26 @@ export function insertUncheckedChecklistRowsBefore(editor:Editor,count:number):b
  return true;
 }
 
+/** Continue each selected task with a new unchecked row, atomically.
+ * Selection must contain only sibling tasks on one page; no text, marks,
+ * completion state, page break, or attachments from originals are altered. */
+export function continueSelectedChecklistRows(editor:Editor):number{
+ if(!editor.isEditable||editor.isDestroyed)return 0;
+ const rows=selectedChecklistRows(editor);
+ if(!rows.length||rows.length>100)return 0;
+ let tr=editor.state.tr;
+ for(let i=rows.length-1;i>=0;i--){
+  const {pos,node}=rows[i],at=pos+node.nodeSize;
+  const $at=tr.doc.resolve(at);
+  if(!$at.parent.canReplaceWith($at.index(),$at.index(),node.type))return 0;
+  tr=tr.insert(at,node.type.create({...node.attrs,done:false}));
+ }
+ if(!tr.doc.type.validContent(tr.doc.content))return 0;
+ tr.setSelection(TextSelection.create(tr.doc,rows[0].pos+rows[0].node.nodeSize+1));
+ editor.view.dispatch(tr.scrollIntoView());
+ return rows.length;
+}
+
 /** The section-scoped toolbar is meaningful only when the whole selection
  * belongs to the SAME innermost section. A range across two sections, from
  * a section into plain text or into a different nested section must not
