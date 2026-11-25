@@ -510,7 +510,7 @@ function Index() {
                       {selected.size>0 && <DropdownMenuItem aria-label="Поделиться редактируемой заметкой" disabled={transferBusy}
                         onClick={()=>void doShareSelected()} className="min-h-10 gap-2">
                         <Share2 className="h-4 w-4"/>{selected.size===1?"Поделиться заметкой":"Поделиться выбранными (.zip)"}
-                      </DropdownMenuItem>
+                      </DropdownMenuItem>}
                       {selected.size===1 && selectedNotes[0]?.kind!=="pdf"&&
                       <DropdownMenuItem disabled={transferBusy} onClick={()=>setExportDialog(true)} className="min-h-10 gap-2">
                         <Download className="h-4 w-4"/>Экспорт в файл
