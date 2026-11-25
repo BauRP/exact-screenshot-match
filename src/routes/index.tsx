@@ -68,6 +68,7 @@ import {
 } from "@/lib/folders-store";
 import {
   createNote,
+  createNotesBatch,
   moveNotesToFolder,
   moveSelectedNotesToFolder,
   setSelectedNotesCardColor,
@@ -97,7 +98,8 @@ import {
 import { useT } from "@/lib/i18n";
 import { pickPdfFile, savePdfFile } from "@/lib/pdf-files";
 import { toast } from "sonner";
-import {inspectWaveFile,receiveWaveNote,shareWaveNote} from "@/lib/note-transfer";
+import {inspectWaveFile,receiveWaveNote,shareWaveNote,shareWaveNotes} from "@/lib/note-transfer";
+import {rewriteNoteAttachmentIds} from "@/lib/note-attachment-refs";
 import {findReturnedOriginal,returnedNoteComparison} from "@/lib/wave-note-conflicts";
 import {noteMatchesSearch,type NoteSearchFilter} from "@/lib/note-search";
 import {shareNoteExport,type NoteExportFormat} from "@/lib/note-export";
@@ -232,54 +234,60 @@ function Index() {
        ?folderParent(parentOfSelection):"all")
     :null;
   const duplicateSelectedNote = async () => {
-    if(copyBusy || selectedNotes.length!==1)return;
+    if(copyBusy||!selectedNotes.length)return;
+    if(selectedNotes.length>20){toast.error("За один раз можно создать до 20 копий");return;}
     setCopyBusy(true);
-    const original=selectedNotes[0];
-    let pdfCopyId:string|null=null;
-    const addedAudioIds:string[]=[];
-    const addedImageIds:string[]=[];
+    const addedAudioIds:string[]=[],addedImageIds:string[]=[],addedPdfIds:string[]=[];
     try{
-      let body=original.body;
-      const { audioIdsInHtml, loadAudioFile, saveAudioFile }=await import("@/lib/audio-files");
-      for(const id of audioIdsInHtml(body)){
-        const blob=await loadAudioFile(id);
-        if(!blob)throw new Error("Не удалось прочитать исходную аудиозапись");
-        const copiedId=await saveAudioFile(blob);
-        addedAudioIds.push(copiedId);
-        body=body.replaceAll(`audiodb:${id}`,`audiodb:${copiedId}`);
+      const [audio,image,pdf]=await Promise.all([
+        import("@/lib/audio-files"),import("@/lib/image-files"),import("@/lib/pdf-files")
+      ]);
+      const copies:Note[]=[];
+      for(const original of selectedNotes){
+        const audioMap=new Map<string,string>(),imageMap=new Map<string,string>();
+        for(const id of audio.audioIdsInHtml(original.body)){
+          const file=await audio.loadAudioFile(id);
+          if(!file)throw Error("Не удалось прочитать исходную аудиозапись");
+          const fresh=crypto.randomUUID();
+          // Register before IDB write, including a committed but unacknowledged write.
+          addedAudioIds.push(fresh);
+          await audio.saveNewAudioFile(fresh,file);
+          audioMap.set(id,fresh);
+        }
+        for(const id of image.imageIdsInHtml(original.body)){
+          const file=await image.loadImageFile(id);
+          if(!file)throw Error("Не удалось прочитать исходную фотографию");
+          const fresh=crypto.randomUUID();
+          addedImageIds.push(fresh);
+          await image.saveNewImageFile(fresh,file);
+          imageMap.set(id,fresh);
+        }
+        const copyId=crypto.randomUUID();
+        if(original.kind==="pdf"){
+          const bytes=await pdf.loadPdfFile(original.id);
+          if(!bytes)throw Error("Исходный PDF не найден");
+          addedPdfIds.push(copyId);
+          await pdf.saveNewPdfFile(copyId,bytes);
+        }
+        copies.push({...original,id:copyId,title:original.title+" — копия",
+          body:rewriteNoteAttachmentIds(original.body,audioMap,imageMap),
+          pdf:original.pdf?structuredClone(original.pdf):undefined,
+          manualOrder:undefined,createdAt:Date.now(),updatedAt:Date.now()});
       }
-      const {imageIdsInHtml,loadImageFile,saveNewImageFile}=await import("@/lib/image-files");
-      for(const imageId of imageIdsInHtml(body)){
-        const photo=await loadImageFile(imageId);
-        if(!photo)throw new Error("Не удалось прочитать исходную фотографию");
-        const copiedId=crypto.randomUUID();
-        await saveNewImageFile(copiedId,photo);
-        addedImageIds.push(copiedId);
-        body=body.replaceAll('data-image-id="'+imageId+'"','data-image-id="'+copiedId+'"')
-          .replaceAll("data-image-id='"+imageId+"'","data-image-id='"+copiedId+"'");
-      }
-      if(original.kind==="pdf"){
-        const {loadPdfFile,saveNewPdfFile}=await import("@/lib/pdf-files");
-        const file=await loadPdfFile(original.id);
-        if(!file)throw new Error("Исходный PDF не найден");
-        pdfCopyId=crypto.randomUUID();
-        await saveNewPdfFile(pdfCopyId,file);
-      }
-      createNote({
-        ...original,id:pdfCopyId??crypto.randomUUID(),title:original.title+" — копия",
-        body,pdf:original.pdf?structuredClone(original.pdf):undefined,
-        createdAt:Date.now(),updatedAt:Date.now(),
-      });
+      createNotesBatch(copies);
       setSelected(new Set());
-      toast.success("Независимая копия создана");
+      toast.success(copies.length===1?"Независимая копия создана":"Создано копий: "+copies.length);
     }catch(error){
-      const {deleteAudioFile}=await import("@/lib/audio-files");
-      await Promise.allSettled(addedAudioIds.map(id=>deleteAudioFile(id)));
-      const {deleteImageFile}=await import("@/lib/image-files");
-      await Promise.allSettled(addedImageIds.map(id=>deleteImageFile(id)));
-      if(pdfCopyId){const {deletePdfFile}=await import("@/lib/pdf-files");await deletePdfFile(pdfCopyId).catch(console.error);}
+      const [audio,image,pdf]=await Promise.all([
+        import("@/lib/audio-files"),import("@/lib/image-files"),import("@/lib/pdf-files")
+      ]);
+      await Promise.allSettled([
+        ...addedAudioIds.map(id=>audio.deleteAudioFile(id)),
+        ...addedImageIds.map(id=>image.deleteImageFile(id)),
+        ...addedPdfIds.map(id=>pdf.deletePdfFile(id))
+      ]);
       console.error("Duplicate note failed",error);
-      toast.error(error instanceof Error?error.message:"Не удалось создать копию");
+      toast.error(error instanceof Error?error.message:"Не удалось создать копии");
     }finally{setCopyBusy(false);}
   };
 
@@ -381,9 +389,13 @@ function Index() {
     finally{setTransferBusy(false);}
   };
   const doShareSelected=async()=>{
-    if(selectedNotes.length!==1||transferBusy)return;
+    if(!selectedNotes.length||transferBusy)return;
     setTransferBusy(true);
-    try{await shareWaveNote(selectedNotes[0]);setSelected(new Set());}
+    try{
+      if(selectedNotes.length===1)await shareWaveNote(selectedNotes[0]);
+      else await shareWaveNotes(selectedNotes);
+      setSelected(new Set());
+    }
     catch(error){toast.error(error instanceof Error?error.message:"Ошибка передачи файла");}
     finally{setTransferBusy(false);}
   };
@@ -492,13 +504,13 @@ function Index() {
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" sideOffset={6} className="w-56 rounded-xl">
-                      {selected.size===1 && <DropdownMenuItem disabled={copyBusy} onClick={()=>void duplicateSelectedNote()} className="min-h-10 gap-2">
-                        <Copy className="h-4 w-4"/>Создать копию
+                      {selected.size>0 && <DropdownMenuItem disabled={copyBusy} onClick={()=>void duplicateSelectedNote()} className="min-h-10 gap-2">
+                        <Copy className="h-4 w-4"/>{selected.size===1?"Создать копию":"Создать копии выбранных"}
                       </DropdownMenuItem>}
-                      {selected.size===1 && <DropdownMenuItem aria-label="Поделиться редактируемой заметкой" disabled={transferBusy}
+                      {selected.size>0 && <DropdownMenuItem aria-label="Поделиться редактируемой заметкой" disabled={transferBusy}
                         onClick={()=>void doShareSelected()} className="min-h-10 gap-2">
-                        <Share2 className="h-4 w-4"/>Поделиться заметкой
-                      </DropdownMenuItem>}
+                        <Share2 className="h-4 w-4"/>{selected.size===1?"Поделиться заметкой":"Поделиться выбранными (.zip)"}
+                      </DropdownMenuItem>
                       {selected.size===1 && selectedNotes[0]?.kind!=="pdf"&&
                       <DropdownMenuItem disabled={transferBusy} onClick={()=>setExportDialog(true)} className="min-h-10 gap-2">
                         <Download className="h-4 w-4"/>Экспорт в файл

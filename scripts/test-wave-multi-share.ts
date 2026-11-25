@@ -1,0 +1,25 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+import {unzipSync,strFromU8} from "fflate";
+import {makeWaveNotesBundle} from "../src/lib/note-transfer";
+import type {Note} from "../src/lib/notes-store";
+const now=Date.now();
+const note=(id:string,title:string):Note=>({id,title,body:"<p>"+title+"</p>",
+ createdAt:now,updatedAt:now,pinned:false,folderId:"all",kind:"note"});
+const first=note("a","Первая"),second=note("b","Вторая");
+const archive=await makeWaveNotesBundle([first,second]);
+assert.equal(archive.type,"application/zip");
+const outer=unzipSync(new Uint8Array(await archive.arrayBuffer()));
+assert.deepEqual(Object.keys(outer).sort(),["WaveNotes-01.wnote","WaveNotes-02.wnote"]);
+const one=JSON.parse(strFromU8(unzipSync(outer["WaveNotes-01.wnote"])["manifest.json"]));
+const two=JSON.parse(strFromU8(unzipSync(outer["WaveNotes-02.wnote"])["manifest.json"]));
+assert.equal(one.note.title,"Первая");
+assert.equal(two.note.title,"Вторая");
+assert.equal(one.originId,"a");assert.equal(two.originId,"b");
+assert.equal(one.format,"wave-notes-single");assert.equal(two.format,"wave-notes-single");
+await assert.rejects(makeWaveNotesBundle([first]),/2 до 10/);
+await assert.rejects(makeWaveNotesBundle(Array.from({length:11},(_,i)=>note("n"+i,"X"))),/2 до 10/);
+const ui=readFileSync("src/routes/index.tsx","utf8");
+assert.ok(ui.includes("shareWaveNotes(selectedNotes)"));
+assert.ok(ui.includes("Поделиться выбранными (.zip)"));
+console.log("ZIP bundles preserve independently importable editable .wnote files");

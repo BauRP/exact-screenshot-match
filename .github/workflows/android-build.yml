@@ -126,6 +126,9 @@ jobs:
       - name: Verify pinned notes obey selected sort mode
         run: bun scripts/test-wave-pinned-sort-modes.ts
 
+      - name: Test atomic creation of multiple independent note copies
+        run: bun scripts/test-wave-notes-batch.ts
+
       - name: Test bulk note ordering across folder groups
         run: bun scripts/test-wave-bulk-note-order.ts
 
@@ -280,6 +283,9 @@ jobs:
 
       - name: Verify tasks scoped to current note page
         run: bun scripts/test-wave-page-checklist.ts
+
+      - name: Test ZIP export of multiple editable Wave Notes
+        run: bun scripts/test-wave-multi-share.ts
 
       - name: Verify safe page copy and reorder ProseMirror transactions
         run: |

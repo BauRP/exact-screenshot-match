@@ -690,6 +690,25 @@ export function createNote(partial?: Partial<Note>): Note {
   return note;
 }
 
+/** Atomically persist several independent copies. No partial note list can
+ * escape if IDs collide or localStorage refuses the write. */
+export function createNotesBatch(incoming:readonly Note[]):Note[]{
+ ensureReadyForMutation();
+ if(!incoming.length||incoming.length>20)throw Error("Можно создать не более 20 копий за одно действие");
+ const known=new Set(state.notes.map(item=>item.id));
+ for(const note of incoming){
+  if(!note||typeof note.id!=="string"||! /^[A-Za-z0-9_-]{1,128}$/.test(note.id)||
+      typeof note.title!=="string"||typeof note.body!=="string"||known.has(note.id))
+   throw Error("Недопустимая копия или повторяющийся ID заметки");
+  known.add(note.id);
+ }
+ const copies=incoming.map(note=>({...note}));
+ const next=[...copies,...state.notes];
+ persistNotes(next);
+ commit({notes:next,hydrated:true,status:"ready",error:null});
+ return copies;
+}
+
 /**
  * Builds the next default note title: "New note", "New note 2", "New note 3"…
  * Missing numbers are reused, so deleting "New note 3" frees that slot again.

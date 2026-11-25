@@ -162,9 +162,31 @@ export async function makeWaveNote(note:Note):Promise<Blob>{
  if(binary.byteLength>LIMIT)throw Error("Размер заметки превышает 80 МБ");
  return new Blob([binary.slice().buffer],{type:"application/octet-stream"});
 }
+/** Each .wnote in the outer ZIP is individually editable after unpacking.
+ * The batch never merges note identities or creates an unsupported format. */
+export async function makeWaveNotesBundle(notes:readonly Note[]):Promise<Blob>{
+ if(notes.length<2||notes.length>10)throw Error("Для передачи выберите от 2 до 10 заметок");
+ const files:Record<string,Uint8Array>={};
+ let total=0;
+ for(let i=0;i<notes.length;i++){
+  const blob=await makeWaveNote(notes[i]);
+  total+=blob.size;
+  if(total>LIMIT)throw Error("Выбранные заметки превышают предел 80 МБ");
+  files["WaveNotes-"+String(i+1).padStart(2,"0")+".wnote"]=new Uint8Array(await blob.arrayBuffer());
+ }
+ const bytes=await pack(files);
+ if(bytes.byteLength>LIMIT)throw Error("Архив заметок превышает 80 МБ");
+ return new Blob([bytes.slice().buffer],{type:"application/zip"});
+}
+export async function shareWaveNotes(notes:readonly Note[]):Promise<void>{
+ const blob=await makeWaveNotesBundle(notes);
+ return shareWaveBlob(blob,"WaveNotes-"+Date.now()+".zip","Заметки Wave Notes");
+}
 export async function shareWaveNote(note:Note):Promise<void>{
  const blob=await makeWaveNote(note);
- const name="WaveNotes-"+Date.now()+".wnote";
+ return shareWaveBlob(blob,"WaveNotes-"+Date.now()+".wnote","Заметка Wave Notes");
+}
+async function shareWaveBlob(blob:Blob,name:string,title:string):Promise<void>{
  const {Capacitor}=await import("@capacitor/core");
  if(Capacitor.isNativePlatform()&&Capacitor.getPlatform()==="android"){
   const [{Filesystem,Directory},{Share}]=await Promise.all([import("@capacitor/filesystem"),import("@capacitor/share")]);
@@ -174,7 +196,7 @@ export async function shareWaveNote(note:Note):Promise<void>{
    reader.readAsDataURL(blob);
   });
   const output=await Filesystem.writeFile({directory:Directory.Cache,path:name,data:encoded});
-  await Share.share({title:"Заметка Wave Notes",url:output.uri});
+  await Share.share({title,url:output.uri});
   return;
  }
  const url=URL.createObjectURL(blob);
