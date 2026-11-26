@@ -1,0 +1,18 @@
+import {strict as assert} from "node:assert";
+import {Schema} from "@tiptap/pm/model";
+import {notePagePositions,noteCurrentPage,collectNoteOutline} from "../src/lib/note-outline";
+import {readFileSync} from "node:fs";
+const schema=new Schema({nodes:{doc:{content:"block+"},paragraph:{group:"block",content:"text*"},wavePageBreak:{group:"block",atom:true},waveFold:{group:"block",content:"block+"},text:{group:"inline"}},marks:{}});
+const p=(value:string)=>schema.nodes.paragraph.create(null,value?schema.text(value):undefined);
+const doc=schema.nodes.doc.create(null,[p("one"),schema.nodes.wavePageBreak.create(),p("two"),schema.nodes.wavePageBreak.create(),p("three")]);
+const positions=notePagePositions(doc);
+assert.equal(positions.length,3);
+assert.equal(noteCurrentPage(doc,0),1);
+assert.equal(noteCurrentPage(doc,positions[1]),2);
+assert.equal(noteCurrentPage(doc,positions[2]),3);
+assert.equal(collectNoteOutline(doc).filter(item=>item.type==="page").length,2);
+const movement=readFileSync("src/lib/wave-block-motion.ts","utf8");
+for(const term of ["selectedWaveBlockPos","moveSelectedWaveBlock","liftWaveBlock","parent.canReplace","validContent"])assert.ok(movement.includes(term),term);
+const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
+for(const term of ["Страница {currentPage}/{pagePositions.length}","moveSelectedWaveBlock(editor","liftWaveBlock(editor","Следующая страница"])assert.ok(editor.includes(term),term);
+console.log("Page boundaries and navigation tested; move/outdent editor integration present");

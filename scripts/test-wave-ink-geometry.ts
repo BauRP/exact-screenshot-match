@@ -1,0 +1,256 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+import {appendInkPoint,arrowInkPoints,duplicateInkStrokeAt,ellipseInkPoints,inkStrokeAt,inkStrokeAlong,inkStrokeIndicesAlong,paintInk,parseInk,prepareInkTransform,serializeInk,transformInkStrokes,translateInkStrokes,type InkStroke,type InkPoint} from "../src/lib/wave-ink";
+const line:InkStroke={tool:"pen",color:"#161b22",width:4,points:[[0,0],[1000,0]]};
+assert.equal(inkStrokeAt([line],[500,5],5),0);
+assert.equal(inkStrokeAt([line],[500,100],5),-1);
+assert.equal(inkStrokeAt([line],[995,2],5),0);
+assert.equal(inkStrokeAlong([line],[500,-10],[500,10],5),0);
+assert.equal(inkStrokeAlong([line],[500,100],[500,110],5),-1);
+assert.equal(inkStrokeAlong([line],[1100,0],[1200,0],5),-1);
+assert.deepEqual(parseInk(serializeInk([line])),[line]);
+assert.deepEqual(parseInk('not-json'),[]);
+const upper:InkStroke={...line,points:[[0,10],[1000,10]]};
+assert.deepEqual(inkStrokeIndicesAlong([line,upper],[500,-10],[500,20],3),[0,1]);
+assert.deepEqual(inkStrokeIndicesAlong([line,upper],[500,100],[500,110],3),[]);
+let longPath:InkPoint[]=[[0,0]];
+for(let i=1;i<=2500;i++){
+ longPath=appendInkPoint(longPath,[i%1001,Math.round(i/3)%1001]);
+ assert.ok(longPath.length<=500,"Freehand gestures never exceed storage point limit");
+}
+assert.deepEqual(longPath[0],[0,0],"First endpoint must survive compaction");
+assert.deepEqual(longPath[longPath.length-1],[2500%1001,Math.round(2500/3)%1001],
+ "Final pointer position must survive");
+assert.deepEqual(parseInk(serializeInk([{...line,points:longPath}]))[0].points,longPath,
+ "A long gesture must survive real save and re-open");
+console.log("Long ink drawing and serialization tested");
+
+const straight:InkStroke={tool:"line",color:"#2563eb",width:8,points:[[100,100],[900,900]]};
+assert.deepEqual(parseInk(serializeInk([straight])),[straight]);
+assert.equal(inkStrokeAt([straight],[500,500],5),0);
+assert.equal(inkStrokeAt([straight],[500,800],5),-1);
+assert.deepEqual(parseInk(JSON.stringify([{...straight,points:[[100,100]]}])),[]);
+
+const box:InkStroke={tool:"rectangle",color:"#2563eb",width:6,
+ points:[[100,100],[400,100],[400,300],[100,300],[100,100]]};
+assert.deepEqual(parseInk(serializeInk([box])),[box]);
+assert.equal(inkStrokeAt([box],[250,103],4),0);
+assert.equal(inkStrokeAt([box],[250,200],4),-1);
+assert.deepEqual(parseInk(JSON.stringify([{...box,points:[[100,100],[400,300]]}])),[]);
+
+const oval:InkStroke={tool:"ellipse",color:"#e11d48",width:5,points:ellipseInkPoints([100,100],[500,300])};
+assert.equal(oval.points.length,33);
+assert.deepEqual(oval.points[0],oval.points[32]);
+assert.deepEqual(parseInk(serializeInk([oval])),[oval]);
+assert.equal(inkStrokeAt([oval],[500,200],8),0);
+assert.equal(inkStrokeAt([oval],[300,200],8),-1);
+assert.deepEqual(parseInk(JSON.stringify([{...oval,points:oval.points.slice(0,-1)}])),[]);
+
+const canvas=readFileSync("src/components/editor/WaveInkCanvas.tsx","utf8");
+assert.ok(canvas.includes('aria-label="Размер ластика"'));
+assert.ok(canvas.includes("onPointerCancel={cancel}"),"Cancelled ink must not commit an incomplete stroke");
+assert.ok(canvas.includes("if(!editable||!active){cancel(e);return;}"),
+ "Pointerup after annotation mode is closed must roll back unsaved ink");
+assert.ok(canvas.includes("appendInkPoint(last.points,point)"),"Canvas must keep sampling after 500 points");
+assert.ok(canvas.includes('role="alert"'),"An unsaved drawing must show a warning");
+assert.ok(canvas.includes("onLostPointerCapture={cancel}"),"Lost capture must release an interrupted gesture");
+assert.ok(canvas.includes("replace(before.strokes)"),"Cancel must restore the exact previous strokes");
+assert.ok(canvas.includes("  move(e);\n  e.preventDefault();gesture.current=null;"),
+ "Pointer-up must incorporate the final finger location before the ink is saved");
+assert.ok(canvas.includes("past.current=before.past;future.current=before.future"),"Cancel must preserve Undo/Redo history");
+assert.ok(canvas.includes('inkStrokeIndicesAlong(current.current,previous??point,point,eraserRadius)'),"Tapped eraser must not leave hidden overlapping strokes");
+assert.ok(canvas.includes('previous??point'),"The same eraser path handles taps and swipes");
+assert.ok(canvas.includes('[8,16,28,40]'));
+for(const color of ["#7c3aed","#0d9488","#ca8a04","#64748b","#f97316","#be185d"]){
+ const colored={...line,color};
+ assert.deepEqual(parseInk(serializeInk([colored])),[colored],"New ink palette colors must survive save/restore");
+ assert.ok(canvas.includes(color),"Palette color visible in both drawing and photo tools");
+}
+assert.equal(inkStrokeAt([line],[500,30],8),-1,"Thin eraser must spare distant strokes");
+assert.equal(inkStrokeAt([line],[500,30],40),0,"Wide eraser should reach distant strokes");
+assert.deepEqual(inkStrokeIndicesAlong([line],[500,30],[600,30],8),[]);
+assert.deepEqual(inkStrokeIndicesAlong([line],[500,30],[600,30],40),[0]);
+
+// A tapped eraser at the crossing of two strokes removes both, consistently
+// with a swipe. A non-hit must not remove anything.
+const crossing:InkStroke={...line,points:[[500,0],[500,1000]]};
+assert.deepEqual(inkStrokeIndicesAlong([line,crossing],[500,0],[500,0],5),[0,1]);
+assert.deepEqual(inkStrokeIndicesAlong([line,crossing],[900,900],[900,900],5),[]);
+
+// The export must match SVG preserveAspectRatio="none": the SAME normalized
+// pen width is stretched in both dimensions, not just horizontal scale.
+const calls:{name:string;args:unknown[]}[]=[];
+const record=(name:string)=>(...args:unknown[])=>calls.push({name,args});
+const ctx={
+ save:record("save"),restore:record("restore"),translate:record("translate"),
+ scale:record("scale"),beginPath:record("beginPath"),rect:record("rect"),
+ clip:record("clip"),moveTo:record("moveTo"),lineTo:record("lineTo"),
+ stroke:record("stroke"),fill:record("fill"),arc:record("arc"),
+ lineWidth:0,strokeStyle:"",fillStyle:"",lineCap:"butt",lineJoin:"miter",globalAlpha:1,
+} as unknown as CanvasRenderingContext2D;
+paintInk(ctx,serializeInk([line,{...line,tool:"marker",points:[[600,600]]}]),13,17,800,320);
+assert.deepEqual(calls.filter(c=>["translate","scale","rect"].includes(c.name)),[
+ {name:"translate",args:[13,17]},{name:"scale",args:[0.8,0.32]},
+ {name:"rect",args:[0,0,1000,1000]}
+]);
+assert.ok(calls.some(c=>c.name==="moveTo"&&c.args[0]===0&&c.args[1]===0),
+ "Ink export must use normalized coordinates, not double-scale points");
+assert.equal(ctx.lineWidth,4,"Pen width stays normalized to match editor strokes");
+assert.equal(ctx.globalAlpha,0.4,"Marker transparency is retained");
+assert.equal(calls.filter(c=>c.name==="save").length,1);
+assert.equal(calls.filter(c=>c.name==="restore").length,1);
+const count=calls.length;
+paintInk(ctx,"[]",0,0,800,320);
+paintInk(ctx,serializeInk([line]),0,0,0,100);
+assert.equal(calls.length,count,"Empty/zero-sized drawings must not alter canvas state");
+
+// Both notebook ink and photo annotations use this canvas. Closing the tool
+// while a finger is down must restore the pre-gesture ink/Undo history.
+assert.ok(canvas.includes("if((editable&&active)||gesture.current===null)return;"));
+assert.ok(canvas.includes("if(canvas?.hasPointerCapture(pointer))canvas.releasePointerCapture(pointer)"));
+assert.ok(canvas.includes("gesture.current=null;lastEraserPoint.current=null;shapeStart.current=null;"));
+assert.ok(canvas.includes("if(!editable||!active||gesture.current!==null||current.current.length===0)return;"));
+assert.ok(canvas.includes("if(!editable||!active||gesture.current!==null||!past.current.length)return;"));
+assert.ok(canvas.includes("if(!editable||!active||gesture.current!==null||!future.current.length)return;"));
+
+// Many saved strokes can be far from the eraser. A cached bounding box must
+// short-circuit their segments on subsequent moves and never hide a real hit.
+let indexedReads=0;
+const points=new Proxy(Array.from({length:500},(_,i)=>[100+i/10,100+i/10] as InkPoint),{
+ get(target,key,receiver){
+  if(typeof key==="string"&&/^\d+$/.test(key))indexedReads++;
+  return Reflect.get(target,key,receiver);
+ }
+});
+const dense:InkStroke={tool:"pen",color:"#161b22",width:4,points};
+assert.deepEqual(inkStrokeIndicesAlong([dense],[900,800],[950,850],8),[]);
+const initialReads=indexedReads;
+assert.ok(initialReads>=500,"First eraser pass computes bounds");
+for(let i=0;i<100;i++)assert.deepEqual(inkStrokeIndicesAlong([dense],[900,i],[920,i+1],8),[]);
+assert.equal(indexedReads,initialReads,"Far-away eraser movement never rescans cached stroke points");
+assert.deepEqual(inkStrokeIndicesAlong([dense],[100,100],[140,140],8),[0],
+ "Bounds must not remove a genuine continuous eraser hit");
+const newPosition={...dense,points:[[700,700],[800,800]] as InkPoint[]};
+assert.deepEqual(inkStrokeIndicesAlong([newPosition],[700,700],[800,800],3),[0],
+ "Fresh stroke geometry invalidates the cached bounds");
+assert.deepEqual(inkStrokeIndicesAlong([newPosition],[100,100],[140,140],8),[]);
+assert.equal(inkStrokeAt([dense],[140,140],4),0,"Tap hit-testing respects cached bounds");
+assert.equal(inkStrokeAt([dense],[900,900],4),-1);
+
+const originalStrokes=parseInk(serializeInk([line,box,oval]));
+const flipped=transformInkStrokes(originalStrokes,"flip-x");
+assert.deepEqual(flipped[0].points,[[1000,0],[0,0]]);
+assert.deepEqual(transformInkStrokes(flipped,"flip-x"),originalStrokes);
+assert.deepEqual(transformInkStrokes(transformInkStrokes(originalStrokes,"flip-y"),"flip-y"),originalStrokes);
+let rotated=originalStrokes;
+for(let i=0;i<4;i++)rotated=transformInkStrokes(rotated,"rotate-cw");
+assert.deepEqual(rotated,originalStrokes);
+assert.deepEqual(parseInk(serializeInk(transformInkStrokes(originalStrokes,"rotate-cw"))).length,3);
+assert.ok(canvas.includes('onClick={()=>transformAll("flip-x")}'));
+assert.ok(canvas.includes('onClick={()=>transformAll("rotate-cw")}'));
+
+const rotatedLeft=transformInkStrokes(originalStrokes,"rotate-ccw");
+assert.deepEqual(transformInkStrokes(rotatedLeft,"rotate-cw"),originalStrokes);
+assert.deepEqual(parseInk(serializeInk(rotatedLeft)),rotatedLeft);
+assert.ok(canvas.includes('onClick={()=>transformAll("rotate-ccw")}'));
+
+
+// Arrow annotations are saved like other ink strokes and work on photos too.
+const arrowPts=arrowInkPoints([100,100],[850,700]);
+assert.equal(arrowPts.length,5);
+assert.deepEqual(arrowPts[0],[100,100]);
+assert.deepEqual(arrowPts[1],[850,700]);
+assert.deepEqual(arrowPts[3],[850,700]);
+const arrow:InkStroke={tool:"arrow",color:"#e11d48",width:6,points:arrowPts};
+assert.deepEqual(parseInk(serializeInk([arrow])),[arrow]);
+assert.equal(inkStrokeAt([arrow],[850,700],6),0);
+assert.equal(inkStrokeAlong([arrow],[450,350],[465,390],15),0);
+assert.deepEqual(parseInk(JSON.stringify([{...arrow,points:[[100,100],[850,700]]}])),[]);
+assert.equal(arrowInkPoints([450,450],[450,450]).length,5);
+assert.ok(canvas.includes('item==="arrow"?"Стрелка"'),"Arrow in both ink editors");
+assert.ok(canvas.includes("arrowInkPoints(shapeStart.current??last.points[0],point)"),
+ "Arrow tip must follow the Android pointer coordinate");
+
+/** Nudge on paper and photographic annotations must keep EVERY point's
+ * relative coordinates. A global clamp prevents deformed arrows/shapes. */
+const geometry=[line,box,oval,arrow];
+// One line spans the full width and touches the top. No global displacement
+// is possible, so the correct behaviour is NO change and NO Undo entry.
+assert.equal(translateInkStrokes(geometry,20,-20),null);
+assert.deepEqual(geometry[0].points,[[0,0],[1000,0]]);
+// The requested motion is clamped once for every point, not point by point.
+const bounded=translateInkStrokes([box],800,0);
+assert.ok(bounded);
+assert.deepEqual(bounded![0].points,[[700,100],[1000,100],[1000,300],[700,300],[700,100]]);
+assert.deepEqual(box.points,[[100,100],[400,100],[400,300],[100,300],[100,100]]);
+const smallShape=[{...box,points:[[100,100],[400,100],[400,300],[100,300],[100,100]] as InkPoint[]}];
+const moved=translateInkStrokes(smallShape,20,40);
+assert.ok(moved);
+assert.deepEqual(moved![0].points,[[120,140],[420,140],[420,340],[120,340],[120,140]]);
+assert.deepEqual(parseInk(serializeInk(moved!)),moved);
+assert.deepEqual(smallShape[0].points,box.points,"The original stroke is immutable");
+const edgeShape=[{...straight,points:[[990,10],[1000,10]] as InkPoint[]}];
+assert.equal(translateInkStrokes(edgeShape,20,0),null,"Do not clip points across a canvas edge");
+assert.deepEqual(translateInkStrokes(edgeShape,-20,0)?.[0].points,[[970,10],[980,10]]);
+assert.equal(translateInkStrokes(smallShape,0,0),null);
+assert.equal(translateInkStrokes([],10,0),null);
+assert.equal(translateInkStrokes(smallShape,NaN,0),null);
+assert.equal(translateInkStrokes(smallShape,2.5,0),null);
+for(const token of ["translateInkStrokes(current.current,dx,dy)",
+ 'aria-label="Передвинуть линии рисунка"',
+ "Сдвинуть линии вверх","Сдвинуть линии вниз",
+ "Сдвинуть линии влево","Сдвинуть линии вправо",
+ "Удалить последний штрих","Удалить выбранный штрих","onClick={removeLastStroke}",
+ "lastEmitted.current=null;"])
+ assert.ok(canvas.includes(token),token);
+const photoSource=readFileSync("src/components/editor/WaveImage.tsx","utf8");
+assert.ok(photoSource.includes("<WaveInkCanvas"),"The same nudge and undo functions are available over photos");
+assert.ok(photoSource.includes("onChange={ink=>updateAttributes({ink})}"));
+
+const selectedPlan=prepareInkTransform(originalStrokes,"flip-x",[1]);
+assert.ok(selectedPlan,"A valid single-stroke transformation should be prepared");
+assert.deepEqual(selectedPlan!.strokes[0],originalStrokes[0],"Unselected strokes stay unchanged");
+assert.deepEqual(selectedPlan!.strokes[1],transformInkStrokes([originalStrokes[1]],"flip-x")[0],
+ "Only the selected stroke receives the transformation");
+assert.deepEqual(parseInk(selectedPlan!.encoded),selectedPlan!.strokes,
+ "Prepared data is already valid for persistence");
+assert.deepEqual(originalStrokes,parseInk(serializeInk([line,box,oval])),
+ "Preparing a transform never mutates the current drawing");
+assert.equal(prepareInkTransform(originalStrokes,"flip-y",[99]),null,
+ "An invalid selection is rejected before any state change");
+assert.equal(prepareInkTransform([],"rotate-cw"),null);
+
+// This compact drawing fits in 120 KB, but a horizontal flip expands each
+// coordinate. Its prepared result must be rejected without touching the source.
+const nearLimitInk:InkStroke[]=Array.from({length:32},()=>({
+ tool:"pen",color:"#161b22",width:4,
+ points:Array.from({length:500},()=>[0,0] as InkPoint)
+}));
+const compactInk=serializeInk(nearLimitInk);
+assert.ok(compactInk.length<120000,"Original drawing fits the storage limit");
+assert.equal(prepareInkTransform(nearLimitInk,"flip-x"),null,
+ "Oversized transformed data is rejected before Undo/Redo or drawing state changes");
+assert.deepEqual(nearLimitInk[0].points[0],[0,0],
+ "A rejected transform never mutates original geometry");
+
+const duplicatedSelected=duplicateInkStrokeAt([line,box,oval],1);
+assert.ok(duplicatedSelected);
+assert.deepEqual(duplicatedSelected!.slice(0,3),[line,box,oval],
+ "Duplicating a selected stroke leaves source geometry unchanged");
+assert.deepEqual(duplicatedSelected![3].points,box.points.map(([x,y])=>[x+12,y+12]));
+assert.equal(duplicateInkStrokeAt([line],-1),null);
+assert.equal(duplicateInkStrokeAt([line],1),null);
+
+const selectStart=canvas.slice(canvas.indexOf("const start="),canvas.indexOf("const move="));
+assert.ok(selectStart.includes('tool==="select"'));
+assert.ok(selectStart.includes("inkStrokeAt(current.current,position(e),28)"));
+assert.ok(canvas.includes('item==="select"?"Выбрать"'));
+assert.ok(canvas.includes("prepareInkTransform(current.current,operation,indices)"));
+assert.ok(canvas.includes("duplicateInkStrokeAt(current.current,index)"));
+assert.ok(canvas.includes("Удалить выбранное"));
+const transformHandler=canvas.slice(canvas.indexOf("const transformAll"),canvas.indexOf("const nudgeInk"));
+assert.ok(transformHandler.indexOf("prepareInkTransform")<transformHandler.indexOf("commitEdit"),
+ "Transform validation must run before any Undo/Redo mutation");
+const commitHandler=canvas.slice(canvas.indexOf("const commitEdit"),canvas.indexOf("const position"));
+assert.ok(commitHandler.indexOf("publish(next,encoded)")<commitHandler.indexOf("past.current="),
+ "History changes only after the parent accepts the serialized drawing");

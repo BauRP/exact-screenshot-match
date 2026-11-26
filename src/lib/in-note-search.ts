@@ -1,0 +1,67 @@
+import { Extension } from "@tiptap/core";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import type { Node as PMNode } from "@tiptap/pm/model";
+
+export type NoteSearchState={query:string;active:number;caseSensitive:boolean};
+export type FoundWord={from:number;to:number};
+export const noteSearchKey=new PluginKey<NoteSearchState>("wave-in-note-search");
+const EMPTY:NoteSearchState={query:"",active:0,caseSensitive:false};
+/** Search only visible editable text. A Tape mark is a confidential answer:
+ * never find or replace it, even when a query spans neighbouring text nodes.
+ * U+FFFC is a hard boundary for hidden and embedded content. */
+export function findWords(doc:PMNode,query:string,caseSensitive=false):FoundWord[]{
+ if(!query||query.length>100||query.includes("\uFFFC"))return [];
+ const matches:FoundWord[]=[];
+ const needle=caseSensitive?query:query.toLowerCase();
+ doc.descendants((node,pos)=>{
+  if(!node.isTextblock||matches.length>=200)return;
+  // Unicode lowercasing can expand characters (İ -> i + combining dot).
+  // Keep a map from every folded code unit to the ORIGINAL ProseMirror range.
+  // Otherwise Find/Replace can delete a neighbouring letter or mark.
+  let haystack="";const starts:number[]=[],ends:number[]=[];
+  const add=(folded:string,from:number,to:number)=>{
+   haystack+=folded;
+   for(let i=0;i<folded.length;i++){starts.push(from);ends.push(to);}
+  };
+  node.forEach((child,offset)=>{
+   const base=pos+offset+1;
+   if(!child.isText){
+    add("\uFFFC",base,base+child.nodeSize);
+    return;
+   }
+   const concealed=child.marks.some(mark=>mark.type.name==="waveTape");
+   let characterOffset=0;
+   for(const character of child.text||""){
+    const from=base+characterOffset,to=from+character.length;
+    // Tape content must never be matched or replaced; it also separates
+    // visible fragments, so a query cannot join across it.
+    add(concealed?"\uFFFC":caseSensitive?character:character.toLowerCase(),from,to);
+    characterOffset+=character.length;
+   }
+  });
+  let from=0;
+  while(from<haystack.length&&matches.length<200){
+   const at=haystack.indexOf(needle,from);if(at<0)break;
+   const start=starts[at],end=ends[at+needle.length-1];
+   if(start!==undefined&&end!==undefined)matches.push({from:start,to:end});
+   from=at+Math.max(needle.length,1);
+  }
+ });
+ return matches;
+}
+export const InNoteSearch=Extension.create({
+ name:"waveInNoteSearch",
+ addProseMirrorPlugins(){
+  return [new Plugin<NoteSearchState>({
+   key:noteSearchKey,
+   state:{init:()=>EMPTY,apply(tr,old){return {...old,...(tr.getMeta(noteSearchKey)||{})};}},
+   props:{decorations(state){
+    const q=noteSearchKey.getState(state)||EMPTY;
+    if(!q.query)return DecorationSet.empty;
+    const matches=findWords(state.doc,q.query,q.caseSensitive);
+    return DecorationSet.create(state.doc,matches.map((m,i)=>Decoration.inline(m.from,m.to,{class:i===q.active?"wave-find-hit wave-find-current":"wave-find-hit"})));
+   }},
+  })];
+ },
+});

@@ -1,0 +1,58 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+import {copyWaveInk,pasteWaveInk} from "../src/lib/wave-ink-transfer";
+import {serializeInk,parseInk,duplicateLastInkStroke} from "../src/lib/wave-ink";
+const ink=readFileSync("src/lib/wave-ink.ts","utf8");
+const canvas=readFileSync("src/components/editor/WaveInkCanvas.tsx","utf8");
+const drawing=readFileSync("src/components/editor/WaveDrawing.tsx","utf8");
+const image=readFileSync("src/components/editor/WaveImage.tsx","utf8");
+const editor=readFileSync("src/routes/editor.$id.tsx","utf8");
+const mover=readFileSync("src/lib/wave-block-motion.ts","utf8");
+for(const x of ["serializeInk","parseInk","inkStrokeAt","120000","strokes.length>120"])assert.ok(ink.includes(x),x);
+for(const x of ["onPointerDown={start}","onPointerMove={move}","onPointerUp={stop}","onPointerCancel={cancel}","onLostPointerCapture={cancel}","Ручка","Маркер","Ластик","emit(current.current)","onChange(encoded)","Отменить штрих","Вернуть штрих"])assert.ok(canvas.includes(x),x);
+assert.ok(canvas.includes("replace(before.strokes)"),"Interrupted gesture must restore the previous saved drawing");
+assert.ok(canvas.includes("past.current=before.past;future.current=before.future"),"Cancel must preserve Undo/Redo");
+for(const x of ["data-wave-drawing","insertWaveDrawing","WaveInkCanvas","updateAttributes({strokes:encoded})","moveWaveBlock"])assert.ok(drawing.includes(x),x);
+for(const x of ["Рисовать поверх","data-ink","onChange={ink=>updateAttributes({ink})}","moveWaveBlock"])assert.ok(image.includes(x),x);
+for(const x of ["WaveDrawing,","Добавить рисунок","insertWaveDrawing().run()"])assert.ok(editor.includes(x),x);
+assert.ok(mover.includes('type Node as PMNode')&&mover.includes('type ResolvedPos'),"Block movement must inspect ProseMirror node boundaries");
+assert.ok(mover.includes("state.tr.replaceWith(from,to,replacement)"));
+console.log("Vector drawing, annotations and complete block moves connected");
+
+const canvasSource=readFileSync("src/components/editor/WaveInkCanvas.tsx","utf8");
+assert.ok(canvasSource.includes('tool==="line"?[point,point]'));
+assert.ok(canvasSource.includes('tool==="rectangle"?[point,point,point,point,point]'));
+assert.ok(canvasSource.includes('tool==="ellipse"?ellipseInkPoints(point,point)'));
+assert.ok(canvasSource.includes('mode.current==="ellipse"'));
+assert.ok(canvasSource.includes('"Овал"'));
+assert.ok(canvasSource.includes('mode.current==="line"'));
+assert.ok(canvasSource.includes('"Прямая"'));
+
+assert.ok(canvasSource.includes('tool==="rectangle"?[point,point,point,point,point]'));
+assert.ok(canvasSource.includes('mode.current==="rectangle"'));
+assert.ok(canvasSource.includes('"Прямоугольник"'));
+
+const ink1=serializeInk([{tool:"pen",color:"#161b22",width:3,points:[[0,0],[150,160]]}]);
+const ink2=serializeInk([{tool:"marker",color:"#2563eb",width:8,points:[[200,240]]}]);
+assert.equal(copyWaveInk(ink1),1);
+const combined=pasteWaveInk(ink2);
+assert.ok(combined);
+assert.equal(parseInk(combined).length,2);
+assert.equal(parseInk(ink2).length,1,"Original annotations are never overwritten");
+assert.ok(readFileSync("src/components/editor/WaveImage.tsx","utf8").includes("pasteWaveInk(node.attrs.ink)"));
+assert.ok(readFileSync("src/components/editor/WaveDrawing.tsx","utf8").includes("pasteWaveInk(strokes)"));
+
+const originalStrokes=parseInk(ink1);
+const repeated=duplicateLastInkStroke(originalStrokes);
+assert.ok(repeated);
+assert.equal(repeated!.length,2);
+assert.deepEqual(repeated![0].points,[[0,0],[150,160]]);
+assert.deepEqual(repeated![1].points,[[12,12],[162,172]]);
+assert.notEqual(repeated![1].points,repeated![0].points,"Duplicate must not share editable point arrays");
+assert.equal(parseInk(serializeInk(repeated!)).length,2);
+assert.equal(originalStrokes.length,1,"Duplicating strokes must never mutate the original");
+assert.equal(duplicateLastInkStroke([]),null);
+assert.equal(duplicateLastInkStroke(Array(120).fill(originalStrokes[0])),null);
+const atCorner=duplicateLastInkStroke([{...originalStrokes[0],points:[[995,995],[1000,1000]]}]);
+assert.deepEqual(atCorner?.[1].points,[[983,983],[988,988]]);
+assert.ok(canvas.includes('onClick={repeatLastStroke}'),"New button is shared by drawings and photo overlays");

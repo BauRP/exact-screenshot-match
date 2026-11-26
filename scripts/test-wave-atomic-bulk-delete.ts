@@ -1,0 +1,16 @@
+import {strict as assert} from "node:assert";
+import {readFileSync} from "node:fs";
+const store=readFileSync("src/lib/notes-store.ts","utf8");
+const home=readFileSync("src/routes/index.tsx","utf8");
+const from=store.indexOf("export function deleteSelectedNotes(");
+const to=store.indexOf("\n}\n",from);
+assert.ok(from>=0&&to>from);
+const fn=store.slice(from,to);
+assert.ok(fn.includes("const next=state.notes.filter("));
+assert.ok(fn.includes("persistNotes(next);"));
+assert.ok(fn.indexOf("persistNotes(next);")<fn.indexOf("commit({notes:next"));
+assert.ok(fn.indexOf("persistNotes(next);")<fn.indexOf("reclaimDetachedAttachments("));
+assert.ok(fn.includes('if(note.kind==="pdf")'));
+assert.ok(home.includes("deleteSelectedNotes([...selected]);"));
+assert.ok(!home.includes("selected.forEach((id) => deleteNote(id));"));
+console.log("Atomic bulk deletion and post-persist attachment cleanup wired");
