@@ -72,9 +72,9 @@ export function serializeInk(strokes:InkStroke[]):string{
 /** Duplicate the last stroke for both drawings and photo annotations.
  * Safe no-op at the 120 stroke / 120 KB limits, with independent point
  * arrays for future erasing and editing. The original ink is never mutated. */
-export function duplicateLastInkStroke(strokes:readonly InkStroke[]):InkStroke[]|null{
- if(!strokes.length||strokes.length>=120)return null;
- const original=strokes[strokes.length-1];
+export function duplicateInkStrokeAt(strokes:readonly InkStroke[],index:number):InkStroke[]|null{
+ if(!Number.isInteger(index)||index<0||index>=strokes.length||strokes.length>=120)return null;
+ const original=strokes[index];
  const xs=original.points.map(p=>p[0]),ys=original.points.map(p=>p[1]);
  const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
  const dx=maxX<=988?12:minX>=12?-12:0;
@@ -82,6 +82,9 @@ export function duplicateLastInkStroke(strokes:readonly InkStroke[]):InkStroke[]
  const copy:InkStroke={...original,points:original.points.map(([x,y]):InkPoint=>[x+dx,y+dy])};
  const result=[...strokes,copy];
  try{serializeInk(result);return result;}catch{return null;}
+}
+export function duplicateLastInkStroke(strokes:readonly InkStroke[]):InkStroke[]|null{
+ return duplicateInkStrokeAt(strokes,strokes.length-1);
 }
 
 /** Move complete ink geometry within the 1000-unit canvas without clipping
@@ -112,6 +115,20 @@ export function transformInkStrokes(strokes:readonly InkStroke[],op:InkTransform
  return strokes.map(stroke=>({...stroke,points:stroke.points.map(([x,y]):InkPoint=>
   op==="flip-x"?[1000-x,y]:op==="flip-y"?[x,1000-y]:op==="rotate-ccw"?[y,1000-x]:[1000-y,x]
  )}));
+}
+/** Prepare and serialize a transform before callers touch live state or Undo/Redo.
+ * A null result means the selected stroke(s) or final encoded drawing is invalid. */
+export function prepareInkTransform(
+ strokes:readonly InkStroke[],op:InkTransform,selectedIndices?:readonly number[]
+):{strokes:InkStroke[];encoded:string}|null{
+ if(!strokes.length)return null;
+ const selected=selectedIndices===undefined?null:new Set(selectedIndices);
+ if(selected&&(!selected.size||[...selected].some(index=>
+   !Number.isInteger(index)||index<0||index>=strokes.length)))return null;
+ const next=strokes.map((stroke,index)=>
+   selected===null||selected.has(index)?transformInkStrokes([stroke],op)[0]:stroke
+ );
+ try{return {strokes:next,encoded:serializeInk(next)};}catch{return null;}
 }
 /** Hit-test a whole line segment; the previous point-only eraser missed long strokes. */
 function segmentDistance(p:InkPoint,a:InkPoint,b:InkPoint):number{

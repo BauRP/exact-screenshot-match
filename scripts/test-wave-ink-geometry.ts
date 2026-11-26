@@ -1,6 +1,6 @@
 import {strict as assert} from "node:assert";
 import {readFileSync} from "node:fs";
-import {appendInkPoint,arrowInkPoints,ellipseInkPoints,inkStrokeAt,inkStrokeAlong,inkStrokeIndicesAlong,paintInk,parseInk,serializeInk,transformInkStrokes,translateInkStrokes,type InkStroke,type InkPoint} from "../src/lib/wave-ink";
+import {appendInkPoint,arrowInkPoints,duplicateInkStrokeAt,ellipseInkPoints,inkStrokeAt,inkStrokeAlong,inkStrokeIndicesAlong,paintInk,parseInk,prepareInkTransform,serializeInk,transformInkStrokes,translateInkStrokes,type InkStroke,type InkPoint} from "../src/lib/wave-ink";
 const line:InkStroke={tool:"pen",color:"#161b22",width:4,points:[[0,0],[1000,0]]};
 assert.equal(inkStrokeAt([line],[500,5],5),0);
 assert.equal(inkStrokeAt([line],[500,100],5),-1);
@@ -206,3 +206,51 @@ for(const token of ["translateInkStrokes(current.current,dx,dy)",
 const photoSource=readFileSync("src/components/editor/WaveImage.tsx","utf8");
 assert.ok(photoSource.includes("<WaveInkCanvas"),"The same nudge and undo functions are available over photos");
 assert.ok(photoSource.includes("onChange={ink=>updateAttributes({ink})}"));
+
+const selectedPlan=prepareInkTransform(originalStrokes,"flip-x",[1]);
+assert.ok(selectedPlan,"A valid single-stroke transformation should be prepared");
+assert.deepEqual(selectedPlan!.strokes[0],originalStrokes[0],"Unselected strokes stay unchanged");
+assert.deepEqual(selectedPlan!.strokes[1],transformInkStrokes([originalStrokes[1]],"flip-x")[0],
+ "Only the selected stroke receives the transformation");
+assert.deepEqual(parseInk(selectedPlan!.encoded),selectedPlan!.strokes,
+ "Prepared data is already valid for persistence");
+assert.deepEqual(originalStrokes,parseInk(serializeInk([line,box,oval])),
+ "Preparing a transform never mutates the current drawing");
+assert.equal(prepareInkTransform(originalStrokes,"flip-y",[99]),null,
+ "An invalid selection is rejected before any state change");
+assert.equal(prepareInkTransform([],"rotate-cw"),null);
+
+// This compact drawing fits in 120 KB, but a horizontal flip expands each
+// coordinate. Its prepared result must be rejected without touching the source.
+const nearLimitInk:InkStroke[]=Array.from({length:32},()=>({
+ tool:"pen",color:"#161b22",width:4,
+ points:Array.from({length:500},()=>[0,0] as InkPoint)
+}));
+const compactInk=serializeInk(nearLimitInk);
+assert.ok(compactInk.length<120000,"Original drawing fits the storage limit");
+assert.equal(prepareInkTransform(nearLimitInk,"flip-x"),null,
+ "Oversized transformed data is rejected before Undo/Redo or drawing state changes");
+assert.deepEqual(nearLimitInk[0].points[0],[0,0],
+ "A rejected transform never mutates original geometry");
+
+const duplicatedSelected=duplicateInkStrokeAt([line,box,oval],1);
+assert.ok(duplicatedSelected);
+assert.deepEqual(duplicatedSelected!.slice(0,3),[line,box,oval],
+ "Duplicating a selected stroke leaves source geometry unchanged");
+assert.deepEqual(duplicatedSelected![3].points,box.points.map(([x,y])=>[x+12,y+12]));
+assert.equal(duplicateInkStrokeAt([line],-1),null);
+assert.equal(duplicateInkStrokeAt([line],1),null);
+
+const selectStart=canvas.slice(canvas.indexOf("const start="),canvas.indexOf("const move="));
+assert.ok(selectStart.includes('tool==="select"'));
+assert.ok(selectStart.includes("inkStrokeAt(current.current,position(e),28)"));
+assert.ok(canvas.includes('item==="select"?"Выбрать"'));
+assert.ok(canvas.includes("prepareInkTransform(current.current,operation,indices)"));
+assert.ok(canvas.includes("duplicateInkStrokeAt(current.current,index)"));
+assert.ok(canvas.includes("Удалить выбранное"));
+const transformHandler=canvas.slice(canvas.indexOf("const transformAll"),canvas.indexOf("const nudgeInk"));
+assert.ok(transformHandler.indexOf("prepareInkTransform")<transformHandler.indexOf("commitEdit"),
+ "Transform validation must run before any Undo/Redo mutation");
+const commitHandler=canvas.slice(canvas.indexOf("const commitEdit"),canvas.indexOf("const position"));
+assert.ok(commitHandler.indexOf("publish(next,encoded)")<commitHandler.indexOf("past.current="),
+ "History changes only after the parent accepts the serialized drawing");
