@@ -255,7 +255,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
  };
  return <div className="relative h-full w-full">
    {saveError&&<div role="alert" className="absolute left-2 right-2 top-2 z-10 rounded-lg bg-destructive px-3 py-2 text-xs text-destructive-foreground">
-     Рисунок слишком большой. Последний штрих не сохранён.
+     Изменение не сохранено. Исходный рисунок и история отмены сохранены.
    </div>}
    <svg ref={canvasRef} role="img" aria-label="Рисунок" viewBox="0 0 1000 1000" preserveAspectRatio="none"
      className={`absolute inset-0 h-full w-full ${editable&&active?"touch-none cursor-crosshair":"pointer-events-none"}`}
@@ -316,7 +316,7 @@ export function WaveInkCanvas({value,onChange,editable,active=false}:{
        onClick={undo} className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">↶</button>
      <button type="button" aria-label="Вернуть штрих" title="Вернуть штрих" disabled={!future.current.length}
        onClick={redo} className="rounded-lg border px-2 py-1 text-xs disabled:opacity-40">↷</button>
-     {tool!=="eraser"&&<>
+     {tool!=="eraser"&&tool!=="select"&&<>
        <div className="flex items-center gap-1" aria-label="Цвет пера">
          {(["#161b22","#e11d48","#2563eb","#16a34a","#f8fafc","#f59e0b","#7c3aed","#0d9488","#ca8a04","#64748b","#f97316","#be185d"] as const).map(ink=>
            <button key={ink} type="button" aria-label={"Цвет "+ink} aria-pressed={color===ink}
