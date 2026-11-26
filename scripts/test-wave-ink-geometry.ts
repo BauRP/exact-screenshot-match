@@ -200,7 +200,7 @@ for(const token of ["translateInkStrokes(current.current,dx,dy)",
  'aria-label="Передвинуть линии рисунка"',
  "Сдвинуть линии вверх","Сдвинуть линии вниз",
  "Сдвинуть линии влево","Сдвинуть линии вправо",
- 'aria-label="Удалить последний штрих"',"onClick={removeLastStroke}",
+ "Удалить последний штрих","Удалить выбранный штрих","onClick={removeLastStroke}",
  "lastEmitted.current=null;"])
  assert.ok(canvas.includes(token),token);
 const photoSource=readFileSync("src/components/editor/WaveImage.tsx","utf8");
